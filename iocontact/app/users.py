@@ -2,10 +2,10 @@
 
 Roles as in the rest of the suite: viewer (reads the shared books), member (also keeps their own private books),
 editor (changes the shared contacts too), admin (also settings and users); an account holds a role per app, a suite
-admin is admin everywhere. Each member gets their own private address book; the Family book is shared by everyone. Web sessions are the suite's cookie (shared by the apps on the domain). CardDAV / LDAP clients
-use HTTP Basic or an LDAP bind with either the account password or an app password (one per device, revocable,
-shown once). What is here is ioContact's own: an account as the app sees it (with its "me" contact), its private
-address book, the LDAP bind, and the birthday calendar's private link. The rest is asked of iosuite_shared directly.
+admin is admin everywhere. Each member gets their own private address book; the Family book is shared by everyone. Web sessions are the suite's cookie (shared by the apps on the domain). CardDAV clients
+use HTTP Basic with the account password or an app password, LDAP clients bind with an app password only (one per
+device, revocable, shown once). What is here is ioContact's own: an account as the app sees it (with its "me" contact), its private
+address book and the LDAP bind. The rest is asked of iosuite_shared directly.
 """
 import logging
 import re
@@ -41,13 +41,6 @@ def all_users() -> list[dict]:
 def names_of(ids: set) -> dict:
     """{id: name} for these account ids (the merge history and suggestions say who did what)."""
     return {u["id"]: u["name"] for u in shared.list_users() if u["id"] in ids} if ids else {}
-
-
-def create(name: str, password: str | None, role: str = "editor", display_name: str | None = None, email: str | None = None) -> dict:
-    """A new account with this role here, and its private address book. ValueError with the message to show."""
-    u = shared.create(name, password or "", role, APP, email=email or "", display_name=display_name or "")
-    personal_book(get(u["id"]))
-    return get(u["id"])
 
 
 def personal_book(u: dict) -> None:
@@ -142,20 +135,6 @@ def sweep_gone() -> int:
 
 # ---------------------------------------------------------------- app passwords
 
-def create_app_password(uid: int, label: str, protocols_only: bool = False) -> str:
-    """Returns the password (shown once): iocontact-XXXXXXXX-<secret>. protocols_only: scope 'dav', it works for CardDAV
-    and LDAP only, not for the web app, the REST API or MCP (what a phone or a configuration profile needs, and no more).
-    The scope lives with the password in the Shared ioSuite database; iosuite-shared's middleware enforces it by path."""
-    return apppasswords.create(uid, APP, label, apppasswords.DAV if protocols_only else "")
-
-
-def authenticate(name: str, password: str) -> dict | None:
-    """Account password or an app password without a scope (a protocol-only one is for CardDAV and LDAP: HTTP Basic
-    and Bearer go through iosuite-shared's middleware, which keeps such passwords to /dav; LDAP binds: ldap_bind)."""
-    user, scope = apppasswords.authenticate_scoped(name, password, APP)
-    return None if scope else row_of(user)
-
-
 APP_PASSWORD = re.compile(r"^[a-z0-9]+-([0-9a-f]{8})-")  # how every app password starts: <app>-<8 hex>-<secret>
 
 
@@ -183,11 +162,6 @@ def ldap_still_good(user_id: int, password: str) -> dict | None:
         return None
     u = get(user_id)
     return u if u and u["role"] != "none" else None
-
-
-def forget_cached_auth() -> None:
-    apppasswords.forget()
-    shared.invalidate()
 
 
 # repeated wrong passwords are slowed down, per visitor and name, as the shared sign-in routes do (the LDAP bind uses these)

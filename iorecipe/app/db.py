@@ -1,4 +1,4 @@
-"""MariaDB access: one short connection per unit of work, and the schema (created and migrated at start)."""
+"""MariaDB access: one short connection per unit of work, and the schema (created at start)."""
 
 import pymysql
 from pymysql.cursors import DictCursor
@@ -7,7 +7,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 2   # 2: several photos (rcp_photos by id, one may belong to a step), rcp_marks, rcp_books
+SCHEMA_VERSION = 2  # recorded in rcp_schema_version; the tables are made as SCHEMA says (pre-release: no upgrade steps)
 PREFIX = "rcp"
 
 # Every table is rcp_<name> (the suite's naming convention: the apps can share one database) and InnoDB/utf8mb4.

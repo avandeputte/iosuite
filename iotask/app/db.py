@@ -1,4 +1,4 @@
-"""MariaDB access: one short connection per unit of work, and the schema (created and migrated at start)."""
+"""MariaDB access: one short connection per unit of work, and the schema (created at start)."""
 
 import pymysql
 from pymysql.cursors import DictCursor
@@ -7,7 +7,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 2   # 2: tsk_activity, tsk_templates
+SCHEMA_VERSION = 2  # recorded in tsk_schema_version; the tables are made as SCHEMA says (pre-release: no upgrade steps)
 PREFIX = "tsk"
 
 # Every table is tsk_<name> (the suite's naming convention: the apps can share one database) and InnoDB/utf8mb4. A

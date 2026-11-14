@@ -1,4 +1,4 @@
-"""MariaDB access: one short connection per unit of work, and the schema (created and migrated at start)."""
+"""MariaDB access: one short connection per unit of work, and the schema (created at start)."""
 
 import pymysql
 from pymysql.cursors import DictCursor
@@ -7,7 +7,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 2  # 2: the suite naming convention (cal_ tables, *_at times, cal_settings, named indexes)
+SCHEMA_VERSION = 2  # recorded in cal_schema_version; the tables are made as SCHEMA says (pre-release: no upgrade steps)
 PREFIX = "cal"
 
 # Every table is cal_<name> (the suite's naming convention: the apps can share one database) and InnoDB/utf8mb4. An

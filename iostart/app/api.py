@@ -344,18 +344,19 @@ def delete_link_icon(lid: int, request: Request):
 
 @router.post("/api/bookmarks/import", dependencies=[access.signed_in])
 async def import_bookmarks(request: Request):
-    """Members, editors and admins (their own; the shared ones: admins). {yaml, replace?}: a homepage bookmarks.yaml (its groups go on the start page). Or {file, parentId?,
-    start?}: the text of a bookmarks file a browser exported (HTML) or an XBEL file, added under the folder (none: the
-    top); start: its folders go on the start page too (false unless said)."""
+    """Members, editors and admins (their own; the shared ones: admins). {file, parentId?, start?}: the text of a
+    bookmarks file a browser exported (HTML) or an XBEL file, added under the folder (none: the top); start: its
+    folders go on the start page too (false unless said)."""
     b = await json_body(request)
-    if b.get("file") is not None:
-        def work():
-            items = bookmarkfiles.parse(str(b["file"]))
-            bookmarks.add_items(b.get("parentId"), items, bool(b.get("start")))
-            f, l = bookmarkfiles.count(items)
-            return {"groups": f, "links": l}
-        return await run_in_threadpool(_bm, request, work)
-    return _bm(request, bookmarks.import_yaml, b.get("yaml") or "", bool(b.get("replace")))
+    if b.get("file") is None:
+        raise HTTPException(400, "Send {file}: a bookmarks file a browser exported (HTML) or an XBEL file")
+
+    def work():
+        items = bookmarkfiles.parse(str(b["file"]))
+        bookmarks.add_items(b.get("parentId"), items, bool(b.get("start")))
+        f, l = bookmarkfiles.count(items)
+        return {"groups": f, "links": l}
+    return await run_in_threadpool(_bm, request, work)
 
 
 @router.get("/api/bookmarks/export.{kind}", dependencies=[access.signed_in])

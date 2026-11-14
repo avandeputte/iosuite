@@ -112,8 +112,11 @@ async def order_photos(rid: int, request: Request):
     """{ids: [..]}: the recipe's own photos in this order; the first is the one the cards show."""
     u = request.state.user
     b = await json_body(request)
-    model.order_photos(u, model.readable(u, rid), b.get("ids") if isinstance(b.get("ids"), list) else [])
-    return model.public(model.readable(u, rid), u)
+
+    def work():
+        model.order_photos(u, model.readable(u, rid), b.get("ids") if isinstance(b.get("ids"), list) else [])
+        return model.public(model.readable(u, rid), u)
+    return await run_in_threadpool(work)
 
 
 @router.delete("/api/recipes/{rid}/photos/{pid}", dependencies=[access.signed_in])
@@ -131,7 +134,7 @@ async def mark_recipe(rid: int, request: Request):
     alone: the others see only the average of the ratings."""
     u = request.state.user
     b = await json_body(request)
-    return model.public(model.mark(u, model.readable(u, rid), b), u)
+    return await run_in_threadpool(lambda: model.public(model.mark(u, model.readable(u, rid), b), u))
 
 
 # ---- cookbooks
@@ -148,7 +151,7 @@ async def add_book(request: Request):
     """{name, description?, family?}: a family cookbook (editors; it holds family recipes) or one of your own."""
     u = request.state.user
     b = await json_body(request)
-    book = model.create_book(u, b, _family(u, b))
+    book = await run_in_threadpool(lambda: model.create_book(u, b, _family(u, b)))
     return JSONResponse(model.book_public({**book, "n": 0}, u), status_code=201)
 
 
@@ -157,7 +160,7 @@ async def change_book(bid: int, request: Request):
     """{name?, description?}"""
     u = request.state.user
     b = await json_body(request)
-    return model.book_public(model.update_book(u, model.readable_book(u, bid), b), u)
+    return await run_in_threadpool(lambda: model.book_public(model.update_book(u, model.readable_book(u, bid), b), u))
 
 
 @router.delete("/api/books/{bid}", dependencies=[access.signed_in])

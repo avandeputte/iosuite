@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import db, users  # noqa: E402
+from app import db  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -43,7 +43,6 @@ def client(_client):
     db.migrate()
     from app.auth import auth
     _authtest.clean_shared_tables(auth)
-    users.forget_cached_auth()
     _client.cookies.clear()
     r = _client.post("/api/auth/setup", json={"name": "alex", "password": "secret123"})
     assert r.status_code == 200, r.text

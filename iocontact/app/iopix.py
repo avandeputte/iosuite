@@ -102,7 +102,7 @@ def photo(person_id: int | None) -> tuple[bytes, str] | None:
         return None
 
 
-def person_url(person_id: int, name: str | None = None) -> str | None:
+def person_url(person_id: int) -> str | None:
     s = settings()
     if not s["url"]:
         return None

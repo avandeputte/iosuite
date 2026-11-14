@@ -139,10 +139,8 @@ def test_mcp_helpers():
     assert shared_mcp.who()["name"] == "bob"
     with pytest.raises(ToolError):
         shared_mcp.need_admin()
-    with pytest.raises(ToolError):
-        shared_mcp.need_writer()
     shared_mcp.current_user.set({"id": 1, "name": "alex", "role": "admin"})
-    assert shared_mcp.need_admin()["name"] == "alex" and shared_mcp.need_writer()
+    assert shared_mcp.need_admin()["name"] == "alex"
     shared_mcp.current_user.set(None)
 
 

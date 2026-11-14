@@ -58,7 +58,7 @@ async def api_note_create(request: Request):
     body.setdefault("source", "web")
     if body.get("template"):
         try:
-            for k, v in notes.note_from_template(str(body.pop("template"))).items():
+            for k, v in (await run_in_threadpool(notes.note_from_template, str(body.pop("template")))).items():
                 body.setdefault(k, v)
         except (notes.NotFound, ValueError):
             raise HTTPException(404, "No such template")
@@ -227,7 +227,7 @@ async def api_attach_put(uid: str, aid: str, request: Request, name: str = "file
 async def api_attach_rename(uid: str, aid: str, request: Request):
     """{name}: rename the file."""
     body = await json_body(request)
-    return attachments.rename(uid, aid, str(body.get("name") or ""), user_name(request))
+    return await run_in_threadpool(attachments.rename, uid, aid, str(body.get("name") or ""), user_name(request))
 
 
 @router.delete("/api/notes/{uid}/attachments/{aid}", dependencies=[access.member_write])
@@ -283,7 +283,7 @@ def api_templates(request: Request):
 @router.post("/api/templates", dependencies=[access.member_write])
 async def api_template_create(request: Request):
     body = await json_body(request)
-    return notes.save_template(body.get("id"), body, user_name(request))
+    return await run_in_threadpool(notes.save_template, body.get("id"), body, user_name(request))
 
 
 @router.post("/api/templates/standard", dependencies=[access.member_write])
@@ -297,7 +297,7 @@ async def api_template_put(uid: str, request: Request):
     """{name, title, body, tags, folderID, updatedAt}; {deleted: true} deletes it."""
     body = await json_body(request)
     try:
-        return notes.save_template(uid, body, user_name(request), bool(body.get("force")))
+        return await run_in_threadpool(notes.save_template, uid, body, user_name(request), bool(body.get("force")))
     except notes.Stale as e:
         return _stale(e)
 
@@ -321,7 +321,7 @@ def api_folders(request: Request):
 @router.post("/api/folders", dependencies=[access.member_write])
 async def api_folder_create(request: Request):
     body = await json_body(request)
-    return notes.save_folder(body.get("id"), body, user_name(request))
+    return await run_in_threadpool(notes.save_folder, body.get("id"), body, user_name(request))
 
 
 @router.put("/api/folders/{uid}", dependencies=[access.member_write])
@@ -329,7 +329,7 @@ async def api_folder_put(uid: str, request: Request):
     """{name, color, updatedAt}; {deleted: true} deletes it (its notes stay, in no folder)."""
     body = await json_body(request)
     try:
-        return notes.save_folder(uid, body, user_name(request), bool(body.get("force")))
+        return await run_in_threadpool(notes.save_folder, uid, body, user_name(request), bool(body.get("force")))
     except notes.Stale as e:
         return _stale(e)
 
@@ -355,7 +355,7 @@ async def api_tag_color(name: str, request: Request):
     """{color: one of the colours, or null for none, updatedAt}."""
     body = await json_body(request)
     try:
-        return notes.set_tag_color(name, body.get("color"), user_name(request), body.get("updatedAt"), bool(body.get("force")))
+        return await run_in_threadpool(notes.set_tag_color, name, body.get("color"), user_name(request), body.get("updatedAt"), bool(body.get("force")))
     except notes.Stale as e:
         return _stale(e)
 
@@ -363,13 +363,13 @@ async def api_tag_color(name: str, request: Request):
 @router.post("/api/tags/rename", dependencies=[access.member_write])
 async def api_tag_rename(request: Request):
     body = await json_body(request)
-    return {"changed": notes.rename_tag(str(body.get("from", "")), str(body.get("to", "")), user_name(request))}
+    return {"changed": await run_in_threadpool(notes.rename_tag, str(body.get("from", "")), str(body.get("to", "")), user_name(request))}
 
 
 @router.post("/api/tags/remove", dependencies=[access.member_write])
 async def api_tag_remove(request: Request):
     body = await json_body(request)
-    return {"changed": notes.remove_tag(str(body.get("name", "")), user_name(request))}
+    return {"changed": await run_in_threadpool(notes.remove_tag, str(body.get("name", "")), user_name(request))}
 
 
 # ---- sync

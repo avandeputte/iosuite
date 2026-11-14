@@ -75,14 +75,6 @@ def need_member() -> dict:
     return u
 
 
-def need_writer() -> dict:
-    """An editor or more: may change what is shared with everyone."""
-    u = who()
-    if not users.can_write(u):
-        raise ToolError("Only an editor or admin can change this")
-    return u
-
-
 def add_suite_update_tools(server: MCPServer) -> None:
     """The start page's tools for updating the suite (iosuite_shared.suiteupdates), suite admins only: suite_version
     and update_suite."""

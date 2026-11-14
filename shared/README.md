@@ -281,7 +281,7 @@ async with shared_mcp.running(server): yield               # in the lifespan
 
 @server.tool(annotations=shared_mcp.READ_ONLY)             # READ_ONLY, WRITES, ADDS, DELETES, UPDATES
 def overview():
-    u = shared_mcp.who()                                   # or need_writer(), need_admin(); clamp(n, lo, hi) for page sizes
+    u = shared_mcp.who()                                   # or need_member(), need_admin(); clamp(n, lo, hi) for page sizes
 ```
 
 `auth.mcp_gate` answers 404 while the switch is off ("The MCP server is switched off (Settings › Server).") and 401 when

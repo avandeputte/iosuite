@@ -410,11 +410,14 @@ async def api_placetags_run(request: Request):
 async def api_tags_recent(request: Request):
     """Remember the tags just assigned, newest first (shown as a quick row like digiKam's)."""
     body = await json_body(request)
-    ids = [int(i) for i in body.get("ids", [])][:20]
-    old = [int(i) for i in json.loads(appstate.get_setting("recent_tags", "[]"))]
-    new = ids + [i for i in old if i not in ids]
-    appstate.set_setting("recent_tags", json.dumps(new[:12]))
-    return {"recent": new[:12]}
+
+    def work():
+        ids = [int(i) for i in body.get("ids", [])][:20]
+        old = [int(i) for i in json.loads(appstate.get_setting("recent_tags", "[]"))]
+        new = ids + [i for i in old if i not in ids]
+        appstate.set_setting("recent_tags", json.dumps(new[:12]))
+        return {"recent": new[:12]}
+    return await run_in_threadpool(work)
 
 
 

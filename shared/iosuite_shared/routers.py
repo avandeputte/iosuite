@@ -259,15 +259,6 @@ def auth_router(self) -> APIRouter:
             raise HTTPException(404, "No face")
         return Response(data, media_type=ctype, headers={"Cache-Control": "private, max-age=3600"})
 
-    @r.delete("/api/auth/suite/{key}", dependencies=[access.suite_admin])
-    def api_suite_forget(key: str, request: Request):
-        """Forget an app that was uninstalled (suite admins); it registers again if it starts."""
-        if not suite.forget(key):
-            raise HTTPException(404, "No such app")
-        if key == app:
-            auth._registered = False
-        return {"items": suite.visible(auth.current_user(request)), "app": app}
-
     return r
 
 def admin_router(self) -> APIRouter:

@@ -7,6 +7,7 @@ import unicodedata
 import pytest
 
 from app import users
+from iosuite_shared import apppasswords
 from app.fold import fold
 from tests.test_carddav import dav
 from tests.test_mcp import app_password, call
@@ -65,7 +66,7 @@ def test_ldap_search_ignores_accents(client, family_id):
     threading.Thread(target=loop.run_forever, daemon=True).start()
     try:
         c = ldap3.Connection(ldap3.Server("127.0.0.1", port=port, get_info=ldap3.NONE),
-                             "cn=alex,ou=users,dc=iocontact", users.create_app_password(users.find("alex")["id"], "Mail"), auto_bind=True)
+                             "cn=alex,ou=users,dc=iocontact", apppasswords.create(users.find("alex")["id"], "iocontact", "Mail"), auto_bind=True)
         c.search("dc=iocontact", "(cn=*celia*)", attributes=["cn"])
         assert [e.cn.value for e in c.entries] == ["Célia Dupont"]
         c.search("dc=iocontact", "(cn=soren orsted)", attributes=["cn"])

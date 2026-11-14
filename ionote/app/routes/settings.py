@@ -24,9 +24,12 @@ def api_settings(request: Request):
 @router.post("/api/settings", dependencies=[access.admin])
 async def api_settings_set(request: Request):
     body = await json_body(request)
-    for k, v in body.items():  # sign-in required is a suite admin's, on Settings › Suite › Apps
-        if k in TEXTS:
-            db.set_setting(k, str(v or "").strip()[:40])
+
+    def save():
+        for k, v in body.items():  # sign-in required is a suite admin's, on Settings › Suite › Apps
+            if k in TEXTS:
+                db.set_setting(k, str(v or "").strip()[:40])
+    await run_in_threadpool(save)
     return {"ok": True}
 
 

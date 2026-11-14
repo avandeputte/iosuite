@@ -10,6 +10,7 @@ import zipfile
 
 from fastapi import APIRouter
 from fastapi import HTTPException
+from starlette.concurrency import run_in_threadpool
 from fastapi import Request
 from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
@@ -203,7 +204,7 @@ async def api_zip_post(request: Request):
     """Same as GET /api/zip, for selections too long for a URL (form-encoded body)."""
     items = await form_items(request)
     d = dict(items)
-    return _zip_response(items, 1 if d.get("sidecars") == "1" else 0, d.get("name") or "photos")
+    return await run_in_threadpool(_zip_response, items, 1 if d.get("sidecars") == "1" else 0, d.get("name") or "photos")
 
 
 @router.get("/api/zip", dependencies=[access.downloads])
@@ -247,7 +248,7 @@ def _zip_parts(items, part_mb: int):
 async def api_zip_plan(request: Request):
     """How a download would be split. Body: the filters, form-encoded, plus part_mb."""
     items = await form_items(request)
-    parts = _zip_parts(items, int(dict(items).get("part_mb") or 2000))
+    parts = await run_in_threadpool(_zip_parts, items, int(dict(items).get("part_mb") or 2000))
     return {"files": sum(len(p) for p in parts), "bytes": sum(r[3] or 0 for p in parts for r in p),
             "parts": [{"files": len(p), "bytes": sum(r[3] or 0 for r in p),
                        "first": p[0][1].strip("/"), "last": p[-1][1].strip("/")} for p in parts]}
