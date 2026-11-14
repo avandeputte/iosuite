@@ -147,10 +147,12 @@ def update_list(lid: int, **f) -> None:
 
 
 def delete_list(lid: int) -> None:
+    gone = [r["id"] for r in db.q("SELECT id FROM tsk_tasks WHERE list_id = %s", (lid,))]
     with db.tx():
         db.ex("DELETE FROM tsk_lists WHERE id = %s", (lid,))
         db.set_setting(f"{PURGED}{lid}", None)
     _cache_clear()
+    related.forget_many("task", gone)  # its tasks' links to other items of the suite go with them
 
 
 def bump(lid: int) -> int:
@@ -405,7 +407,15 @@ def purged_before(lid: int) -> int:
 
 def move(tid: int, to_lid: int, user_id: int | None = None) -> dict:
     """To another list: a deletion in the old one and a new task in the new one (as CalDAV sees it), in one
-    transaction. Its subtasks go along."""
+    transaction. Its subtasks go along, and the links of each to other items of the suite follow (after the commit)."""
+    moved = []
+    new = _move(tid, to_lid, user_id, moved)
+    for old_id, new_id in moved:
+        related.move("task", old_id, new_id)  # a new id in the new list: its links go along
+    return new
+
+
+def _move(tid: int, to_lid: int, user_id: int | None, moved: list) -> dict:
     with db.tx():
         r = get_row(tid)
         if r["list_id"] == to_lid:
@@ -418,8 +428,9 @@ def move(tid: int, to_lid: int, user_id: int | None = None) -> dict:
             delete(tid, user_id, "moved", f"to {task_list(to_lid)['name']}")
             new = save(to_lid, cal, None, None, r.get("created_by") if user_id is None else user_id, "added", f"from {task_list(r['list_id'])['name']}")
             for k in kids:
-                move(k["id"], to_lid, user_id)
-        return new
+                _move(k["id"], to_lid, user_id, moved)
+        moved.append((tid, new["id"]))
+    return new
 
 
 LISTED = ("id, list_id, uid, href, etag, summary, status, done, priority, due, due_all_day, start, completed_at, parent_uid, rrule, "

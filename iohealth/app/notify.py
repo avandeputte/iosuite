@@ -4,15 +4,17 @@ turned notifications on.
 
 Only goals whose numbers mean the same in every unit system are looked at (steps, minutes, kilocalories, hours and
 the activity rings): a goal is kept in the units the web app shows, which the server does not know.
+
+"Today" is the person's own: the zone their phone sends when a sync starts (timeZone), or the web app's, as last seen
+(webapi.remember_zone); the server's TZ only until either has been seen.
 """
 import json
 import logging
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from iosuite_shared import push
 
-from app import config, db, webapi
+from app import db, webapi
 
 log = logging.getLogger("app.notify")
 APP = "iohealth"
@@ -21,13 +23,6 @@ NAMES = {"activity_move": "Move ring", "activity_exercise": "Exercise ring", "ac
          "step_count": "Steps", "apple_exercise_time": "Exercise", "active_energy_burned": "Active energy",
          "flights_climbed": "Flights climbed", "apple_stand_time": "Stand time", "mindful_session": "Mindful minutes"}
 UNIT_WORDS = {"count": "", "min": " min", "kcal": " kcal", "h": " h"}
-
-
-def _zone():
-    try:
-        return ZoneInfo(config.TZ or "UTC")
-    except (ZoneInfoNotFoundError, ValueError):
-        return ZoneInfo("UTC")
 
 
 def _goals(uid: int) -> list:
@@ -47,7 +42,7 @@ def after_sync(uid: int, now: datetime = None) -> int:
     """After a sync of this account: the goals reached today that were not announced yet."""
     if uid not in {u["id"] for u in push.recipients("health")}:
         return 0
-    loc = _zone()
+    loc = webapi.zone_of(uid)  # where the person is: their phone's or browser's zone, as last seen
     now = (now or datetime.now(loc)).astimezone(loc)
     start = datetime(now.year, now.month, now.day, tzinfo=loc)
     sent = 0

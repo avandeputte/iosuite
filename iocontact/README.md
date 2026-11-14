@@ -213,7 +213,7 @@ The tools: `overview`, `list_address_books`, `search_contacts`, `get_contact`, `
   profiles the person verified there, and the contact's GitHub, Mastodon and Bluesky profiles. LinkedIn, Facebook,
   Instagram and X have no lookup apps may use; an assistant connected over MCP can research people there and file
   what it finds with `suggest_contact_update`, with the page it found it on.
-- **Merge history.** Every merge keeps the contacts as they were, so **Undo** brings them back, relations included.
+- **Merge history.** Every merge keeps the contacts as they were for 30 days, so **Undo** brings them back, relations included. After 30 days, or once a merged contact is purged for good, the merge is forgotten.
 
 ## Tests
 

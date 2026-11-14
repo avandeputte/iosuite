@@ -343,16 +343,41 @@ def snapshot(ids: list[int]) -> dict:
     return {k: [{c: _enc(v) for c, v in r.items()} for r in rows] for k, rows in snap.items()}
 
 
-def merge(u: dict, keep_id: int, other_ids: list[int], result: dict | None = None) -> int:
+def merge(u: dict, keep_id: int, other_ids: list[int], result: dict | None = None, book_ids: list[int] | None = None) -> int:
     """Merge (model.merge) after keeping a snapshot for undo. Returns the merge's id."""
     ids = [keep_id, *[i for i in other_ids if i != keep_id]]
     snap = json.dumps(snapshot(ids))
     names = ", ".join(model.get_row(i)["fn"] for i in ids)
     if result is not None:
         result = {k: v for k, v in result.items() if k not in ("photo", "photoData", "id", "uid", "href", "etag", "bookId")}
-    model.merge(keep_id, other_ids, result)
+    model.merge(keep_id, other_ids, result, book_ids)
     return db.ex("INSERT INTO con_contact_merges (user_id, kept_contact_id, other_ids, names, snapshot, keep_etag) VALUES (%s, %s, %s, %s, %s, %s)",
                  (u["id"] if u else None, keep_id, ",".join(map(str, other_ids)), names[:1024], snap, model.get_row(keep_id)["etag"]))
+
+
+MERGE_KEEP_DAYS = 30  # how long a merge can be undone: its snapshot holds the contacts as they were, then it goes
+
+
+def _merge_ids(m: dict) -> list[int]:
+    return [int(m["kept_contact_id"]), *[int(x) for x in m["other_ids"].split(",") if x]]
+
+
+def purge_merges(days: int = MERGE_KEEP_DAYS) -> int:
+    """Forget the merges older than `days`, and those whose contacts are no longer all there (purged deletion markers,
+    an account's book gone): their snapshots could not be put back, and they hold copies of the contacts."""
+    n = db.ex("DELETE FROM con_contact_merges WHERE created_at < NOW() - INTERVAL %s DAY", (days,))
+    rows = db.q("SELECT id, kept_contact_id, other_ids FROM con_contact_merges")
+    have = {r["id"] for r in db.q("SELECT id FROM con_contacts")} if rows else set()
+    dead = [r["id"] for r in rows if not set(_merge_ids(r)) <= have]
+    if dead:
+        n += db.ex(f"DELETE FROM con_contact_merges WHERE id IN ({','.join(['%s'] * len(dead))})", dead)
+    return n
+
+
+def housekeeping() -> None:
+    """The daily chore: old deletion markers (model.purge_deleted), then the merges that can no longer be undone."""
+    model.purge_deleted()
+    purge_merges()
 
 
 def history(book_ids: list[int], limit: int = 50) -> list[dict]:
@@ -361,13 +386,15 @@ def history(book_ids: list[int], limit: int = 50) -> list[dict]:
     rows = db.q("SELECT m.id, m.kept_contact_id, m.other_ids, m.names, m.keep_etag, m.created_at, m.undone_at, m.user_id, c.etag, c.address_book_id, c.deleted, c.fn "
                 "FROM con_contact_merges m LEFT JOIN con_contacts c ON c.id = m.kept_contact_id ORDER BY m.id DESC LIMIT %s", (limit * 3,))
     who = users.names_of({r["user_id"] for r in rows if r["user_id"]})  # the accounts live in the Shared ioSuite database
+    have = {r["id"] for r in db.q("SELECT id FROM con_contacts")} if rows else set()
     for r in rows:
         if r["address_book_id"] not in book_ids:
             continue
         out.append({"id": r["id"], "keepId": r["kept_contact_id"], "keepName": r["fn"], "otherIds": [int(x) for x in r["other_ids"].split(",") if x],
                     "names": r["names"], "by": who.get(r["user_id"]), "at": r["created_at"].isoformat() if r["created_at"] else None,
                     "undone": r["undone_at"].isoformat() if r["undone_at"] else None,
-                    "changedSince": bool(r["etag"] != r["keep_etag"]), "canUndo": not r["undone_at"] and not r["deleted"]})
+                    "changedSince": bool(r["etag"] != r["keep_etag"]), "canUndo": not r["undone_at"] and not r["deleted"] and set(_merge_ids(r)) <= have,
+                    "until": (r["created_at"] + dt.timedelta(days=MERGE_KEEP_DAYS)).isoformat() if r["created_at"] else None})
         if len(out) >= limit:
             break
     return out
@@ -378,6 +405,9 @@ def undo(merge_id: int) -> dict:
     m = db.one("SELECT * FROM con_contact_merges WHERE id = %s", (merge_id,))
     if not m or m["undone_at"]:
         raise Invalid("No such merge, or it was undone already")
+    marks = ",".join(["%s"] * len(_merge_ids(m)))
+    if len(db.q(f"SELECT id FROM con_contacts WHERE id IN ({marks})", _merge_ids(m))) < len(set(_merge_ids(m))):
+        raise Invalid("This merge can no longer be undone: some of its contacts are gone for good")
     snap = {k: [{c: _dec(v) for c, v in r.items()} for r in rows] for k, rows in json.loads(m["snapshot"]).items()}
     ids = [r["id"] for r in snap["contacts"]]
     marks = ",".join(["%s"] * len(ids))

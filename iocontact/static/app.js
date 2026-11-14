@@ -1243,7 +1243,7 @@ async function showCleanup(page, r) {
 
 async function maintDups(el) {
   const r = await api('api/duplicates');
-  el.replaceChildren(h('p', { class: 'muted' }, 'Contacts that are probably the same person: the same email or phone, the same or a similar name, a nickname (Bob for Robert), the same birthday or company. Other birthdays, genders or a Sr./Jr. count against. The first name has to fit: people who only share a last name, an address, a home phone or a family email are never offered. Merging keeps everything (you choose where they disagree) and can be undone.'));
+  el.replaceChildren(h('p', { class: 'muted' }, 'Contacts that are probably the same person: the same email or phone, the same or a similar name, a nickname (Bob for Robert), the same birthday or company. Other birthdays, genders or a Sr./Jr. count against. The first name has to fit: people who only share a last name, an address, a home phone or a family email are never offered. Merging keeps everything (you choose where they disagree) and can be undone for 30 days.'));
   if (!r.groups.length) { el.append(h('div', { class: 'empty' }, icon('check'), h('p', null, 'No duplicates found.'))); return; }
   for (const g of r.groups) {
     const reasons = g.pairs.length === 1 ? g.pairs[0].reasons : g.pairs.map((p) => `${g.contacts.find((c) => c.id === p.a).fn} / ${g.contacts.find((c) => c.id === p.b).fn}: ${p.reasons.join(', ')}`);
@@ -1317,7 +1317,7 @@ async function mergeDialog(ids, done, keepId) {
         for (const [field, flags] of Object.entries(keepLists)) res[field] = (pv.merged[field] || []).filter((_, i) => flags[i]);
         try {
           await api('api/contacts/merge', { method: 'POST', json: { keep: pv.keep, others: ids.filter((x) => x !== pv.keep), result: res } });
-          close(); S.all = null; await loadMeta(); toast('Merged. Clean up › Merge history can undo it.'); done && done(pv.keep);
+          close(); S.all = null; await loadMeta(); toast('Merged. Clean up › Merge history can undo it for 30 days.'); done && done(pv.keep);
         } catch (e) { fail(e); }
       } }, 'Merge'))));
   document.body.append(back);
@@ -1392,7 +1392,7 @@ async function maintSuggest(el) {
 
 async function maintMerges(el) {
   const r = await api('api/merges');
-  el.replaceChildren(h('p', { class: 'muted' }, 'Every merge is kept with the contacts as they were before it, so it can be undone: the merged contacts come back as they were, with their relations.'));
+  el.replaceChildren(h('p', { class: 'muted' }, 'Each merge is kept for 30 days with the contacts as they were before it, so it can be undone: the merged contacts come back as they were, with their relations. After that, or once a merged contact is gone for good, it can no longer be undone.'));
   if (!r.items.length) { el.append(h('div', { class: 'empty' }, h('p', null, 'No merges yet.'))); return; }
   el.append(h('table', { class: 't' }, h('tr', null, h('th', null, 'When'), h('th', null, 'Contacts'), h('th', null, 'By'), h('th')),
     r.items.map((m) => h('tr', null, h('td', null, new Date(m.at).toLocaleString()),
@@ -1401,7 +1401,7 @@ async function maintMerges(el) {
       h('td', null, m.undone ? h('span', { class: 'muted' }, 'undone') : m.canUndo ? h('button', { class: 'pillbtn noic', onclick: async () => {
         if (!await confirmDialog('Undo merge', `Put ${m.names} back as they were before the merge?${m.changedSince ? ' Changes made to the merged contact since then are lost.' : ''}`, 'Undo merge')) return;
         try { await api(`api/merges/${m.id}/undo`, { method: 'POST' }); S.all = null; await loadMeta(); toast('Merge undone'); onRoute(); } catch (e) { fail(e); }
-      } }, 'Undo') : null)))));
+      } }, 'Undo') : h('span', { class: 'muted' }, 'can no longer be undone'))))));
 }
 
 async function showImport(page) {

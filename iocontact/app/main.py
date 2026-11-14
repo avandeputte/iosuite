@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from iosuite_shared import chores, mcp as shared_mcp
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, carddav, config, db, enrich, iopix, ldapd, mcp, model, notify, users
+from app import __version__, api, carddav, config, db, enrich, iopix, ldapd, mcp, model, notify, quality, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
         except OSError as e:
             log.warning("LDAP directory not started on port %s: %s", config.LDAP_PORT, e)
     updater.start_daily()  # the daily "is there a newer version" check, while the setting allows it
-    purge = chores.start(model.purge_deleted, name="purge of old deletion markers")  # once a day: KEEP_DELETED_DAYS
+    purge = chores.start(quality.housekeeping, name="purge of old deletion markers and merges")  # once a day: KEEP_DELETED_DAYS, 30 days of undo
     notes = chores.start(notify.run, every_s=60, first_s=20, name="notifications")  # the morning's birthdays
     log.info("ioContact %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
     async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process

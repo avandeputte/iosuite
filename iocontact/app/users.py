@@ -92,6 +92,9 @@ def forget_gone(*uids: int) -> None:
             db.ex("DELETE FROM con_contacts WHERE address_book_id = %s", (b["id"],))
         db.ex("DELETE FROM con_address_books WHERE owner_id = %s", (uid,))
         db.ex("DELETE FROM con_feed_tokens WHERE user_id = %s", (uid,))
+    if uids:
+        from app import quality
+        quality.purge_merges()  # merges of their contacts can no longer be undone, and hold copies of them
 
 
 SUITE_ID = "suite_id"             # in the Shared ioSuite database (ios_settings, suite-wide): which one it is

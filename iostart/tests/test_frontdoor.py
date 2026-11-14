@@ -32,6 +32,10 @@ async def _echo(scope, receive, send):
         for part in (b"one ", b"two ", b"three"):
             await send({"type": "http.response.body", "body": part, "more_body": True})
         return await send({"type": "http.response.body", "body": b""})
+    if path in ("/slash", "/rooted", "/away"):  # Starlette's trailing-slash redirect, built from the request without the folder
+        where = {"/slash": b"http://testserver/dav/thing/?a=1", "/rooted": b"/dav/thing/", "/away": b"https://elsewhere.example/dav/"}[path]
+        await send({"type": "http.response.start", "status": 307, "headers": [(b"location", where), (b"content-length", b"0")]})
+        return await send({"type": "http.response.body", "body": b""})
     if path == "/moved":
         await send({"type": "http.response.start", "status": 302, "headers": [(b"location", b"/calendar/there"), (b"content-length", b"0")]})
         return await send({"type": "http.response.body", "body": b""})
@@ -146,6 +150,47 @@ def test_the_answer_as_the_app_gave_it(door):
     r = door.get("/calendar/moved", follow_redirects=False)  # the app's own redirect, not followed here
     assert r.status_code == 302 and r.headers["location"] == "/calendar/there"
     assert door.get("/calendar/cookies").headers.get_list("set-cookie") == ["a=1; Path=/", "b=2; Path=/"]
+
+
+def test_a_redirect_that_lost_its_folder_gets_it_back(door):
+    loc = lambda p: door.get(p, follow_redirects=False).headers["location"]  # noqa: E731
+    assert loc("/calendar/slash") == "http://testserver/calendar/dav/thing/?a=1"
+    assert loc("/calendar/rooted") == "/calendar/dav/thing/"
+    assert loc("/calendar/away") == "https://elsewhere.example/dav/"
+    assert loc("/calendar/moved") == "/calendar/there"
+    assert frontdoor._location("there", {"testserver"}, "/calendar") == "there"
+    assert frontdoor._location("//evil.example/x", {"testserver"}, "/calendar") == "//evil.example/x"
+
+
+def _asgi(client, path: str, headers=(), body=b"") -> tuple[int, bytes]:
+    """One request straight into the app, as a server would pass on what it read (no client in between to tidy it)."""
+    import asyncio
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST" if body else "GET", "scheme": "http",
+             "path": path, "raw_path": path.encode(), "query_string": b"", "root_path": "", "client": ("127.0.0.1", 5000),
+             "server": ("testserver", 80), "headers": [(b"host", b"testserver"), *headers]}
+    got, sent = [], [{"type": "http.request", "body": body, "more_body": False}]
+
+    async def receive():
+        return sent.pop(0) if sent else (await asyncio.sleep(3600))
+
+    async def send(m):
+        got.append(m)
+    client.portal.call(client.app, scope, receive, send)  # on the app's own event loop
+    return got[0]["status"], b"".join(m.get("body", b"") for m in got[1:])
+
+
+def test_odd_requests_get_a_plain_answer_not_a_500(door):
+    status, body = _asgi(door, "/calendar/upload", [(b"content-length", b"2"), (b"transfer-encoding", b"chunked")], b"abcd")
+    assert status == 200 and json.loads(body)["size"] == 4
+    assert _asgi(door, "/calendar/" + "a" * 70000)[0] == 414
+
+
+def test_websockets_are_refused_in_an_apps_folder(door):
+    from starlette.websockets import WebSocketDisconnect
+    with pytest.raises(WebSocketDisconnect) as e:
+        with door.websocket_connect("/calendar/ws"):
+            pass
+    assert e.value.code == 1008
 
 
 def test_nobody_names_the_signed_in_person_but_a_trusted_proxy(door):

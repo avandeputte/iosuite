@@ -16,7 +16,7 @@ Every app with items mounts the router (Auth.related_router(): /api/related/*) a
 The picker searches every app that has items (the same way the start page's search box does), the coming events
 and the open tasks first. Adding or removing a link needs a role of member or more in the app the item is in, so it
 is done there (an app answers 403 for another app's kind), and both items must be ones the viewer sees. An app that
-deletes an item for good calls forget(kind, id).
+deletes an item for good calls forget(kind, id); one that gives an item a new id calls move(kind, old, new).
 
 The other app is asked on the viewer's behalf (iosuite_shared.links.as_viewer): on localhost when it runs on this
 machine, then at its address inside the network, then at its public one, with the suite's Cloudflare Access service
@@ -129,6 +129,24 @@ def forget(kind: str, item_id) -> int:
 def forget_many(kind: str, ids) -> int:
     """forget() for many items of one kind (an app purging what was deleted)."""
     return sum(forget(kind, i) for i in ids)
+
+
+def move(kind: str, old_id, new_id) -> int:
+    """The item lives on under another id (an event moved to another calendar is a new event there, as CalDAV sees
+    it): its links follow it (how many). Never raises: the app's move has happened."""
+    try:
+        kind, old_id = check(kind, old_id)
+        new = check(kind, new_id)
+        links = of(kind, old_id)
+        for link in links:
+            (ak, ai), (bk, bi) = _pair(new, (link["kind"], link["id"]))
+            db.ex("INSERT IGNORE INTO ios_related (a_kind, a_id, b_kind, b_id, created_by, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
+                  (ak, ai, bk, bi, link["createdBy"], link["createdAt"]))
+        forget(kind, old_id)
+        return len(links)
+    except Exception as e:  # noqa: BLE001
+        log.warning("could not move the links of %s %s to %s: %s", kind, old_id, new_id, e)
+        return 0
 
 
 # ------------------------------------------------------------------ asking the item's app, as the viewer

@@ -126,7 +126,9 @@ def update_book(bid: int, **f) -> None:
 
 
 def delete_book(bid: int) -> None:
+    gone = [r["id"] for r in db.q("SELECT id FROM con_contacts WHERE address_book_id = %s", (bid,))]
     db.ex("DELETE FROM con_address_books WHERE id = %s", (bid,))
+    related.forget_many("contact", gone)  # its contacts' links to other items of the suite go with them
 
 
 def _bump(book_id: int) -> int:
@@ -718,16 +720,17 @@ def _child_key(key: str, x: dict, cols: list) -> tuple:
     return tuple(str(x.get(k) or "").strip().lower() for k in cols if k not in ("pref", "label"))
 
 
-def merge(keep_id: int, other_ids: list[int], result: dict | None = None) -> None:
+def merge(keep_id: int, other_ids: list[int], result: dict | None = None, book_ids: list[int] | None = None) -> None:
     """Fold other contacts into one: `result` (the contact as it should end up, e.g. chosen field by field) or what
-    combine() gives. Relations from elsewhere that point at the others move to the kept one; then the others are deleted."""
+    combine() gives. Relations from elsewhere that point at the others move to the kept one; then the others are deleted.
+    book_ids: the books the person merging reads, where a relation to a contact in another book is found again."""
     keep = full(keep_id)
     others = [o for o in (full(x) for x in other_ids if x != keep_id) if o]
     data = result if result is not None else combine(keep, others)
     with db.tx():
         for o in others:
             db.ex("UPDATE con_contact_relations SET related_id = %s WHERE related_id = %s AND contact_id NOT IN (%s, %s)", (keep_id, o["id"], keep_id, o["id"]))
-        save(keep["bookId"], data, cid=keep_id)
+        save(keep["bookId"], data, cid=keep_id, resolve_book_ids=book_ids)
         for o in others:
             db.ex("DELETE FROM con_contact_relations WHERE (contact_id = %s AND related_id = %s) OR (contact_id = %s AND related_id = %s)",
                   (o["id"], keep_id, keep_id, o["id"]))

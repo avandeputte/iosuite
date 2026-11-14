@@ -135,10 +135,12 @@ def update_calendar(cid: int, **f) -> None:
 
 
 def delete_calendar(cid: int) -> None:
+    gone = [r["id"] for r in db.q("SELECT id FROM cal_events WHERE calendar_id = %s", (cid,))]
     with db.tx():
         db.ex("DELETE FROM cal_calendars WHERE id = %s", (cid,))
         db.set_setting(f"{PURGED}{cid}", None)
     _cache_clear()
+    related.forget_many("event", gone)  # its events' links to other items of the suite go with them
 
 
 def bump(cid: int) -> int:
@@ -274,7 +276,9 @@ def move(eid: int, to_cid: int) -> dict:
             raise Invalid("That calendar already has this event")
         cal = parsed(r)
         delete(eid)
-        return save(to_cid, cal, None, None, r.get("created_by"))
+        new = save(to_cid, cal, None, None, r.get("created_by"))
+    related.move("event", eid, new["id"])  # a new id in the new calendar: its links go along
+    return new
 
 
 LISTED = ("id, calendar_id, uid, href, etag, summary, all_day, dtstart, dtend, rrule, status, range_start, range_end, changed_token, "
@@ -330,8 +334,7 @@ def occurrences(cals: list[dict], start: dt.datetime, end: dt.datetime, q: str =
     for r in rows_:
         try:
             cal = parsed(r)
-            occ = ical.occurrences(cal, start - (PAD if r["all_day"] else dt.timedelta(0)), end + (PAD if r["all_day"] else dt.timedelta(0)),
-                                   by_id[r["calendar_id"]].get("timezone"))
+            occ = ical.occurrences(cal, start, end, by_id[r["calendar_id"]].get("timezone"))
         except Exception:  # noqa: BLE001 - one broken object does not hide the rest
             continue
         for o in occ:

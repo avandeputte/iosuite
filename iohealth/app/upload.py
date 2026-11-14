@@ -21,7 +21,7 @@ import orjson
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 
-from app import access, db, rollup
+from app import access, db, rollup, webapi
 
 log = logging.getLogger("app.upload")
 router = APIRouter()
@@ -329,9 +329,12 @@ async def _json(request: Request) -> dict:
 
 @router.post("/v1/sessions", status_code=201, dependencies=[access.uploader])
 async def start(request: Request):
-    """A sync begins. {deviceName?, systemVersion?, fullResync?}: {sessionId}, which the batches and the finish name."""
+    """A sync begins. {deviceName?, systemVersion?, fullResync?, timeZone?}: {sessionId}, which the batches and the finish
+    name. timeZone: the phone's (an IANA name), for the goal notifications' "today"."""
     uid = int(request.state.user["id"])
     h = await _json(request)
+    if isinstance(h.get("timeZone"), str):
+        await run_in_threadpool(webapi.remember_zone, uid, h["timeZone"])
     sid = await run_in_threadpool(db.ex, "INSERT INTO hlt_sync_log (started_at, device, os, full_resync, items, user_id) VALUES (%s, %s, %s, %s, 0, %s)",
                                   (datetime.now(timezone.utc).replace(tzinfo=None), str(h.get("deviceName", ""))[:255],
                                    str(h.get("systemVersion", ""))[:32], bool(h.get("fullResync")), uid))
