@@ -26,6 +26,7 @@ import uuid as uuidlib
 from datetime import datetime, timedelta
 
 from app import config, db
+from iosuite_shared import related as linked_items
 from iosuite_shared.errors import Invalid
 
 SOURCES = ("clipboard", "service", "screenshot", "manual", "web", "photo", "import", "share", "mcp")
@@ -351,6 +352,7 @@ def _purge_rows(con, uids: list) -> int:
         con.execute("DELETE FROM nts_attachments WHERE note_uuid = ?", (uid,))
         con.execute("UPDATE nts_notes SET title = '', body = '', ocr_text = '', tags = '[]', pinned = 0, folder_id = NULL, has_image = 0, "
                     "image_sha = NULL, source_app = NULL, deleted = ?, rev = ? WHERE uuid = ?", (PURGED, db.next_rev(con), uid))
+    linked_items.forget_many("note", uids)  # their links to other items of the suite go too
     return len(uids)
 
 
