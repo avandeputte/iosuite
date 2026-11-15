@@ -816,15 +816,50 @@ async function showImport(page) {
       refreshAround();
     } catch (e) { fill(out, h('p', { class: 'err' }, e.message)); }
   };
+  // from a running Homebox, through its API: everything, the photos, manuals, receipts and the log too
+  const srvOut = h('div', { class: 'importres' });
+  const hbUrl = h('input', { class: 't', type: 'url', placeholder: 'https://homebox.example.com', value: store.get('homebox') || '', autocomplete: 'off' });
+  const hbUser = h('input', { class: 't', placeholder: 'Email', autocomplete: 'off', autocapitalize: 'none' });
+  const hbPw = h('input', { class: 't', type: 'password', placeholder: 'Password', autocomplete: 'off' });
+  let timer = null;
+  const showJob = (j) => {
+    if (!j || j.state === 'idle') { fill(srvOut); return; }
+    const counts = `${j.added} added, ${j.changed} brought up to date, ${j.files} ${j.files === 1 ? 'file' : 'files'}, ${j.log} log ${j.log === 1 ? 'line' : 'lines'}`;
+    fill(srvOut,
+      j.state === 'running' ? h('div', { class: 'draftnote' }, icon('download', 's'), j.total ? `${j.done} of ${j.total} things: ${counts}…` : `${j.step || 'Starting'}…`)
+        : j.state === 'failed' ? h('p', { class: 'err' }, `The import stopped: ${j.error}`)
+          : h('div', { class: 'draftnote' }, icon('check', 's'), `Done: ${j.total} things from ${j.source}. ${counts}.`),
+      j.skipped && j.skipped.length ? [h('p', null, `Left out (${j.skipped.length}):`), h('ul', { class: 'muted small' }, j.skipped.map((x) => h('li', null, x)))] : null,
+      j.state === 'done' ? h('p', null, h('a', { class: 'pillbtn', href: '#/' }, 'See them')) : null);
+    clearTimeout(timer);
+    if (j.state === 'running') timer = setTimeout(poll, 1500);
+    else if (j.state === 'done') refreshAround();
+  };
+  const poll = async () => { if (!document.body.contains(srvOut)) return; try { showJob(await api('api/import/homebox-server')); } catch (e) { fill(srvOut, h('p', { class: 'err' }, e.message)); } };
+  const fromServer = async (e) => {
+    e.preventDefault();
+    fill(srvOut, h('p', { class: 'muted' }, 'Signing in to Homebox…'));
+    try {
+      const j = await api('api/import/homebox-server', { method: 'POST', json: { url: hbUrl.value.trim(), username: hbUser.value.trim(), password: hbPw.value } });
+      store.set('homebox', hbUrl.value.trim()); hbPw.value = '';
+      showJob(j);
+    } catch (x) { fill(srvOut, h('p', { class: 'err' }, x.message)); }
+  };
   put(page, h('div', { class: 'pagehead' }, h('h1', null, 'Import and export')),
-    h('div', { class: 'box importbox' }, h('h2', null, icon('download'), 'From Homebox'),
+    canEditAll() ? h('form', { class: 'box importbox', onsubmit: fromServer }, h('h2', null, icon('download'), 'From a Homebox server'),
+      h('p', null, 'Everything in your Homebox, the photos, manuals, receipts, warranties and the maintenance log too, straight from Homebox itself. Give its address and the email and password you sign in to it with: they are used for this import and not kept.'),
+      h('div', { class: 'grid' }, fld('Homebox address', hbUrl), fld('Email', hbUser), fld('Password', hbPw)),
+      h('p', { class: 'muted small' }, 'Running it again brings things up to date instead of adding them twice, and things from an earlier CSV import are taken over (same name, same place). Maintenance that was only scheduled is not brought: add it here as upkeep.'),
+      h('p', null, h('button', { class: 'pillbtn primary', type: 'submit' }, icon('download', 's'), 'Bring everything over')), srvOut) : null,
+    h('div', { class: 'box importbox' }, h('h2', null, icon('download'), 'From a Homebox export (CSV)'),
       h('p', null, 'In Homebox, open ', h('b', null, 'Tools'), ' and choose ', h('b', null, 'Export inventory'), '. Pick that file here: every thing comes over with its place (the places are made), its labels, its purchase, warranty and sale details and its own fields.'),
-      h('p', { class: 'muted small' }, 'Importing the same export again brings the things it added up to date instead of adding them twice. Homebox’s export has no photos, manuals or maintenance log: add those on each thing’s page.'),
+      h('p', { class: 'muted small' }, 'Importing the same export again brings the things it added up to date instead of adding them twice. Homebox’s export has no photos, manuals or maintenance log: the import from a Homebox server above brings those.'),
       canAdd() ? h('p', null, h('button', { class: 'pillbtn primary', onclick: pick }, icon('upload', 's'), 'Pick the CSV file')) : h('p', { class: 'muted' }, 'A viewer only looks.'), out),
     h('div', { class: 'box' }, h('h2', null, icon('upload'), 'Export'),
       h('p', null, 'Every thing as a spreadsheet (CSV), in Homebox’s columns: open it in a spreadsheet, or take it to Homebox or another app.'),
       h('div', { class: 'exports chiprow' }, h('a', { class: 'pillbtn', href: 'api/export.csv', download: '' }, icon('download', 's'), 'Everything'),
         h('a', { class: 'pillbtn', href: 'api/export.csv?archived=false', download: '' }, icon('download', 's'), 'Only what you still have'))));
+  if (canEditAll()) poll();  // an import that is running (or just ran) shows where it is
 }
 
 // ------------------------------------------------------------------ settings
