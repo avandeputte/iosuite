@@ -73,6 +73,17 @@ main() {
   if [ -n "$home" ]; then
     [ ${#rest[@]} -eq 0 ] || die "ioSuite is already on this server (in $base): ${rest[*]} is for a first install. To change an app's settings: --reconfigure APP"
     [ -z "$dbadmin" ] || manage+=(--db-admin "${dbadmin%%:*}")
+    # the list is the suite's as it is now, not as it was when that app was installed: the shared library is fetched
+    # fresh and runs in that app's Python for this once (the app itself keeps its own until its next update)
+    local now; now="$(mktemp -d)"
+    if command -v git >/dev/null 2>&1 && git clone -q --depth 1 "$REPO" "$now" 2>/dev/null && [ -f "$now/shared/iosuite_shared/install.py" ]; then
+      local rc=0
+      PYTHONPATH="$now/shared${PYTHONPATH:+:$PYTHONPATH}" IOSUITE_REPO="$REPO" "$home/.venv/bin/python" -m iosuite_shared.cli \
+        --config "$home" apps --into "$base" ${manage[@]+"${manage[@]}"} || rc=$?
+      rm -rf "$now"; exit "$rc"
+    fi
+    rm -rf "$now"
+    say "Could not fetch ioSuite from $REPO: the list is the one this server has (an app added since is not on it)"
     exec "$home/.venv/bin/iosuite-shared" --config "$home" apps --into "$base" ${manage[@]+"${manage[@]}"}
   fi
 
