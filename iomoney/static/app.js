@@ -630,21 +630,38 @@ function txList(items, showAccount = true) {
   const cls = `rows flat txs ${showAccount ? 'withacct' : ''}`;
   return h('ul', { class: cls },
     h('li', { class: 'txhead', 'aria-hidden': 'true' }, h('div', { class: 'r tx' }, h('span', { class: 'd' }, 'Date'), h('span', { class: 'p' }, 'Payee'),
-      h('span', { class: 'n' }, 'Notes'), h('span', { class: 'c' }, 'Category'), showAccount ? h('span', { class: 'a' }, 'Account') : null, h('span', { class: 'm' }, 'Amount'))),
-    items.map((t) => h('li', { class: t.hidden ? 'off' : null }, h('button', { class: 'r tx', onclick: () => txDialog(t) },
+      h('span', { class: 'n' }, 'Notes'), h('span', { class: 'c' }, 'Category'), showAccount ? h('span', { class: 'a' }, 'Account') : null, h('span', { class: 'm' }, 'Amount'), h('span', { class: 'rc', title: 'Reconciled' }, '✓'))),
+    items.map((t) => h('li', { class: t.hidden ? 'off' : null }, h('div', { class: 'r tx', role: 'button', tabindex: 0, onclick: () => txDialog(t),
+      onkeydown: (e) => { if (e.key === 'Enter') txDialog(t); } },
       h('span', { class: 'd' }, fmtTxDay(t.day)),
       h('span', { class: 'p' }, h('b', null, t.merchant || t.description || '(no payee)'), t.pending ? h('span', { class: 'tag' }, 'Pending') : null,
         h('small', { class: 'cs' }, txCat(t))),
       h('span', { class: 'n', title: t.notes || null }, t.notes || ''),
       h('span', { class: 'c' }, txCat(t)),
       showAccount ? h('span', { class: 'a' }, t.account) : null,
-      h('span', { class: 'm' }, amt(t.amount, t.currency))))));
+      h('span', { class: 'm' }, amt(t.amount, t.currency)),
+      h('span', { class: 'rc' }, recTick(t))))));
+}
+/** The reconciled tick of a transaction: a click marks it (or unmarks it) without opening it. */
+function recTick(t) {
+  const b = h('button', { class: `tick ${t.reconciled ? 'on' : ''}`, title: t.reconciled ? 'Reconciled (click to undo)' : 'Not reconciled (click to mark)',
+    'aria-label': 'Reconciled', 'aria-pressed': t.reconciled ? 'true' : 'false', disabled: t.writable ? null : true }, icon('check', 's'));
+  b.onclick = async (e) => {
+    e.stopPropagation();
+    try {
+      await api('api/transactions/reconcile', { method: 'POST', json: { ids: [t.id], reconciled: !t.reconciled } });
+      t.reconciled = !t.reconciled; b.classList.toggle('on', t.reconciled); b.setAttribute('aria-pressed', String(t.reconciled));
+      b.title = t.reconciled ? 'Reconciled (click to undo)' : 'Not reconciled (click to mark)';
+    } catch (x) { fail(x); }
+  };
+  return b;
 }
 async function showTransactions(page, r) {
   const q = r.q || {};
   const limit = 100, offset = +(q.offset || 0);
   const params = new URLSearchParams({ limit, offset });
   for (const k of ['q', 'account', 'category', 'month', 'flow']) if (q[k]) params.set(k, q[k]);
+  if (q.rec) params.set('reconciled', q.rec);
   const [d, cats] = await Promise.all([api(`api/transactions?${params}`), categories()]);
   const go = (changes) => { const n = { ...q, ...changes }; delete n.offset; for (const k of Object.keys(n)) if (!n[k]) delete n[k]; location.hash = `#/transactions?${new URLSearchParams(n)}`; };
   const search = h('input', { class: 't', type: 'search', placeholder: 'Payee, category, notes…', value: q.q || '' });
@@ -657,8 +674,15 @@ async function showTransactions(page, r) {
   put(page, h('div', { class: 'filters' }, search,
     sel('account', [['', 'Every account'], ...S.accounts.filter(followsTx).map((a) => [a.id, a.name])], 'Account'),
     sel('category', [['', 'Every category'], ['-', 'Uncategorized'], ...cats.map((c) => [c.category, c.category])], 'Category'),
-    sel('month', months, 'Month'), sel('flow', [['', 'In and out'], ['out', 'Money out'], ['in', 'Money in']], 'Direction')));
-  put(page, h('p', { class: 'sumline' }, `${d.total} transaction${d.total === 1 ? '' : 's'} · `, amt(d.sum)));
+    sel('month', months, 'Month'), sel('flow', [['', 'In and out'], ['out', 'Money out'], ['in', 'Money in']], 'Direction'),
+    sel('rec', [['', 'Reconciled or not'], ['no', 'Not reconciled'], ['yes', 'Reconciled']], 'Reconciled')));
+  const markable = d.items.filter((t) => t.writable && !t.reconciled);
+  const markAll = async () => {
+    if (!await confirmDialog('Mark them reconciled', `Mark the ${markable.length} transaction${markable.length === 1 ? '' : 's'} shown here as reconciled?`, 'Mark')) return;
+    try { const r = await api('api/transactions/reconcile', { method: 'POST', json: { ids: markable.map((t) => t.id), reconciled: true } }); toast(`${r.changed} marked reconciled`); onRoute(); } catch (e) { fail(e); }
+  };
+  put(page, h('p', { class: 'sumline' }, `${d.total} transaction${d.total === 1 ? '' : 's'} · `, amt(d.sum),
+    q.rec === 'no' && markable.length ? [' · ', h('button', { class: 'lnk', onclick: markAll }, `Mark these ${markable.length} reconciled`)] : null));
   put(page, txList(d.items));
   if (d.total > offset + limit || offset) {
     put(page, h('div', { class: 'more' }, offset ? h('a', { class: 'pillbtn', href: `#/transactions?${new URLSearchParams({ ...q, offset: Math.max(0, offset - limit) })}` }, 'Newer') : null,
@@ -677,13 +701,15 @@ async function txDialog(t, account) {
   const dl = h('datalist', { id: 'catlist' }, cats.map((c) => h('option', { value: c.category })));
   const f = { merchant: inp(t.merchant, { disabled: ro ? true : null }), category: inp(t.category, { list: 'catlist', disabled: ro ? true : null }),
     notes: h('textarea', { class: 't', rows: 2, disabled: ro ? true : null }, t.notes || ''), hidden: h('input', { type: 'checkbox', checked: t.hidden ? true : null, disabled: ro ? true : null }),
+    reconciled: h('input', { type: 'checkbox', checked: t.reconciled ? true : null, disabled: ro ? true : null }),
     day: inp(t.day, { type: 'date', disabled: ro || !manual ? true : null }), amount: inp(t.amount, { inputmode: 'decimal', placeholder: '-12.50 out, 100 in', disabled: ro || !manual ? true : null }),
     account: h('select', { class: 't', disabled: !isNew ? true : null }, (isNew ? manualAccts : S.accounts).map((a) => h('option', { value: a.id, selected: a.id === t.accountId ? true : null }, a.name))) };
   const xbox = isNew ? null : h('div', { class: 'xferbox' });
   let moved = false;
   if (xbox) drawTransfer(xbox, t, () => { moved = true; });
   const body = h('div', null, dl, h('div', { class: 'grid' }, fld('Payee', f.merchant, true), fld('Amount', f.amount), fld('Date', f.day), fld('Category', f.category), fld('Account', f.account), fld('Notes', f.notes, true)),
-    h('label', { class: 'check', style: { marginTop: '10px' } }, f.hidden, 'Hidden: left out of the sums'), xbox,
+    h('div', { class: 'chiprow', style: { marginTop: '10px', gap: '18px' } }, h('label', { class: 'check' }, f.hidden, 'Hidden: left out of the sums'),
+      !isNew ? h('label', { class: 'check' }, f.reconciled, 'Reconciled with the statement') : null), xbox,
     t.description && t.description !== t.merchant ? h('p', { class: 'muted small' }, 'At the bank: ', t.description) : null,
     t.source === 'monarch' ? h('p', { class: 'muted small' }, 'From Monarch Money. A change here stays here: Monarch itself is not changed.') : null);
   const btns = ro ? [{ label: 'Close', value: false }] : [
@@ -699,6 +725,7 @@ async function txDialog(t, account) {
   }
   if (!ok) { if (moved) onRoute(); return; }
   const b = { merchant: f.merchant.value, category: f.category.value, notes: f.notes.value, hidden: f.hidden.checked };
+  if (!isNew && f.reconciled.checked !== !!t.reconciled) b.reconciled = f.reconciled.checked;
   if (manual) Object.assign(b, { day: f.day.value, amount: f.amount.value });
   try {
     await api(isNew ? `api/accounts/${f.account.value}/transactions` : `api/transactions/${t.id}`, { method: isNew ? 'POST' : 'PATCH', json: b });
@@ -781,7 +808,7 @@ async function drawTransferRules(page) {
   const d = await api('api/transfer-rules');
   const items = d.items || [];
   const w = d.writable;
-  const linkNow = async () => { try { const r = await api('api/transfers/link', { method: 'POST' }); toast(`${r.linked} transfer${r.linked === 1 ? '' : 's'} linked`); } catch (e) { fail(e); } };
+  const linkNow = () => transferMaintenance();
   put(page, h('div', { class: 'pagehead', style: { marginTop: '28px' } }, h('h2', { class: 'h1ish' }, icon('link'), 'Transfers'), h('span', { class: 'grow' }),
     w ? h('button', { class: 'pillbtn', onclick: linkNow, title: 'Look for transfers among every transaction not linked yet' }, icon('sync'), h('span', null, 'Link transfers now')) : null,
     w ? h('button', { class: 'pillbtn', onclick: () => transferRuleDialog() }, icon('add'), h('span', null, 'Transfer rule')) : null));
@@ -794,6 +821,30 @@ async function drawTransferRules(page) {
       h('small', null, `In ${x.account || '?'}, the payee “${x.pattern}”, up to ${x.days} day${x.days === 1 ? '' : 's'} apart`)),
     x.source === 'learned' ? h('span', { class: 'tag', title: 'Learned from a transfer ioMoney found' }, 'Learned') : null,
     w ? h('span', { class: 'end acts' }, h('button', { class: 'iconbtn', title: 'Edit', onclick: () => transferRuleDialog(x) }, icon('edit', 's'))) : null)))));
+}
+/** The maintenance: go through every transaction and link the transfers (card, bank and loan payments), then show
+    what still looks like one but was not linked, with why, each with Link. */
+async function transferMaintenance() {
+  toast('Going through every transaction…');
+  let r;
+  try { r = await api('api/transfers/link', { method: 'POST' }); } catch (e) { fail(e); return; }
+  const fmtSide = (t) => h('span', { class: 'main' }, h('b', null, t.account || '?'),
+    h('small', null, [fmtDay(t.day), t.merchant || t.description, t.category].filter(Boolean).join(' · ')));
+  const rows = r.possible.map((p) => {
+    const btn = h('button', { class: 'pillbtn' }, 'Link');
+    btn.onclick = async () => {
+      try { await api(`api/transactions/${p.out.id}/transfer`, { method: 'PUT', json: { with: p.in.id } }); btn.textContent = 'Linked'; btn.disabled = true; } catch (e) { fail(e); }
+    };
+    return h('li', null, h('div', { class: 'r pair' }, h('span', { class: 'num amt' }, money(Math.abs(p.out.amount), p.out.currency)),
+      h('span', { class: 'sides' }, h('span', { class: 'side' }, h('small', { class: 'muted' }, 'Out of'), fmtSide(p.out)), h('span', { class: 'side' }, h('small', { class: 'muted' }, 'Into'), fmtSide(p.in)),
+        h('small', { class: 'why' }, p.why)), p.out.writable && p.in.writable ? btn : null));
+  });
+  const body = h('div', null,
+    h('p', null, `${r.linked} transfer${r.linked === 1 ? '' : 's'} linked`, r.learned ? `, ${r.learned} transfer rule${r.learned === 1 ? '' : 's'} learned` : '', '.'),
+    r.possible.length ? [h('p', { class: 'muted small' }, `${r.possible.length}${r.possible.length >= 200 ? '+' : ''} more look like one (the same amount out of one account and into another, within two weeks) but were not linked. Link the ones that are:`),
+      h('ul', { class: 'rows flat pairs' }, rows)] : h('p', { class: 'muted small' }, 'Nothing else looks like a transfer.'));
+  await dialog('Link transfers', body, [{ label: 'Done', value: true, primary: true }], 'wide');
+  onRoute();
 }
 async function transferRuleDialog(x) {
   const isNew = !x;
@@ -1040,6 +1091,9 @@ async function setMoney(el) {
       h('div', { class: 'chiprow' }, code, h('button', { class: 'pillbtn', onclick: async () => { try { await api('api/monarch/code', { method: 'POST', json: { code: code.value } }); toast('Signed in'); onRoute(); } catch (e) { fail(e); } } }, 'Sign in with the code'))) : null,
     st.history && st.history.length > 1 ? h('details', { style: { marginTop: '14px' } }, h('summary', { class: 'muted small' }, 'The last syncs'),
       h('ul', { class: 'keylist' }, st.history.map((x) => h('li', null, icon(x.ok ? 'check' : 'close', x.ok ? 'ok' : 'warn'), `${new Date(x.started).toLocaleString()}: ${x.message || ''}`)))) : null));
+  put(el, h('div', { class: 'box' }, h('h2', null, icon('link'), 'Maintenance'),
+    h('p', { class: 'muted' }, 'Go through every transaction and link the transfers between your own accounts (card payments, bank transfers, loan payments), then see what still looks like one, with why it was not linked.'),
+    h('div', { class: 'chiprow' }, h('button', { class: 'pillbtn', onclick: () => transferMaintenance() }, icon('link'), h('span', null, 'Link transfers')))));
 }
 
 // ------------------------------------------------------------------ chrome

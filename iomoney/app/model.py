@@ -530,7 +530,8 @@ def tx_row(tid) -> dict | None:
         tid = int(tid)
     except (TypeError, ValueError):
         return None
-    return db.one("SELECT t.*, a.owner_id, a.name AS account_name, a.currency, a.source AS account_source "
+    return db.one("SELECT t.*, a.owner_id, a.name AS account_name, a.currency, a.source AS account_source, "
+                  "EXISTS (SELECT 1 FROM mny_reconciled r WHERE r.transaction_id = t.id) AS reconciled "
                   "FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id WHERE t.id = %s", (tid,))
 
 
@@ -550,7 +551,7 @@ def tx_public(t: dict, u: dict = None) -> dict:
            "amount": n2(t["amount"]), "currency": t.get("currency"), "merchant": t["merchant"], "description": t["description"],
            "category": t["category"], "group": t["category_group"], "notes": t["notes"], "tags": tags,
            "pending": bool(t["pending"]), "hidden": bool(t["hidden"]), "recurring": bool(t["recurring"]),
-           "edited": bool(t["edited"]), "source": t["source"]}
+           "edited": bool(t["edited"]), "source": t["source"], "reconciled": bool(t.get("reconciled"))}
     if u is not None:
         out["writable"] = can_write(u, t)
     return out
@@ -561,7 +562,7 @@ def words(*parts) -> str:
 
 
 def _tx_filter(u: dict, q: str = "", account: int = None, category: str = None, start=None, end=None,
-               flow: str = None, hidden: bool = False) -> tuple[str, list]:
+               flow: str = None, hidden: bool = False, reconciled: str = None) -> tuple[str, list]:
     where, args = _visible(u)
     where += " AND a.track = 'transactions'"  # an account followed by its value alone keeps its transactions out of sight
     if not hidden:
@@ -585,6 +586,8 @@ def _tx_filter(u: dict, q: str = "", account: int = None, category: str = None, 
         where += " AND t.amount < 0"
     elif flow == "in":
         where += " AND t.amount > 0"
+    if reconciled in ("yes", "no"):
+        where += f" AND {'' if reconciled == 'yes' else 'NOT '}EXISTS (SELECT 1 FROM mny_reconciled r WHERE r.transaction_id = t.id)"
     for w in (q or "").lower().split()[:8]:
         where += " AND t.words LIKE %s"
         args.append("%" + w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
@@ -592,11 +595,11 @@ def _tx_filter(u: dict, q: str = "", account: int = None, category: str = None, 
 
 
 def find_transactions(u: dict, q: str = "", account: int = None, category: str = None, start=None, end=None,
-                      flow: str = None, limit: int = 100, offset: int = 0, hidden: bool = False) -> dict:
-    where, args = _tx_filter(u, q, account, category, start, end, flow, hidden)
+                      flow: str = None, limit: int = 100, offset: int = 0, hidden: bool = False, reconciled: str = None) -> dict:
+    where, args = _tx_filter(u, q, account, category, start, end, flow, hidden, reconciled)
     base = f"FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id WHERE {where}"
     total = db.one(f"SELECT count(*) AS n, COALESCE(SUM(t.amount), 0) AS s {base}", args)
-    rows = db.q(f"SELECT t.*, a.owner_id, a.name AS account_name, a.currency {base} ORDER BY t.day DESC, t.id DESC LIMIT %s OFFSET %s",
+    rows = db.q(f"SELECT t.*, a.owner_id, a.name AS account_name, a.currency, EXISTS (SELECT 1 FROM mny_reconciled r WHERE r.transaction_id = t.id) AS reconciled {base} ORDER BY t.day DESC, t.id DESC LIMIT %s OFFSET %s",
                 (*args, max(1, min(int(limit), 1000)), max(0, int(offset))))
     return {"items": with_transfers([tx_public(r, u) for r in rows], u), "total": total["n"], "sum": n2(total["s"])}
 
@@ -670,6 +673,8 @@ def update_transaction(u: dict, t: dict, b: dict) -> dict:
     if "hidden" in b:
         sets.append("hidden = %s")
         args.append(flag(b["hidden"]))
+    if "reconciled" in b:  # not a change to what the transaction says: it does not make it "edited"
+        set_reconciled(u, [t["id"]], flag(b["reconciled"]))
     if t["source"] == "manual":
         if "day" in b:
             sets.append("day = %s")
@@ -685,6 +690,21 @@ def update_transaction(u: dict, t: dict, b: dict) -> dict:
         if t["source"] == "manual":
             _move_balance(t["account_id"], Decimal(n["amount"]) - Decimal(t["amount"]))
     return tx_row(t["id"])
+
+
+def set_reconciled(u: dict, ids: list, on: bool) -> int:
+    """Mark transactions reconciled (checked against the statement) or not; those this person may change. How many."""
+    n = 0
+    for tid in ids[:1000]:
+        t = tx_row(tid)
+        if not t or not can_read(u, t) or not can_write(u, t):
+            continue
+        if on:
+            db.ex("INSERT IGNORE INTO mny_reconciled (transaction_id, by_user) VALUES (%s, %s)", (t["id"], u["id"]))
+        else:
+            db.ex("DELETE FROM mny_reconciled WHERE transaction_id = %s", (t["id"],))
+        n += 1
+    return n
 
 
 def delete_transaction(u: dict, t: dict) -> None:

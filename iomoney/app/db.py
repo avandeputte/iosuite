@@ -216,6 +216,13 @@ SCHEMA = [
         CONSTRAINT fk_mny_transfer_rules_account FOREIGN KEY (account_id) REFERENCES mny_accounts(id) ON DELETE CASCADE,
         CONSTRAINT fk_mny_transfer_rules_other FOREIGN KEY (other_id) REFERENCES mny_accounts(id) ON DELETE CASCADE
     )""",
+    # a transaction checked against the bank's statement: reconciled (by whom, when); the sync leaves it as it is
+    """CREATE TABLE IF NOT EXISTS mny_reconciled (
+        transaction_id INT PRIMARY KEY,
+        by_user INT NULL,
+        at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_mny_reconciled_tx FOREIGN KEY (transaction_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
+    )""",
     # an account Monarch Money reports that ioMoney did not know, after the first sync: held until an admin says whether
     # it is new or the new id of an account here (one deleted and made again in Monarch when its bank link broke);
     # decision 'new' lets the next sync add it. Its transactions wait with it.

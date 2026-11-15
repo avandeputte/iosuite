@@ -150,14 +150,25 @@ def networth(request: Request, days: int = 365, kind: str = None):
 
 @router.get("/api/transactions", dependencies=[access.signed_in])
 def list_transactions(request: Request, q: str = "", account: int = None, category: str = None, month: str = None,
-                      start: str = None, end: str = None, flow: str = None, hidden: bool = False, limit: int = 100, offset: int = 0):
+                      start: str = None, end: str = None, flow: str = None, hidden: bool = False, reconciled: str = None,
+                      limit: int = 100, offset: int = 0):
     """The transactions you see, the newest first. q: words (the payee, the bank's text, the category, the notes);
     account; category ('-': none); month (YYYY-MM) or start and end (YYYY-MM-DD); flow: out or in; hidden: also those
-    left out of the sums. With total (how many match) and sum."""
+    left out of the sums; reconciled: yes or no. With total (how many match) and sum."""
     u = _u(request)
     if month:
         start, end = _month_bounds(month)
-    return model.find_transactions(u, q, account, category, start, end, flow, limit, offset, hidden)
+    return model.find_transactions(u, q, account, category, start, end, flow, limit, offset, hidden, reconciled)
+
+
+@router.post("/api/transactions/reconcile", dependencies=[access.signed_in])
+async def reconcile_transactions(request: Request):
+    """{ids: [...], reconciled: true|false}: mark transactions reconciled (checked against the statement) or not.
+    How many were marked (those you may change)."""
+    u = _u(request)
+    b = await json_body(request)
+    ids = b.get("ids") if isinstance(b.get("ids"), list) else []
+    return {"changed": await run_in_threadpool(model.set_reconciled, u, ids, model.flag(b.get("reconciled", True)))}
 
 
 @router.post("/api/accounts/{aid}/transactions", dependencies=[access.signed_in])
@@ -171,8 +182,8 @@ async def add_transaction(aid: int, request: Request):
 
 @router.patch("/api/transactions/{tid}", dependencies=[access.signed_in])
 async def change_transaction(tid: int, request: Request):
-    """{category?, group?, merchant?, notes?, hidden?} (and day, amount in a manual account): kept as changed here,
-    also by the next Monarch sync."""
+    """{category?, group?, merchant?, notes?, hidden?, reconciled?} (and day, amount in a manual account): kept as
+    changed here, also by the next Monarch sync."""
     u = _u(request)
     b = await json_body(request)
     t = await run_in_threadpool(lambda: model.update_transaction(u, model.transaction(u, tid), b))
@@ -220,11 +231,19 @@ def unlink_transfer(tid: int, request: Request):
     return {"ok": True}
 
 
+@router.get("/api/transfers/possible", dependencies=[access.signed_in])
+def possible_transfers(request: Request):
+    """The debits and credits of the same amount in two accounts, at most two weeks apart, not linked: each {out, in,
+    why} (why it was not linked by itself), the nearest days first."""
+    return {"items": transfers.possible(_u(request))}
+
+
 @router.post("/api/transfers/link", dependencies=[access.signed_in])
 async def link_transfers(request: Request):
-    """Find the transfers among every transaction not linked yet (editors): how many were linked."""
+    """Go through every transaction not linked yet and link the transfers (editors): {linked, learned (transfer
+    rules learned), unsure: [{out, in}] the pairs as likely as another, left for a person to link}."""
     u = _u(request)
-    return {"linked": await run_in_threadpool(transfers.link_all, u)}
+    return await run_in_threadpool(transfers.link_all, u)
 
 
 @router.get("/api/transfer-rules", dependencies=[access.signed_in])

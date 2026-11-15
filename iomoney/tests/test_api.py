@@ -273,8 +273,9 @@ def test_transfers_between_own_accounts_are_linked(client, as_user):
     tx(chk, -42, "Grocer", 2, category="Groceries")
     refund = tx(visa, 42, "Grocer refund", 2, category="Groceries")
     assert "transfer" not in refund                  # nothing says it is a transfer
+    fund = add(client, name="Emergency fund", institution="Marcus", balance=0)
     tx(sav, 100, "Deposit", 1)
-    tx(visa, 100, "Payment", 1, category="Transfer")
+    tx(fund, 100, "Deposit", 1)
     third = tx(chk, -100, "Somebody", 1, category="Transfer")
     assert "transfer" not in third                   # two as likely: left for a person
     s = client.get(f"/api/spending?start={d(10)}&end={today}").json()
@@ -288,7 +289,14 @@ def test_transfers_between_own_accounts_are_linked(client, as_user):
     assert i2["transfer"]["id"] == o2["id"] and i2["transfer"]["how"] == "rule"
     # by hand: unlink for good, and link one the guess left
     assert client.delete(f"/api/transactions/{into['id']}/transfer").json()["ok"]
-    assert client.post("/api/transfers/link").json()["linked"] == 0  # not linked again by itself
+    m = client.post("/api/transfers/link").json()
+    assert m["linked"] == 0  # not linked again by itself
+    # the maintenance says what still looks like a transfer, and why it was not linked; not the pair unlinked by hand
+    why = {(p["out"]["id"], p["in"]["id"]): p["why"] for p in m["possible"]}
+    assert why[(next(t["id"] for t in client.get("/api/transactions?q=grocer").json()["items"] if t["amount"] < 0), refund["id"])] == "nothing says it is a transfer"
+    assert sum(1 for (o, _i), w in why.items() if o == third["id"] and w.startswith("as likely")) == 2
+    assert (out["id"], into["id"]) not in why
+    assert client.get("/api/transfers/possible").json()["items"] == m["possible"]
     c = client.get(f"/api/transactions/{third['id']}/transfer").json()
     assert c["other"] is None and len(c["candidates"]) == 2
     r = client.put(f"/api/transactions/{third['id']}/transfer", json={"with": c["candidates"][0]["id"]}).json()
@@ -298,7 +306,58 @@ def test_transfers_between_own_accounts_are_linked(client, as_user):
     tr = client.post("/api/transfer-rules", json={"accountId": chk["id"], "otherId": visa["id"], "pattern": "Zelle", "days": 10})
     assert tr.status_code == 201 and tr.json()["pattern"] == "zelle"
     assert client.post("/api/transfer-rules", json={"accountId": chk["id"], "otherId": chk["id"], "pattern": "x"}).status_code == 400
+    # a card's and a loan's payment with payees that say little: money from the bank into the card or the loan
+    loan = add(client, name="Car loan", kind="loan", balance=9000, track="transactions")
+    p1 = tx(chk, -1850, "ONLINE PMT 88213", 9)
+    p2 = tx(loan, 1850, "Received", 7)
+    assert p2["transfer"]["id"] == p1["id"]
     as_user("viv", "viewer")
     assert client.get("/api/transfer-rules").json()["writable"] is False
     assert client.post("/api/transfers/link").status_code == 403
     assert client.delete(f"/api/transfer-rules/{tr.json()['id']}").status_code == 403
+
+
+def test_link_transfers_over_everything(client, monkeypatch):
+    """The maintenance pairs what came in unlinked (as a bank's history does): card payments every month of the same
+    amount, the other account's last digits in the bank's text, each with the nearest of its kind."""
+    from app import transfers
+    pnc = add(client, name="PNC Checking", institution="PNC", mask="4199", balance=5000)
+    visa = add(client, name="PNC Visa", kind="credit", institution="PNC", mask="2530", balance=0)
+    sav = add(client, name="Ally Savings", institution="Ally", mask="7081", balance=0)
+    chk = add(client, name="Ally Checking", institution="Ally", mask="2748", balance=0)
+    today = dt.date.today()
+    d = lambda n: (today - dt.timedelta(days=n)).isoformat()  # noqa: E731
+    tx = lambda a, amt, desc, n, **f: client.post(f"/api/accounts/{a['id']}/transactions", json={"amount": amt, "merchant": desc, "day": d(n), **f}).json()  # noqa: E731
+    with monkeypatch.context() as m:
+        m.setattr(transfers, "link", lambda *a, **k: 0)  # as it comes from the bank: nothing linked yet
+        pays = [(tx(pnc, -40, "AUTOPAY CHASE CREDIT CRD ACH DEBIT", n + 1, category="Credit Card Payment"),
+                 tx(visa, 40, "AUTOMATIC PAYMENT - THANK", n, category="Credit Card Payment")) for n in (60, 30, 2)]
+        cat = (tx(pnc, -1830.67, "ONLINE PAYMENT TO *2530", 20, category="Loan Repayments"),
+               tx(visa, 1830.67, "THANK YOU FOR YOUR PMT XXXX2530", 20, category="Paychecks"))
+        over = (tx(sav, -300, "Overdraft Transfer to Spending Account XXXXXX2748", 50),
+                tx(chk, 300, "Overdraft Transfer from Savings Account XXXXXX7081", 50))
+        fid = tx(pnc, -300, "MONEYLINE FID BKG SVC LLC ACH DEBIT", 45, category="Transfer")
+    r = client.post("/api/transfers/link").json()
+    assert r["linked"] == 5
+    for o, i in pays + [cat, over]:
+        assert client.get(f"/api/transactions/{i['id']}/transfer").json()["other"]["id"] == o["id"]
+    assert client.get(f"/api/transactions/{fid['id']}/transfer").json()["other"] is None
+    # learned only from what names the other account: the bank's text without what changes each time
+    learned = {(x["account"], x["pattern"]) for x in client.get("/api/transfer-rules").json()["items"]}
+    assert ("PNC Checking", "online payment to") in learned and ("Ally Savings", "overdraft transfer to spending account") in learned
+    assert not any(a == "PNC Checking" and "fid" in p for a, p in learned)
+
+
+def test_reconciled(client, as_user):
+    chk = add(client, name="Checking", balance=100)
+    t1 = client.post(f"/api/accounts/{chk['id']}/transactions", json={"amount": -10, "merchant": "Cafe"}).json()
+    t2 = client.post(f"/api/accounts/{chk['id']}/transactions", json={"amount": -20, "merchant": "Books"}).json()
+    assert t1["reconciled"] is False
+    r = client.patch(f"/api/transactions/{t1['id']}", json={"reconciled": True}).json()
+    assert r["reconciled"] is True and r["edited"] is False  # not a change to what it says
+    assert [t["id"] for t in client.get("/api/transactions?reconciled=no").json()["items"]] == [t2["id"]]
+    assert client.post("/api/transactions/reconcile", json={"ids": [t1["id"], t2["id"]], "reconciled": True}).json()["changed"] == 2
+    assert client.get("/api/transactions?reconciled=no").json()["total"] == 0
+    assert client.get("/api/transactions?reconciled=yes").json()["total"] == 2
+    as_user("viv", "viewer")
+    assert client.post("/api/transactions/reconcile", json={"ids": [t1["id"]], "reconciled": False}).json()["changed"] == 0
