@@ -29,7 +29,9 @@ def _fill(path, lib):
     return re.sub(r"\{(\w+)(?::\w+)?\}", lambda m: str(vals.get(m.group(1), 1)), path)
 
 
-def test_every_get_route_answers_without_a_server_error(client, lib):
+def test_every_get_route_answers_without_a_server_error(client, lib, monkeypatch):
+    from app.geo import maps
+    monkeypatch.setattr(maps, "elevation", lambda lat, lon: {"alt": 300.0, "source": "test"})  # no call to Open-Meteo from CI
     failures = []
     params = {"/api/trail": "?day=2025-08-14", "/api/elevation": "?lat=40&lon=-80", "/api/location/suggest": f"?id={lib['ids'][0]}",
               "/api/faces/nearby": f"?photo={lib['ids'][0]}", "/api/quality/items": "?check=nolocation", "/api/trash/thumb": "?info=/nonexistent",

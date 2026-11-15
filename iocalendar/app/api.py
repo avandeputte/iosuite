@@ -16,7 +16,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import access, config, contacts, holiday, ical, members, model, subscribe, tasks, users
+from app import access, config, contacts, holiday, ical, members, model, subscribe, tasks, users, weather
 from iosuite_shared import appleprofile, prefix, users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
@@ -744,6 +744,33 @@ async def complete_task(tid: int, request: Request):
         return await run_in_threadpool(tasks.complete, request, tid, bool(b.get("done", True)), b.get("tz"))
     except tasks.Unavailable as x:
         raise HTTPException(x.status, str(x))
+
+
+# ------------------------------------------------------------------ the weather
+
+@router.get("/api/weather", dependencies=[access.signed_in])
+async def weather_days():
+    """The forecast for the next days at the start page's weather place (app/weather.py): {enabled, place, units,
+    days: [{date, min, max (°C), code (WMO), rain (%)}]}. enabled false while ioStart has no place; error when the
+    forecast could not be fetched."""
+    try:
+        return await run_in_threadpool(weather.days)
+    except weather.WeatherError as e:
+        return {"enabled": True, "days": [], "error": str(e)}
+
+
+@router.get("/api/events/{eid}/weather", dependencies=[access.signed_in])
+async def event_weather(eid: int, request: Request, start: str):
+    """The weather where and when an event you see takes place: {found, place, units, day?, hour?}. start: this
+    occurrence's start (a date for an all-day event, else an ISO time). found false when it has no place, or one
+    OpenStreetMap does not know."""
+    r, _ = readable_event(request.state.user, eid)
+    if not r.get("location"):
+        return {"found": False}
+    try:
+        return await run_in_threadpool(weather.at_event, r["location"], start, bool(r.get("all_day")))
+    except weather.WeatherError as e:
+        return {"found": False, "error": str(e)}
 
 
 # ------------------------------------------------------------------ ioContact

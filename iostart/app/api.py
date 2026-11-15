@@ -77,6 +77,14 @@ async def get_weather(request: Request):
                 "location": weather.settings()["locationName"]}
 
 
+@router.get("/api/weather/place", dependencies=[access.signed_in])
+def weather_place(request: Request):
+    """The weather's place and units, for the other apps (ioCalendar draws its own forecast for this place): {name,
+    units}; name empty while none is chosen. Never asks AccuWeather."""
+    s = weather.settings()
+    return {"name": s["locationName"] if s["locationKey"] else "", "units": s["units"]}
+
+
 @router.get("/api/weather/settings", dependencies=[access.admin])
 def weather_settings(request: Request):
     return weather.settings()

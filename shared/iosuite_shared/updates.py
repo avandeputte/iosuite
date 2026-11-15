@@ -277,6 +277,7 @@ class Updater:
             pass
 
         def work():
+            restarting = False
             try:
                 res = subprocess.run(["sh", str(self.root / "update.sh")], cwd=str(self.root), capture_output=True, text=True, timeout=1800, env=env)
                 self.progress["log"] = (res.stdout + res.stderr)[-3000:]
@@ -284,13 +285,14 @@ class Updater:
                 if res.returncode < 0 and done and done["ok"]:
                     # update.sh wrote "ok" and then restarted the service, which ends every process of it, the script
                     # included (killed by a signal): the update went through, the restart is under way
-                    pass
+                    restarting = True
                 elif res.returncode != 0:
                     tail = re.sub(r"\x1b\[[0-9;]*m", "", (res.stderr or res.stdout)).strip()
                     self.progress["error"] = tail.splitlines()[-1] if tail else f"exit {res.returncode}"
                 elif os.environ.get("INVOCATION_ID") and "updated to" in (self.last_result() or {}).get("text", ""):
                     # still running after a successful update: the service could not be restarted from here (it runs
                     # as an account without sudo), so this process ends and systemd (Restart=always) starts the new version
+                    restarting = True
                     self.restart(1.5)
             except Exception as e:  # noqa: BLE001
                 self.progress["error"] = str(e)[:300]
@@ -299,7 +301,12 @@ class Updater:
                 last = self.last_result()
                 if self.progress["error"]:
                     suiteupdates.publish(self.app, state="failed", message=self.progress["error"][:300])
-                elif last:  # nothing to install, or updated and about to restart (the new start says it again)
+                elif restarting:
+                    # updated, and the restart is under way: the row stays "running" until the new version starts and
+                    # says how it went (_said_hello). Marked "ok" here, the suite's Updates page would see this app
+                    # still on the old version and stop following along while a slow starter (ioPix) is coming back
+                    suiteupdates.publish(self.app, state="running", message=f"{last['text']}; restarting")
+                elif last:  # nothing to install, or updated without a restart (update.sh says what to do)
                     suiteupdates.publish(self.app, state="ok" if last["ok"] else "failed", message=last["text"])
 
         threading.Thread(target=work, name="self-update", daemon=True).start()

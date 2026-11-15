@@ -2,6 +2,7 @@ import { $, DOW, LOCAL_TZ, S, addDays, addMonths, api, calOf, colorOf, dayStart,
 import { drawNav } from './shell.js';
 import { openEvent } from './event.js';
 import { go } from './main.js';
+import { dayWeather, loadWeather } from './weather.js';
 
 // ------------------------------------------------------------------ the calendar views
 export const daysBetween = (a, b) => Math.round((dayStart(b) - dayStart(a)) / 864e5);
@@ -64,7 +65,8 @@ export async function drawView() {
   const ids = shownCals().map((c) => c.id);
   const [occ, tasks] = await Promise.all([
     ids.length ? api(`api/occurrences?start=${encodeURIComponent(s.toISOString())}&end=${encodeURIComponent(e.toISOString())}&calendars=${ids.join(',')}`) : { items: [] },
-    tasksOn() ? api(`api/tasks?start=${ymd(s)}&end=${ymd(e)}&tz=${encodeURIComponent(LOCAL_TZ)}`).catch((x) => ({ available: false, reason: x.message, items: [] })) : null]);
+    tasksOn() ? api(`api/tasks?start=${ymd(s)}&end=${ymd(e)}&tz=${encodeURIComponent(LOCAL_TZ)}`).catch((x) => ({ available: false, reason: x.message, items: [] })) : null,
+    loadWeather()]);
   if (seq !== drawSeq) return;
   if (tasks) {
     const was = `${S.tasks.available}|${S.tasks.url}`;
@@ -108,7 +110,7 @@ export function drawMonth(body, s, e) {
       const cell = h('div', { class: ['mday', d.getMonth() !== month ? 'other' : '', sameDay(d, today) ? 'today' : ''].join(' '),
         onclick: () => newAt(d), title: 'New event' },
       h('span', { class: 'dnum', title: 'Open the day', onclick: (ev) => { ev.stopPropagation(); go('day', d); } }, d.getDate() === 1 ? d.toLocaleDateString([], { month: 'short', day: 'numeric' }) : d.getDate()),
-      list.map((o) => chip(o, d)));
+      dayWeather(d), list.map((o) => chip(o, d)));
       dropTarget(cell, (o) => moveBy(o, daysBetween(S.drag.from, d) * 864e5, true));
       row.append(cell);
     }
@@ -178,7 +180,7 @@ export function drawWeek(body, s, e, keep) {
   const map = byDay(days, S.occ), today = new Date();
   const grid = h('div', { class: 'tgrid', style: { '--days': n, '--hh': `${HH}px` } });
   grid.append(h('div', { class: 'head' }), ...days.map((d) => h('div', { class: `head thead-day ${sameDay(d, today) ? 'today' : ''}`, onclick: () => go('day', d) },
-    h('div', { class: 'dow' }, DOW(d.getDay(), n === 1 ? 'long' : 'short')), h('span', { class: `dnum ${sameDay(d, today) ? 'today' : ''}` }, d.getDate()))));
+    h('div', { class: 'dow' }, DOW(d.getDay(), n === 1 ? 'long' : 'short')), h('span', { class: `dnum ${sameDay(d, today) ? 'today' : ''}` }, d.getDate()), dayWeather(d, true))));
   grid.append(h('div', { class: 'alldaylabel' }, 'all day'), ...days.map((d) => {
     const cell = h('div', { class: 'alldayrow', onclick: () => location.hash = `#/new?date=${ymd(d)}&allday=1` }, map.get(ymd(d)).filter(longEvent).map((o) => chip(o, d)));
     dropTarget(cell, (o) => moveBy(o, daysBetween(S.drag.from, d) * 864e5, true));
@@ -263,7 +265,7 @@ export function drawAgenda(body, s, e) {
     any = true;
     wrap.append(h('div', { class: `aday ${sameDay(d, today) ? 'today' : ''}` },
       h('div', { class: 'when', onclick: () => go('day', d), style: { cursor: 'pointer' } }, h('div', { class: 'n' }, d.getDate()),
-        h('div', { class: 'w' }, d.toLocaleDateString([], { weekday: 'short', month: 'short' }))),
+        h('div', { class: 'w' }, d.toLocaleDateString([], { weekday: 'short', month: 'short' })), dayWeather(d, true)),
       h('div', { class: 'evs' }, list.map((o) => agendaRow(o, d)))));
   }
   if (!any) wrap.append(h('div', { class: 'empty' }, icon('agenda'), h('p', null, shownCals().length || tasksOn() ? 'Nothing planned in these weeks.' : 'Every calendar is hidden: tick one in the sidebar.')));
