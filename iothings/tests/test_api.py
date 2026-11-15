@@ -168,7 +168,7 @@ def test_who_may_do_what(client, as_user):
 
 
 def test_settings_currency(client):
-    assert client.get("/api/things-settings").json()["currency"] == "EUR"
-    assert client.put("/api/things-settings", json={"currency": "usd"}).json()["currency"] == "USD"
-    assert client.get("/api/summary").json()["currency"] == "USD"
+    assert client.get("/api/things-settings").json()["currency"] == "USD"
+    assert client.put("/api/things-settings", json={"currency": "eur"}).json()["currency"] == "EUR"
+    assert client.get("/api/summary").json()["currency"] == "EUR"
     assert client.put("/api/things-settings", json={"currency": "dollars"}).status_code == 400
