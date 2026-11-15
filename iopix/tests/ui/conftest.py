@@ -88,7 +88,7 @@ def server(lib):
 def browser():
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
-        b = p.chromium.launch(headless=True)
+        b = p.chromium.launch(headless=True, executable_path=os.environ.get("IOPIX_TEST_CHROMIUM") or None)  # another Chromium than Playwright's own, if set
         yield b
         b.close()
 

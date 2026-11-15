@@ -4,7 +4,7 @@ import { S, ST, go, hashFor, onRoute, parseHash, photosWith, pollSoon, toast, to
 import { G, renderGrid, scrollToIndex } from './grid.js';
 import { albumDialog, clearSelection, setFavorite, trashPhotos } from './actions.js';
 import { editPhotos, tagDialog } from './editing.js';
-import { M } from './map.js';
+import { M, removeMap } from './map.js';
 import { nameNextFace, reapplyRecent, renderFaces, startDrawFace, toggleFaces, toggleObjects } from './faces.js';
 import { renderInfo } from './info.js';
 
@@ -416,7 +416,7 @@ export function closeLightbox(fromUser) {
   LB.open = false; LB.token++;
   LB.el.frame.replaceChildren();
   unpeek();
-  LB.mini?.remove(); LB.mini = null; LB.stripSrc = null;
+  removeMap(LB.mini); LB.mini = null; LB.stripSrc = null;
   $('.facemenu')?.remove();
   $('#lightbox').hidden = true;
   const src = LB.src, i = LB.i;

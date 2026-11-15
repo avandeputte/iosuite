@@ -27,12 +27,15 @@ _data = _tmp / "data"
 
 from fixture import build  # noqa: E402  (tests/ on sys.path through pytest's rootdir conftest import)
 
-LIB = None
-if SRC_DB.exists() and SRC_ROOT.exists():
+# a scratch copy cut from a real digiKam library when there is one (DIGIKAM_TEST_DB / DIGIKAM_TEST_ROOT, the
+# viewer's own by default); otherwise (CI), or with DIGIKAM_TEST_LIBRARY=synthetic, a library made from scratch
+SYNTHETIC = not (SRC_DB.exists() and SRC_ROOT.exists()) or os.environ.get("DIGIKAM_TEST_LIBRARY") == "synthetic"
+if not SYNTHETIC:
     LIB = build(SRC_DB, SRC_ROOT, _lib)
-else:  # no digiKam library to cut a scratch copy from (CI): the tests that need one skip, the rest run
-    (_lib / "db").mkdir(parents=True, exist_ok=True); (_lib / "photos").mkdir(parents=True, exist_ok=True)
-    print(f"\nNo test library at {SRC_DB} / {SRC_ROOT} (DIGIKAM_TEST_DB / DIGIKAM_TEST_ROOT): library tests are skipped")
+else:
+    import synthetic  # noqa: E402
+    LIB = synthetic.build(_lib)
+    print(f"\nA test library made from scratch ({LIB['n']} files; DIGIKAM_TEST_DB / DIGIKAM_TEST_ROOT point at a real one to cut a copy from)")
 
 import mariadb  # noqa: E402  (tests/mariadb.py: the MariaDB iopix's own database runs on, iosuite_shared.testing's; Docker or IOSUITE_TEST_DB)
 
@@ -44,7 +47,7 @@ AUTH_DB = mariadb.fresh_database(os.environ.get("IOPIX_TEST_SUITE_DB", "iopix_te
 
 os.environ.update({
     **mariadb.env_for(VIEWER_DB),
-    "DATA_DIR": str(_data), "DIGIKAM_DB_DIR": str(_lib / "db"), "PHOTOS_ROOT": str(LIB["root"] if LIB else _lib / "photos"),
+    "DATA_DIR": str(_data), "DIGIKAM_DB_DIR": str(_lib / "db"), "PHOTOS_ROOT": str(LIB["root"]),
     "PREWARM": "0", "SEMANTIC": "0", "ANALYSIS": "0", "CAPTIONS": "0", "REINDEX_POLL": "3600",
     "DIGIKAM_CHECK": "none", "BG_THREADS": "2", "JOBS_PROCESS": "0",  # the jobs run in this process, where the tests can reach into them (test_jobproc.py turns the job process on)
      "HF_HUB_OFFLINE": "1", "SCANNER_LOOP": "0", "LOG_FILE": str(_data / "iopix.log"),  # a server log of its own, in the scratch data folder (/api/log answers)
@@ -56,7 +59,7 @@ _data.mkdir(parents=True, exist_ok=True)
 
 from app import config  # noqa: E402
 
-assert config.DATA_DIR.resolve() == _data.resolve() and (LIB is None or config.DIGIKAM_DB.resolve() == LIB["db"].resolve()), "environment overrides were not picked up"
+assert config.DATA_DIR.resolve() == _data.resolve() and config.DIGIKAM_DB.resolve() == LIB["db"].resolve(), "environment overrides were not picked up"
 
 
 @pytest.fixture(scope="session")

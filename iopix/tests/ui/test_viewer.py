@@ -2,6 +2,7 @@
 edits made from it."""
 import sqlite3
 import time
+import urllib.error
 
 import pytest
 
@@ -29,7 +30,10 @@ def test_face_boxes_follow_the_toggle(page, server, lib):
 
 def test_ignored_faces_are_not_drawn_or_listed(page, server, lib):
     for pid in lib["with_faces"]:
-        d = _get(server, f"/api/photo/{pid}")
+        try:
+            d = _get(server, f"/api/photo/{pid}")
+        except urllib.error.HTTPError:
+            continue  # a photo an earlier test took out of the library
         if any(f["kind"] == "ignored" for f in d.get("faces_other", [])):
             break
     else:
@@ -626,7 +630,8 @@ def test_closing_the_viewer_after_an_edit_keeps_the_grid_where_it_was(browser, s
             tile.click()
             _viewer_ready(page)
             meta = page.evaluate("import('/static/js/state.js').then((m) => m.S.META.version)")
-            edit(pid, {"rating": 3 if close == "x" else 4}); touched.append(pid)  # the library changes under the open viewer
+            stars = 3 if _get(server, f"/api/photo/{pid}").get("rating") != 3 else 2  # a rating the photo does not have: a real change
+            edit(pid, {"rating": stars}); touched.append(pid)  # the library changes under the open viewer
             assert _eventually(lambda: page.evaluate("import('/static/js/main.js').then((m) => m.pollStatus()).then(() => import('/static/js/state.js')).then((m) => m.S.META.version)") != meta, 15), "the page saw the change"
             if close == "x":
                 page.mouse.move(420, 40)

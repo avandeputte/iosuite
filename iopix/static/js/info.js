@@ -5,7 +5,7 @@ import { S, faceUrl, go, infoHidden, infoPrefsEditor, photosWith, pollSoon, toas
 import { setBadges } from './grid.js';
 import { albumDialog, histEntry, movePhotos, renamePhoto } from './actions.js';
 import { dateEditor, detectFaces, editControls, editPhotos, locationDialog, metadataEditor, tagPicker, templatePicker } from './editing.js';
-import { loadLeaflet, loadMaps, mapLink, streetView, tiles } from './map.js';
+import { loadLeaflet, loadMaps, mapLink, removeMap, streetView, tiles } from './map.js';
 import { pollStatus } from './main.js';
 import { LB, TRANSFORMS, closeLightbox, details, editMenu, filterFromLightbox, openLightbox, popMenu, setPhotoParam, showItem, toggleInfo, transformPhotos } from './lightbox.js';
 import { faceMenu, faceOp, faceRegions, personPicker, removeUnnamedFaces, setTagIcon, startDrawFace, tagOnlyMenu, toggleFaces } from './faces.js';
@@ -308,7 +308,7 @@ function infoMiniMap(d, mapEl) {
 export function renderInfo() {
   const d = LB.detail, el = LB.el.info;
   if (!d) return;
-  LB.mini?.remove(); LB.mini = null;
+  removeMap(LB.mini); LB.mini = null;
   const hid = infoHidden(), show = (k) => !hid.has(k);
   const c = infoContext(d, show);
   const mapEl = d.lat != null && show('location') ? h('div', { class: 'imap' }) : null;

@@ -9,13 +9,14 @@ MariaDB-only since v1.113, so the suite needs a server. Two ways, the same as in
   for the next run (`docker rm -f iosuite-test-mariadb` throws it away). Without Docker and without
   IOSUITE_TEST_DB the whole suite is skipped with a message that says so.
 
-A session uses two databases: `iopix_test` for the API tests (the app imported in-process) and
-`iopix_test_ui` for the browser tests' own server (a second process, tests/ui/conftest.py). Both are
-dropped and created again at the start of every session, never shared with anything real.
+A session uses three databases: `iopix_test` for the API tests (the app imported in-process) and
+`iopix_test_ui` for the browser tests' own server (a second process, tests/ui/conftest.py); `iopix_test_nodk` is
+the no-digiKam run's (tests/test_no_digikam.py), whose library starts empty. All are dropped and created again at
+the start of every session, never shared with anything real.
 """
 from iosuite_shared import testing as _testing
 
-API_DB, UI_DB = "iopix_test", "iopix_test_ui"
+API_DB, UI_DB, NODK_DB = "iopix_test", "iopix_test_ui", "iopix_test_nodk"
 server = _testing.server  # {host, port, user, password} of a reachable MariaDB, or None (the reason in server.reason)
 
 

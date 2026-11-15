@@ -190,7 +190,7 @@ def test_folders_and_albums_are_separate_pages(page, server, lib):
     tw = page.locator(".tree > .tnode > .trow .tw[style='']").first
     if tw.count():
         before = page.locator(".tree .trow").count()
-        node = page.locator(".tree > .tnode").filter(has=tw).first
+        node = tw.locator("xpath=ancestor::*[contains(concat(' ', @class, ' '), ' tnode ')][1]")  # the folder the expander belongs to
         if "open" not in (node.get_attribute("class") or ""):
             tw.click()
         assert page.locator(".tree .trow").count() > before or "open" in (node.get_attribute("class") or "")
