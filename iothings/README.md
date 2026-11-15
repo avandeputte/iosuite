@@ -32,10 +32,19 @@ single-page vanilla JS app, with everything stored in MariaDB / MySQL (the files
 - **The things as cards or a table**, by name, the newest, recently changed, price, when bought or when the warranty
   ends; what they cost together on the front page. **Duplicate** makes the next one of a kind quickly. **Print** gives
   one thing on paper.
-- **Homebox**: Tools › Export inventory in Homebox gives a CSV file; Import and export takes it, with its places
+- **Homebox, straight from the server** (editors, Import and export › From a Homebox server): give Homebox's address
+  and the email and password you sign in to it with, and ioThings reads everything through Homebox's API: the things
+  with all their details, the places, the labels with their colours, the own fields, the **photos, manuals, receipts
+  and warranties**, and the completed **maintenance log**. It runs in the background with its progress on the page.
+  Running it again brings things up to date (the same bytes, the same log line are not added twice), and things from
+  an earlier CSV import are taken over (same name, same place). The Homebox password is used for the import and not
+  kept. Both shapes of Homebox's API are read: `/api/v1/items` (up to v0.2x) and the newer `/api/v1/entities`.
+  Maintenance that was only scheduled is listed as left out (add it as upkeep). The server must reach Homebox: one
+  behind Cloudflare Access needs the address it has on the home network.
+- **Homebox's CSV**: Tools › Export inventory in Homebox gives a CSV file; Import and export takes it, with its places
   (made as needed), labels and `HB.field.*` fields. Importing the same file again changes what it brought instead of
   adding it twice (Homebox's `HB.import_ref`). The export writes Homebox's format, so it goes back into Homebox, or
-  into a spreadsheet. Photos and manuals are not in Homebox's CSV: attach them here.
+  into a spreadsheet. Homebox's CSV has no photos, manuals or log: the import from the server brings those.
 - **Notifications** (Settings › Account › Notifications): at your morning time, the upkeep that is due and is not an
   ioTask task (ioTask reminds of those itself), and the warranties ending.
 - **Linked**: a thing can be linked to events, tasks, notes, contacts, recipes and photos of the other apps, and they
@@ -119,7 +128,7 @@ pull the image.
 | For | Standard | Where |
 | --- | --- | --- |
 | Web and JSON clients | **REST/JSON**: things (list, search, by place or label, archived), one thing, add, change, duplicate, delete, its files, upkeep and log; places and labels | `/api/`, OpenAPI docs at `/api/docs` |
-| Homebox | Homebox's CSV, in and out | `POST /api/import/homebox`, `GET /api/export.csv` |
+| Homebox | Homebox's CSV, in and out; everything from a Homebox server, files and log too | `POST /api/import/homebox`, `GET /api/export.csv`, `POST`/`GET /api/import/homebox-server` |
 | AI assistants | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server), or every app's tools at ioStart's `/mcp` |
 
 Settings › Account makes **app passwords**, for the REST API (HTTP Basic, or `Authorization: Bearer <app password>`)

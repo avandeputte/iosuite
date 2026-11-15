@@ -12,7 +12,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 from iosuite_shared.access import json_body
 
-from app import access, files, homebox, model, upkeep
+from app import access, files, homebox, homebox_api, model, upkeep
 
 router = APIRouter()
 
@@ -287,6 +287,23 @@ async def import_homebox(request: Request):
     u = request.state.user
     raw = await request.body()
     return await run_in_threadpool(lambda: homebox.keep(u, homebox.read(raw)))
+
+
+@router.post("/api/import/homebox-server", dependencies=[access.signed_in])
+async def import_homebox_server(request: Request):
+    """{url, username, password}: sign in to a running Homebox and bring everything over in the background, the photos,
+    manuals, receipts and the maintenance log too (editors). Answers at once, with a wrong address or password as an
+    error; then GET this address says how far it got. Nothing about the Homebox account is kept."""
+    u = request.state.user
+    body = await json_body(request)
+    return await run_in_threadpool(lambda: homebox_api.start(u, str(body.get("url") or ""), str(body.get("username") or ""), str(body.get("password") or "")))
+
+
+@router.get("/api/import/homebox-server", dependencies=[access.signed_in])
+def import_homebox_server_progress():
+    """How far the import from a Homebox server got: {state: idle|running|done|failed, total, done, added, changed,
+    files, log, skipped: [what was left out and why], error}."""
+    return homebox_api.progress()
 
 
 @router.get("/api/export.csv", dependencies=[access.signed_in])

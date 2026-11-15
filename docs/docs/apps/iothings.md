@@ -26,8 +26,12 @@ fridge's water filter). It does what Homebox does, and brings a Homebox inventor
   how much.
 - **The things as cards or a table**, sorted by name, the newest, the price, when they were bought or when their
   warranty ends; all of them, by place, by label, or found by words in any of their details.
-- **Homebox**: Tools › Export inventory in Homebox gives a CSV file; Import and export in ioThings takes it, with its
-  places, labels and fields. Importing the same file again changes what it brought instead of adding it twice. The
+- **Homebox, straight from the server**: give Homebox's address, email and password (used once, not kept) and
+  everything comes over: the things, places, labels and fields, the photos, manuals, receipts and warranties, and the
+  maintenance log. Running it again brings things up to date instead of adding them twice. The server must reach
+  Homebox, so use its address on the home network when it sits behind Cloudflare Access.
+- **Homebox's CSV**: Tools › Export inventory in Homebox gives a CSV file; Import and export in ioThings takes it, with its
+  places, labels and fields (no files: Homebox's CSV has none). Importing the same file again changes what it brought instead of adding it twice. The
   export writes the same format, so the file also goes back into Homebox.
 - **Who may do what**: viewers look; members add things, attach files and keep the upkeep and the log; editors
   change everything, the places and the labels.
