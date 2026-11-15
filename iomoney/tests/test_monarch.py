@@ -166,12 +166,17 @@ def test_later_syncs_keep_changes_and_drop_what_went(client, mm):
     assert [x["merchant"] for x in client.get("/api/transactions?q=cafe").json()["items"]] == ["Cafe"]
     a = client.get(f"/api/accounts/{chk['id']}").json()
     assert a["name"] == "Joint checking" and a["hidden"] is True
+    # hidden in Monarch (a duplicate, "Hide from reports"): not brought in, and gone here when it was
+    FakeMM.transactions = [tx("t1", 3, -55.2, "Grocer"), tx("t2", 2, -1000, "To savings", cat="c2"), tx("t4", 1, -12, "Cafe", hideFromReports=True),
+                           tx("t5", 1, -12, "Cafe twin", hideFromReports=True)]
+    assert client.post("/api/monarch/sync").json()["transactions"] == 2
+    assert client.get("/api/transactions?q=cafe&hidden=true").json()["total"] == 0
     # Monarch no longer takes the session: ioMoney signs in again by itself
     FakeMM.valid.clear()
     assert client.post("/api/monarch/sync").json()["ok"]
     assert FakeMM.logins == 2 and credentials.get("iomoney", "monarch_token") == "tok-2"
     st = client.get("/api/monarch").json()
-    assert st["configured"] and st["keys"]["monarch_token"] and st["last"]["ok"] and len(st["history"]) == 3
+    assert st["configured"] and st["keys"]["monarch_token"] and st["last"]["ok"] and len(st["history"]) == 4
 
 
 def test_a_code_by_hand_and_a_wrong_sign_in(client, mm):
