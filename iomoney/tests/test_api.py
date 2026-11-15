@@ -340,6 +340,7 @@ def test_link_transfers_over_everything(client, monkeypatch):
                  tx(visa, 40, "AUTOMATIC PAYMENT - THANK", n, category="Credit Card Payment")) for n in (60, 30, 2)]
         cat = (tx(pnc, -1830.67, "ONLINE PAYMENT TO *2530", 20, category="Loan Repayments"),
                tx(visa, 1830.67, "THANK YOU FOR YOUR PMT XXXX2530", 20, category="Paychecks"))
+        tx(visa, 1830.67, "THANK YOU FOR YOUR PMT XXXX2530", 20, category="Paychecks", hidden=True)  # a hidden twin: not a rival
         over = (tx(sav, -300, "Overdraft Transfer to Spending Account XXXXXX2748", 50),
                 tx(chk, 300, "Overdraft Transfer from Savings Account XXXXXX7081", 50))
         fid = tx(pnc, -300, "MONEYLINE FID BKG SVC LLC ACH DEBIT", 45, category="Transfer")

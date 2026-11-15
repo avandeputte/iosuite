@@ -38,7 +38,9 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   by kind of account. An account or a holding in another currency is converted at the day's rate.
 - **Transactions**: one row each (date, payee, notes, category or where a transfer went, account, amount; on a phone the
   category goes under the payee), searched by words, account, category, month and direction; a category, a payee,
-  notes or hidden changed here stays as changed through later syncs (Monarch itself is not changed).
+  notes or hidden changed here stays as changed through later syncs (Monarch itself is not changed). Hidden
+  transactions (Monarch's "Hide from reports", or hidden by a rule or by hand here) are left out of the lists, the
+  sums and the transfer matching; the list shows them, dimmed, with "With the hidden".
 - **Transfers**: money that leaves one of the household's accounts and arrives in another (to savings, a card's payment,
   a loan's payment) is one transfer: its two halves are linked, shown as "To Savings" / "From Checking", and left out
   of the spending and the cash flow. Two transactions are linked when they are the same amount out and in, in two
