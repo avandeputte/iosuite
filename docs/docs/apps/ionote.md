@@ -5,7 +5,7 @@ description: ioNote, notes, clipboard snippets and screenshots in the ioThing su
 # ioNote <small>notes</small>
 
 Your notes, clipboard snippets and screenshots, searchable everywhere. The server keeps them in its database, pictures
-included, and gives you a web app; the **ionote apps for Mac, iPhone and iPad** keep a full copy and sync with it.
+included, and gives you a web app; the **ioNote apps for Mac, iPhone and iPad** keep a full copy and sync with it.
 
 ![ioNote with folders, tags and a note open](../img/ionote.jpg)
 
@@ -17,7 +17,7 @@ included, and gives you a web app; the **ionote apps for Mac, iPhone and iPad** 
 - **Web app**: folders and tags in the sidebar, editing that saves as you type, pictures pasted or dropped anywhere
   become notes, a change log, trash, import and export.
 - **On the Mac**: everything you copy and every screenshot lands in an Inbox on that Mac; keep what is worth keeping
-  as a note. Right-click › Save to ionote in any app. On the **iPhone and iPad**: the same notes, paste and photos.
+  as a note. Right-click › Save to ioNote in any app. On the **iPhone and iPad**: the same notes, paste and photos.
 - **Offline**: the apps work without the server and send their changes when it is back.
 - **Private**: every note belongs to the account that made it; nobody else sees it, admins included.
 

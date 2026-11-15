@@ -48,7 +48,7 @@ for these paths, or a second Access application covering only them. They stay pr
 
 Everything else, the web apps and `/api/`, stays behind Access. A script calling `/api/` from outside needs a Cloudflare
 **service token** (`CF-Access-Client-Id` and `CF-Access-Client-Secret`) allowed in the policy, as well as an app password.
-The ionote Mac and iPhone apps take a service token in their settings. The ioStart start page asks the other apps for its
+The ioNote Mac and iPhone apps take a service token in their settings. The ioStart start page asks the other apps for its
 tiles with the suite's service token (Settings › Global settings › Keys and tokens) when they are only reachable through
 Access.
 

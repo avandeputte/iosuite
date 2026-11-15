@@ -55,5 +55,6 @@ Every app is built the same way, so what you learn in one holds in the others:
 
 1. [One app or all of them](start/one-or-all.md): decide what you need.
 2. [Requirements](start/requirements.md): a database server and somewhere to run the app.
-3. Install it: [Proxmox VE](start/proxmox.md), [Docker](start/docker.md) or [any Linux or Mac](start/linux-mac.md).
+3. Install it: [one line on any Linux server](start/several-apps.md#one-line-install-add-remove-reconfigure),
+   [Proxmox VE](start/proxmox.md), [Docker](start/docker.md) or [any Linux or Mac](start/linux-mac.md).
 4. [First run](start/first-run.md): sign in, make accounts, put it behind HTTPS.
