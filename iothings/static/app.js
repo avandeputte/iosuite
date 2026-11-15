@@ -127,7 +127,7 @@ const store = { get: (k) => { try { return localStorage.getItem(`iothings.${k}`)
 
 
 // ------------------------------------------------------------------ state
-const S = { status: {}, user: null, suite: [], settings: {}, counts: {}, locations: [], labels: [], currency: 'EUR', may: {}, tasks: false };
+const S = { status: {}, user: null, suite: [], settings: {}, counts: {}, locations: [], labels: [], currency: 'USD', may: {}, tasks: false };
 // the suite's roles, each able to do what the one before can: a viewer only looks, a member adds things and keeps
 // their upkeep, an editor changes everything and keeps the places and labels in order
 const RANK = { none: 0, viewer: 1, member: 2, editor: 3, admin: 4 };
@@ -135,13 +135,13 @@ const roleAtLeast = (r) => (RANK[S.user && S.user.role] || 0) >= RANK[r];
 const canAdd = () => roleAtLeast('member');
 const canEditAll = () => roleAtLeast('editor');
 /** What goes around the things: how many, the places and the labels (the summary). */
-function around(d) { S.counts = d.counts; S.locations = d.locations; S.labels = d.labels; S.currency = d.currency || 'EUR'; S.may = d.may || {}; S.tasks = !!d.tasks; }
+function around(d) { S.counts = d.counts; S.locations = d.locations; S.labels = d.labels; S.currency = d.currency || 'USD'; S.may = d.may || {}; S.tasks = !!d.tasks; }
 async function refreshAround() { try { around(await api('api/summary')); } catch { /* the page says so */ } drawNav(); }
 async function saveSettings(changes) {
   Object.assign(S.settings, changes);
   try { await api('api/auth/settings', { method: 'POST', json: changes }); } catch { /* kept for this visit */ }
 }
-/** An amount in the app's currency: € 1,299.50. */
+/** An amount in the app's currency: $1,299.50. */
 const money = (v) => (v == null || v === '' ? '' : new Intl.NumberFormat(undefined, { style: 'currency', currency: S.currency }).format(v));
 /** A day as people read it: 15 Nov 2026. */
 const fmtDay = (iso) => (iso ? new Date(`${iso.slice(0, 10)}T00:00`).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -898,7 +898,7 @@ async function setDisplay(el) {
 }
 
 /** Settings › Things (admins): the currency, for prices and what the things are worth together. */
-const CURRENCIES = ['EUR', 'GBP', 'USD', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'CAD', 'AUD', 'NZD', 'JPY'];
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'CAD', 'AUD', 'NZD', 'JPY'];
 async function setThings(el) {
   const cur = (await api('api/things-settings')).currency || S.currency;
   const list = CURRENCIES.includes(cur) ? CURRENCIES : [cur, ...CURRENCIES];

@@ -29,7 +29,7 @@ class Forbidden(Exception):
 MAX_FIELDS = 50        # own fields of one thing
 MAX_LABELS = 30        # labels on one thing
 SOON_DAYS = 30         # a warranty that ends within this many days "ends soon"
-CURRENCIES = ("EUR", "USD", "GBP", "CHF", "CAD", "AUD", "NZD", "SEK", "NOK", "DKK", "PLN", "CZK", "JPY", "INR", "ZAR", "BRL", "MXN")
+CURRENCIES = ("USD", "EUR", "GBP", "CHF", "CAD", "AUD", "NZD", "SEK", "NOK", "DKK", "PLN", "CZK", "JPY", "INR", "ZAR", "BRL", "MXN")
 
 
 # ---- who may
@@ -636,7 +636,7 @@ def duplicate(u: dict, it: dict) -> dict:
 # ---- the app's settings (admins)
 
 def currency() -> str:
-    return db.get_setting("currency") or "EUR"
+    return db.get_setting("currency") or "USD"
 
 
 def settings() -> dict:
@@ -647,6 +647,6 @@ def set_settings(data: dict) -> dict:
     if "currency" in data:
         c = str(data.get("currency") or "").strip().upper()
         if not re.fullmatch(r"[A-Z]{3}", c):
-            raise Invalid("currency: a three-letter code such as EUR or USD")
+            raise Invalid("currency: a three-letter code such as USD or EUR")
         db.set_setting("currency", c)
     return settings()
