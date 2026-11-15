@@ -3,8 +3,7 @@
 # this is the ct/ script; proxmox/install/ionote-install.sh runs inside the container.
 #
 # After the framework's own questions (resources, network) it asks about the app: the MariaDB server, database, user
-# and password (the database is created when the user may), the Shared ioSuite database, the web port, whether pictures
-# added in the web app get their text read (RapidOCR),
+# and password (the database is created when the user may), the Shared ioSuite database, the web port,
 # the public address, the domain the sign-in is shared on and the admin account. It creates the container, then runs the app's own setup.sh inside with those answers, which installs the
 # packages, writes the settings, creates the tables and the admin and starts the service.
 #
@@ -12,7 +11,7 @@
 # (COMMUNITY_SCRIPTS_URL below; the core engine still comes from community-scripts). Run on the Proxmox host as root:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/ionote/proxmox/ct/ionote.sh)"
 # Unattended: IONOTE_DB=host:port/db:user:password IONOTE_SUITE_DB=host:port/db:user:password
-#   IONOTE_ADMIN=name:password IONOTE_PORT=8610 IONOTE_FEATURES=ocr|none
+#   IONOTE_ADMIN=name:password IONOTE_PORT=8610
 #   IONOTE_PUBLIC_URL=https://notes.example.com IONOTE_COOKIE_DOMAIN=example.com in the environment skip the questions.
 export COMMUNITY_SCRIPTS_URL="${COMMUNITY_SCRIPTS_URL:-https://raw.githubusercontent.com/avandeputte/iosuite/main/ionote/proxmox}"
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
@@ -58,9 +57,6 @@ ask_app_settings() {
     IONOTE_SUITE_DB="$ah:$ap/$ad:$au:$aw2"
   fi
   IONOTE_PORT="${IONOTE_PORT:-$(whiptail --backtitle "$bt" --inputbox "Web port (web app, REST API, the Mac and iPhone apps)" 9 70 "8610" 3>&1 1>&2 2>&3)}" || exit 1
-  if [[ -z "${IONOTE_FEATURES:-}" ]]; then
-    if whiptail --backtitle "$bt" --yesno "Read the text in pictures added in the web app (RapidOCR, ~60 MB)?\n\nThe Mac and iPhone apps read text on the device; this is only for pictures uploaded in the browser." 12 76 3>&1 1>&2 2>&3; then IONOTE_FEATURES=ocr; else IONOTE_FEATURES=none; fi
-  fi
   if [[ -z "${IONOTE_PUBLIC_URL+x}" ]]; then
     IONOTE_PUBLIC_URL=$(whiptail --backtitle "$bt" --inputbox "Public address behind your reverse proxy, e.g. https://notes.example.com (empty: the address it is reached at)" 10 76 "" 3>&1 1>&2 2>&3) || exit 1
   fi
@@ -136,7 +132,7 @@ SECRETS="IONOTE_DB=$(printf '%q' "$IONOTE_DB")"$'\n'"IONOTE_SUITE_DB=$(printf '%
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/ionote/setup.env --perms 0600 --user 0 --group 0
 rm -f "$SECF"
-SETUP_CMD="cd /opt/ionote/app && sh ./setup.sh --yes --no-system-deps --service --port '${IONOTE_PORT:-8610}' --data /opt/ionote/data --features '${IONOTE_FEATURES:-none}' --public-url '${IONOTE_PUBLIC_URL:-}' --cookie-domain '${IONOTE_COOKIE_DOMAIN:-}' --also '${IONOTE_ALSO:-none}'"
+SETUP_CMD="cd /opt/ionote/app && sh ./setup.sh --yes --no-system-deps --service --port '${IONOTE_PORT:-8610}' --data /opt/ionote/data --public-url '${IONOTE_PUBLIC_URL:-}' --cookie-domain '${IONOTE_COOKIE_DOMAIN:-}' --also '${IONOTE_ALSO:-none}'"
 WRAPPED="set -a; . /opt/ionote/setup.env; set +a; rm -f /opt/ionote/setup.env; $SETUP_CMD > /opt/ionote/setup.log 2>&1"
 if ! pct exec "$CTID" -- bash -c "$WRAPPED"; then
   msg_error "setup.sh failed inside the container; last lines of /opt/ionote/setup.log:"

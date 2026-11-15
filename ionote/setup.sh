@@ -26,8 +26,7 @@
 #   --apps                        only that: show the apps that are here; tick or untick them, or pick one to
 #                                 reconfigure (no other question). Without --yes, every run ends with this list
 # >>> own: help
-#        ioNote's own: --data DIR (its own files: session secret, log; default data/)   --features ocr|none (read the
-#        text in pictures added in the web app with RapidOCR, about 60 MB; the Mac and iPhone apps read it themselves)
+#        ioNote's own: --data DIR (its own files: session secret, log; default data/)
 # <<< own: help
 # Secrets can stay off the command line: IONOTE_DB, IONOTE_SUITE_DB, IONOTE_ADMIN and
 # IONOTE_DB_ADMIN in the environment do what --db, --suite-db, --admin and --db-admin do.
@@ -45,7 +44,7 @@ say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 YES=0; DBS=""; ADBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; PUBURL=""; COOKIE=""; SERVICE=""; SYSDEPS=""; PY=""; ALSO=""; DBADMIN=""; REMOVE=""; REDO=""; APPSONLY=0; NOAPPS=0; NOTE=""
 # >>> own: vars
-DATA=""; FEATURES=""
+DATA=""
 # <<< own: vars
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -54,7 +53,7 @@ while [ $# -gt 0 ]; do
     --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
     --python) PY="$2"; shift 2;; --also) ALSO="$2"; shift 2;; --remove) REMOVE="$2"; shift 2;; --reconfigure) REDO="$2"; shift 2;; --apps) APPSONLY=1; shift;; --db-admin) DBADMIN="$2"; shift 2;;
 # >>> own: options
-    --data) DATA="$2"; shift 2;; --features) FEATURES="$2"; shift 2;;
+    --data) DATA="$2"; shift 2;;
 # <<< own: options
     -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); if ($0 !~ /^(>>>|<<<) own:/) print; next } NR > 1 { exit }' "$0"; exit 0;;
     *) die "unknown option $1 (try --help)";;
@@ -130,12 +129,6 @@ split SUITE "$ADBS"
 [ -n "$PORT" ] || { P="$(getenv PORT)"; ask PORT "Web port" "${P:-8610}"; }
 # >>> own: questions
 [ -n "$DATA" ] || DATA="$(getenv DATA_DIR)"; [ -n "$DATA" ] || DATA="$APP/data"  # not asked, as in the other apps (--data sets it)
-if [ -z "$FEATURES" ]; then
-  case "$(getenv OCR)" in 0) F=n;; *) F=y;; esac  # what config.env says, else on
-  ask F "Read the text in pictures added in the web app (RapidOCR, ~60 MB; the Mac and iPhone apps read it themselves), y/n" "$F"
-  case "$F" in y|Y|yes|YES) FEATURES=ocr;; *) FEATURES=none;; esac
-fi
-case "$FEATURES" in ocr|none) ;; *) die "--features takes ocr or none";; esac
 # <<< own: questions
 [ -n "$PUBURL" ] || { U2="$(getenv PUBLIC_URL)"; ask PUBURL "Public address, e.g. https://$EXAMPLE (empty: as reached)" "$U2"; }
 [ -n "$COOKIE" ] || { C2="$(getenv COOKIE_DOMAIN)"; ask COOKIE "Domain the sign-in is shared on, e.g. example.com (empty: this host only)" "$C2"; }
@@ -159,7 +152,6 @@ SHARED=shared; [ -f shared/pyproject.toml ] || SHARED=../shared
 .venv/bin/python -m pip install -q --disable-pip-version-check -e "$SHARED"
 .venv/bin/python -m pip install -q --disable-pip-version-check -e .
 # >>> own: packages
-[ "$FEATURES" != ocr ] || { say "Installing RapidOCR (the text in pictures)"; .venv/bin/python -m pip install -q --disable-pip-version-check -e ".[ocr]"; }
 # <<< own: packages
 
 # ---- settings (kept between runs; passwords readable by the owner only)
@@ -172,7 +164,8 @@ setenv IOSUITE_DB_HOST "$SUITE_HOST"; setenv IOSUITE_DB_PORT "$SUITE_PORT"; sete
 setenv IOSUITE_DB_USER "$SUITE_USER"; setenv IOSUITE_DB_PASSWORD "$SUITE_PASSWORD"
 setenv PORT "$PORT"; setenv PUBLIC_URL "$PUBURL"; setenv COOKIE_DOMAIN "$COOKIE"
 # >>> own: settings
-setenv DATA_DIR "$DATA"; setenv OCR "$([ "$FEATURES" = ocr ] && echo 1 || echo 0)"
+setenv DATA_DIR "$DATA"
+(umask 077; grep -v '^OCR=' config.env > config.env.tmp || true; mv config.env.tmp config.env)  # text in pictures is always on now
 mkdir -p "$DATA"
 # <<< own: settings
 

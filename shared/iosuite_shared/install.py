@@ -81,7 +81,7 @@ APPS = {
     "iostart": dict(label="ioStart", port=8630, env="IOSTART"),
     "iocalendar": dict(label="ioCalendar", port=8620, env="IOCALENDAR"),
     "iocontact": dict(label="ioContact", port=8640, env="IOCONTACT"),
-    "ionote": dict(label="ioNote", port=8610, env="IONOTE", data=True, extra=["--features", "none"]),
+    "ionote": dict(label="ioNote", port=8610, env="IONOTE", data=True),
     "iohealth": dict(label="ioHealth", port=8650, env="IOHEALTH"),
     "iotask": dict(label="ioTask", port=8670, env="IOTASK"),
     "iodns": dict(label="ioDNS", port=8660, env="IODNS"),

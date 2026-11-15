@@ -5,7 +5,7 @@
 # Source: https://github.com/avandeputte/iosuite (ionote/)
 # ionote: runs inside the LXC, driven by proxmox/ct/ionote.sh (community-scripts framework).
 # This only installs the system packages and fetches the code; the ct script then runs the app's own
-# setup.sh inside the container with the answers given on the host (database, OCR, admin, service).
+# setup.sh inside the container with the answers given on the host (database, admin, service).
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color

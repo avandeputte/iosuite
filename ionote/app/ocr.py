@@ -1,4 +1,4 @@
-"""Text in pictures for notes made in the web app (RapidOCR, an optional package: pip install -e '.[ocr]').
+"""Text in pictures for notes made in the web app (RapidOCR).
 
 The Mac and iPhone apps read the text themselves with Apple's Vision framework and send it as ocrText, so the
 server only does this for pictures added in the browser. One background thread works through a queue; the
@@ -9,7 +9,7 @@ import logging
 import queue
 import threading
 
-from app import config, images, notes
+from app import images, notes
 
 log = logging.getLogger("app.ocr")
 _q = queue.Queue()
@@ -21,14 +21,12 @@ _failed = None
 
 
 def available() -> bool:
-    if not config.OCR:
-        return False
     import importlib.util
     return importlib.util.find_spec("rapidocr") is not None
 
 
 def status() -> dict:
-    return {"enabled": config.OCR, "installed": available(), "queued": _q.qsize(), "error": _failed}
+    return {"installed": available(), "queued": _q.qsize(), "error": _failed}
 
 
 def _read(data: bytes) -> str:

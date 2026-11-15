@@ -31,7 +31,7 @@ LABEL=ioNote
 ITEMS="app static proxmox pyproject.toml README.md setup.sh run.sh update.sh Dockerfile docker-compose.yml config.env.example"
 # the optional dependency groups installed here (has <group> <module to probe>), and anything else a new version needs on this machine
 groups() {
-  has ocr rapidocr
+  :
 }
 # ----
 

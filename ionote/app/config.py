@@ -17,8 +17,6 @@ env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
 # MCP_FORCED, KEEP_DELETED_DAYS, ADMIN_USER, ADMIN_PASSWORD: the same names in every app (iosuite_shared.config.standard says what each is)
 globals().update(shared.standard(APP, APP_DIR))
 
-# OCR=0 keeps the server from reading text in images itself (the apps read it on the device and send it along)
-OCR = env_flag("OCR", True)
 # the account `python -m app.mcp` (stdio) acts as. Updates: IONOTE_REPO, IONOTE_BRANCH and UPDATE_CHECK are read by
 # iosuite_shared.updates (app.auth.updater)
 MCP_USER = env("MCP_USER")
