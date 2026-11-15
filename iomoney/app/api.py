@@ -254,6 +254,16 @@ def possible_transfers(request: Request):
     return {"items": transfers.possible(_u(request))}
 
 
+@router.post("/api/transfers/not", dependencies=[access.signed_in])
+async def not_a_transfer(request: Request):
+    """{outId, inId}: these two are not one transfer; they leave the list of what to check and are never linked by
+    themselves."""
+    u = _u(request)
+    b = await json_body(request)
+    await run_in_threadpool(transfers.dismiss, u, b.get("outId"), b.get("inId"))
+    return {"ok": True}
+
+
 @router.post("/api/transfers/link", dependencies=[access.signed_in])
 async def link_transfers(request: Request):
     """Go through every transaction not linked yet and link the transfers (editors): {linked, learned (transfer

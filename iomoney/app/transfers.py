@@ -247,6 +247,19 @@ def connect(u: dict, t: dict, other_id) -> None:
     db.ex("INSERT INTO mny_transfers (out_id, in_id, how, created_by) VALUES (%s, %s, 'hand', %s)", (out_["id"], in_["id"], u["id"]))
 
 
+def dismiss(u: dict, out_id, in_id) -> None:
+    """Say these two are not one transfer (the list of what to check stops showing them, and they are never linked
+    by themselves); neither may be linked to the other already."""
+    o, i = model.transaction(u, out_id), model.transaction(u, in_id)
+    model._need(model.can_write(u, o) and model.can_write(u, i))
+    if Decimal(o["amount"]) >= 0 or Decimal(i["amount"]) <= 0:
+        raise Invalid("The first is the money out, the second the money in")
+    p = pair_of(o["id"])
+    if p and p["in_id"] == i["id"]:
+        raise Invalid("They are linked: unlink them instead")
+    db.ex("INSERT IGNORE INTO mny_transfer_nots (out_id, in_id) VALUES (%s, %s)", (o["id"], i["id"]))
+
+
 def disconnect(u: dict, t: dict) -> None:
     """Unlink t's transfer, for good: the two are not linked again by themselves."""
     p = pair_of(t["id"])
@@ -275,7 +288,7 @@ def link_all(u: dict) -> dict:
             "possible": possible(u, tied)}
 
 
-def possible(u: dict, tied: set = frozenset(), limit: int = 200) -> list[dict]:
+def possible(u: dict, tied: set = frozenset(), limit: int = 1000) -> list[dict]:
     """The debits and credits of the same amount in two accounts, at most LOOK_DAYS apart, neither linked yet nor
     unlinked by a person: what a person may want to link, with why it was not linked by itself."""
     rows = [t for t in _rows() if model.can_read(u, t)]

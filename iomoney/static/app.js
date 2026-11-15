@@ -307,6 +307,7 @@ function route() {
   if (a === 'portfolio') return { view: 'portfolio' };
   if (a === 'assets') return { view: 'assets' };
   if (a === 'rules') return { view: 'rules' };
+  if (a === 'transfers') return { view: 'transfers', q };
   if (a === 'account' && b) return { view: 'account', id: +b, tab: c };
   if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: c };
   return { view: 'overview' };
@@ -320,7 +321,7 @@ async function onRoute() {
     const page = h('div', { class: 'page wide' });
     if (!may('read') && r.view !== 'settings') noRole(page);
     else await ({ overview: showOverview, transactions: showTransactions, spending: showSpending, portfolio: showPortfolio,
-      assets: showAssets, rules: showRules, account: showAccount, settings: showSettings })[r.view](page, r);
+      assets: showAssets, rules: showRules, transfers: showTransfers, account: showAccount, settings: showSettings })[r.view](page, r);
     main.replaceChildren(page);
     if (!r.keepScroll) main.scrollTop = 0;
   } catch (e) { main.replaceChildren(h('div', { class: 'page' }, h('div', { class: 'empty' }, icon('warning'), h('p', null, e.message || String(e)), h('p', null, h('a', { class: 'lnk', href: '#/' }, 'Overview'))))); }
@@ -876,28 +877,88 @@ async function drawTransferRules(page) {
     w ? h('span', { class: 'end acts' }, h('button', { class: 'iconbtn', title: 'Edit', onclick: () => transferRuleDialog(x) }, icon('edit', 's'))) : null)))));
 }
 /** The maintenance: go through every transaction and link the transfers (card, bank and loan payments), then show
-    what still looks like one but was not linked, with why, each with Link. */
-async function transferMaintenance() {
-  toast('Going through every transaction…');
-  let r;
-  try { r = await api('api/transfers/link', { method: 'POST' }); } catch (e) { fail(e); return; }
-  const fmtSide = (t) => h('span', { class: 'main' }, h('b', null, t.account || '?'),
-    h('small', null, [fmtDay(t.day), t.merchant || t.description, t.category].filter(Boolean).join(' · ')));
-  const rows = r.possible.map((p) => {
-    const btn = h('button', { class: 'pillbtn' }, 'Link');
-    btn.onclick = async () => {
-      try { await api(`api/transactions/${p.out.id}/transfer`, { method: 'PUT', json: { with: p.in.id } }); btn.textContent = 'Linked'; btn.disabled = true; } catch (e) { fail(e); }
+    what still looks like one but was not linked on its own page, to check. */
+function transferMaintenance() { location.hash = '#/transfers?run=1'; }
+const WHY = [['', 'Any reason'], ['as likely', 'As likely as another'], ['nothing says', 'Nothing says it is a transfer'], ['days apart', 'Too many days apart']];
+/** Transfers to check: the same amount out of one account and into another within two weeks, not linked: each with
+    both sides in full, why it was not linked, and Link or Not a transfer. ?run=1 first links what it can. */
+async function showTransfers(page, r) {
+  let ran = null;
+  if (r.q.run) {
+    toast('Going through every transaction…');
+    ran = await api('api/transfers/link', { method: 'POST' });
+    history.replaceState(null, '', '#/transfers');
+  }
+  const items = ran ? ran.possible : ((await api('api/transfers/possible')).items || []);
+  const f = { why: store.get('tfWhy') || '', acct: store.get('tfAcct') || '', q: '', sort: store.get('tfSort') || 'day' };
+  put(page, h('div', { class: 'pagehead' }, h('a', { class: 'iconbtn', href: '#/rules', title: 'Rules', 'aria-label': 'Rules' }, icon('prev')),
+    h('h1', null, 'Transfers to check'), h('span', { class: 'grow' }),
+    may('write') ? h('button', { class: 'pillbtn', onclick: () => { location.hash = '#/transfers?run=1'; }, title: 'Go through every transaction not linked yet' }, icon('sync'), h('span', null, 'Link transfers now')) : null));
+  if (ran) put(page, h('p', { class: 'banner ok' }, icon('check', 's'), ` ${ran.linked} transfer${ran.linked === 1 ? '' : 's'} linked`, ran.learned ? `, ${ran.learned} transfer rule${ran.learned === 1 ? '' : 's'} learned` : '', '.'));
+  put(page, h('p', { class: 'muted' }, 'The same amount out of one account and into another, within two weeks, that ioMoney did not link by itself. ',
+    'Link the ones that are one transfer; Not a transfer takes a pair off this list for good.'));
+  if (!items.length) { put(page, h('div', { class: 'empty' }, icon('link'), h('p', null, 'Nothing left to check.'))); return; }
+  const accts = [...new Map(items.flatMap((p) => [p.out, p.in]).filter((t) => t.accountId).map((t) => [t.accountId, t.account])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const sel = (opts, v, on) => { const e = h('select', { class: 't' }, opts.map(([k, l]) => h('option', { value: k, selected: k === v ? true : null }, l))); e.onchange = () => on(e.value); return e; };
+  const count = h('span', { class: 'muted small' });
+  const list = h('div', { class: 'tfx' });
+  const gone = new Set();  // transactions linked or set aside here: their other pairs leave the list
+  const side = (t) => h('div', { class: 'side' },
+    h('div', { class: 'acct' }, t.accountId ? h('a', { class: 'lnk', href: `#/account/${t.accountId}` }, t.account) : (t.account || 'Someone’s private account')),
+    h('div', { class: 'meta' }, fmtDay(t.day, true), t.category ? h('span', { class: 'tag' }, t.category) : null),
+    h('button', { class: 'payee', title: 'Open the transaction', onclick: () => txDialog(t) }, t.merchant || t.description || '—'),
+    t.description && t.description !== t.merchant ? h('div', { class: 'bank' }, t.description) : null);
+  const draw = () => {
+    const q = f.q.trim().toLowerCase();
+    let shown = items.filter((p) => !gone.has(p.out.id) && !gone.has(p.in.id) && (!f.why || p.why.includes(f.why))
+      && (!f.acct || String(p.out.accountId) === f.acct || String(p.in.accountId) === f.acct)
+      && (!q || [p.out, p.in].some((t) => [t.merchant, t.description, t.account, t.category].some((x) => (x || '').toLowerCase().includes(q))) || String(Math.abs(p.out.amount)).includes(q)));
+    // pairs that share a transaction are one choice (a tie): kept together, the choice said once
+    const root = new Map();
+    const find = (x) => { while (root.get(x) !== x) x = root.get(x); return x; };
+    for (const p of shown) {
+      for (const k of [`o${p.out.id}`, `i${p.in.id}`]) if (!root.has(k)) root.set(k, k);
+      root.set(find(`o${p.out.id}`), find(`i${p.in.id}`));
+    }
+    const groups = new Map();
+    for (const p of shown) { const g = find(`o${p.out.id}`); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(p); }
+    const day = (p) => (p.out.day > p.in.day ? p.out.day : p.in.day);
+    const gday = (g) => g.map(day).sort().pop();
+    const gamt = (g) => Math.abs(g[0].out.amount);
+    const sorted = [...groups.values()].sort(f.sort === 'amount' ? (a, b) => gamt(b) - gamt(a) || gday(b).localeCompare(gday(a))
+      : (a, b) => gday(b).localeCompare(gday(a)) || gamt(b) - gamt(a));
+    count.textContent = `${shown.length} of ${items.length - [...items].filter((p) => gone.has(p.out.id) || gone.has(p.in.id)).length}`;
+    const same = (a, b) => a.accountId === b.accountId && a.day === b.day && a.amount === b.amount && (a.merchant || '') === (b.merchant || '') && (a.description || '') === (b.description || '');
+    const twins = (g) => {  // the same transaction twice on one side: a duplicate from the bank or Monarch Money
+      const seen = (side) => [...new Map(g.map((p) => [p[side].id, p[side]])).values()];
+      return ['out', 'in'].map((sd) => seen(sd)).find((ts) => ts.length > 1 && ts.every((t) => same(t, ts[0])));
     };
-    return h('li', null, h('div', { class: 'r pair' }, h('span', { class: 'num amt' }, money(Math.abs(p.out.amount), p.out.currency)),
-      h('span', { class: 'sides' }, h('span', { class: 'side' }, h('small', { class: 'muted' }, 'Out of'), fmtSide(p.out)), h('span', { class: 'side' }, h('small', { class: 'muted' }, 'Into'), fmtSide(p.in)),
-        h('small', { class: 'why' }, p.why)), p.out.writable && p.in.writable ? btn : null));
-  });
-  const body = h('div', null,
-    h('p', null, `${r.linked} transfer${r.linked === 1 ? '' : 's'} linked`, r.learned ? `, ${r.learned} transfer rule${r.learned === 1 ? '' : 's'} learned` : '', '.'),
-    r.possible.length ? [h('p', { class: 'muted small' }, `${r.possible.length}${r.possible.length >= 200 ? '+' : ''} more look like one (the same amount out of one account and into another, within two weeks) but were not linked. Link the ones that are:`),
-      h('ul', { class: 'rows flat pairs' }, rows)] : h('p', { class: 'muted small' }, 'Nothing else looks like a transfer.'));
-  await dialog('Link transfers', body, [{ label: 'Done', value: true, primary: true }], 'wide');
-  onRoute();
+    const tieNote = (g) => {
+      const dup = twins(g);
+      if (dup) return h('div', { class: 'tfnote' }, icon('warning', 'xs'), ` ${dup.length} identical transactions in ${dup[0].account || 'one account'} on ${fmtDay(dup[0].day, true)} (“${dup[0].merchant || dup[0].description || ''}”): most likely a duplicate from the bank or Monarch Money. Link one; then open the other to check it.`);
+      return h('div', { class: 'tfnote' }, `${g.length} ways to pair these, each as likely: link the right one.`);
+    };
+    const rowOf = (p) => {
+      const apart = Math.round(Math.abs(new Date(p.out.day) - new Date(p.in.day)) / 864e5);
+      const can = p.out.writable && p.in.writable;
+      const link = h('button', { class: 'pillbtn primary' }, icon('link', 'xs'), 'Link');
+      const not = h('button', { class: 'pillbtn' }, 'Not a transfer');
+      link.onclick = async () => { try { await api(`api/transactions/${p.out.id}/transfer`, { method: 'PUT', json: { with: p.in.id } }); gone.add(p.out.id); gone.add(p.in.id); toast('Linked'); draw(); } catch (e) { fail(e); } };
+      not.onclick = async () => { try { await api('api/transfers/not', { method: 'POST', json: { outId: p.out.id, inId: p.in.id } }); items.splice(items.indexOf(p), 1); draw(); } catch (e) { fail(e); } };
+      return h('div', { class: 'tfr' }, h('div', { class: 'amt num' }, money(Math.abs(p.out.amount), p.out.currency)),
+        side(p.out), side(p.in), h('div', { class: 'apart' }, apart === 0 ? 'Same day' : `${apart} day${apart === 1 ? '' : 's'}`),
+        h('div', { class: 'why' }, p.why), h('div', { class: 'acts' }, can ? [link, not] : null));
+    };
+    list.replaceChildren(h('div', { class: 'tfh' }, h('span', null, 'Amount'), h('span', null, 'Out of'), h('span', null, 'Into'), h('span', null, 'Apart'), h('span', null, 'Not linked because'), h('span')),
+      ...sorted.map((g) => (g.length > 1 ? h('div', { class: 'tfg' }, tieNote(g), g.map(rowOf)) : rowOf(g[0]))));
+  };
+  const search = inp('', { type: 'search', placeholder: 'Payee, account, amount…' });
+  search.oninput = () => { f.q = search.value; draw(); };
+  put(page, h('div', { class: 'filters tff' }, search,
+    sel([['', 'Every account'], ...accts.map(([id, n]) => [String(id), n])], f.acct, (v) => { f.acct = v; store.set('tfAcct', v); draw(); }),
+    sel(WHY, f.why, (v) => { f.why = v; store.set('tfWhy', v); draw(); }),
+    sel([['day', 'Newest first'], ['amount', 'Largest first']], f.sort, (v) => { f.sort = v; store.set('tfSort', v); draw(); }), count), list);
+  draw();
 }
 async function transferRuleDialog(x) {
   const isNew = !x;

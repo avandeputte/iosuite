@@ -32,7 +32,8 @@ quotes, and what the house and the cars are worth after their loans.
   digits) or the category says so; each pairs with the nearest of its kind. A transfer that names the other account
   teaches a rule, so the next is found even later; link or unlink one by hand, and add or change transfer rules on the Rules page.
   **Link transfers** in Settings › Money goes through every transaction (card payments, bank transfers, loan
-  payments), then lists what still looks like a transfer, with why it was not linked, to link in one click.
+  payments), then opens Transfers to check, a full-width page of what still looks like a transfer, both sides in full, with
+  why it was not linked: Link, or Not a transfer; ties are grouped and likely duplicates pointed out.
 - **Reconciled**: tick each transaction as checked against the bank's statement, filter on it, or tick every one shown.
 - **Bank details** on each account: account and routing numbers (hidden until shown, with copy), IBAN, customer
   service phone, website, address and notes, to have at hand. AI assistants only get the phone, website and address.

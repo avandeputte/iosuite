@@ -52,9 +52,13 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   (Learned, ten days, from the bank's text without its dates and numbers).
   A transaction's dialog links one by hand among the candidates, or unlinks it (never linked again by itself); the
   Rules page lists, adds and changes the transfer rules. **Link transfers** (the maintenance in Settings › Money, and
-  on the Rules page) goes through every transaction, links what it can, and then lists what still looks like a
-  transfer (the same amount out of one account and into another within two weeks) with why it was not linked
-  (as likely as another, nothing says it is a transfer, too many days apart), each with **Link**.
+  on the Rules page) goes through every transaction, links what it can, and then opens **Transfers to check**
+  (#/transfers), a full-width page of what still looks like a transfer (the same amount out of one account and into
+  another within two weeks): both sides in full (account, day, category, payee and the bank's text), how many days
+  apart and why it was not linked (as likely as another, nothing says it is a transfer, too many days apart), with
+  **Link** and **Not a transfer** (off the list for good), a search, and filters by account and reason. Pairs that
+  share a transaction are shown together as one choice, and two identical transactions on one side are pointed out
+  as a likely duplicate.
 - **Reconciled**: each transaction can be ticked as reconciled with the bank's statement (the tick at the end of its
   row, or its dialog); the list filters on it, and **Mark these reconciled** ticks every one shown. The sync leaves it
   as it is, and it does not count as a change to the transaction.
@@ -185,6 +189,7 @@ Updates, releases, the reverse proxy and Cloudflare Access work as in every app 
 | Spending and cash flow | `GET /api/spending?month=2026-11`, `GET /api/cashflow?months=12`, `GET /api/categories` |
 | Transfers: one transaction's other half and candidates, link, unlink; link all; what is left | `GET/PUT/DELETE /api/transactions/{id}/transfer`, `POST /api/transfers/link`, `GET /api/transfers/possible` |
 | Reconciled: filter, mark | `GET /api/transactions?reconciled=yes\|no`, `PATCH /api/transactions/{id}` (`reconciled`), `POST /api/transactions/reconcile` (`{ids, reconciled}`) |
+| Not a transfer (off the list to check, never linked by itself) | `POST /api/transfers/not` (`{outId, inId}`) |
 | Transfer rules: list, add, change, delete | `/api/transfer-rules`, `/api/transfer-rules/{id}` |
 | Rules: list, add, try, apply, order, change, delete | `/api/rules`, `POST /api/rules/test`, `POST /api/rules/apply`, `PUT /api/rules/order`, `/api/rules/{id}` |
 | The portfolio and quotes | `GET /api/portfolio`, `POST /api/accounts/{id}/holdings`, `/api/holdings/{id}`, `GET /api/quotes/{symbol}`, `POST /api/quotes/refresh` |
