@@ -1,147 +1,87 @@
-"""ionote' database: MySQL/MariaDB (the normal case), or a SQLite file in DATA_DIR (a quick try, the tests).
+"""ioNote's database: MariaDB/MySQL, through the suite's layer (iosuite_shared.db.Database: a pool of connections
+and a transaction nested calls share), like every app of the suite. Rows answer to an index and to a column name.
 
-The code is written in one SQL dialect (? placeholders, INSERT OR REPLACE / OR IGNORE) and the wrapper translates
-it for MySQL, the same way iopix's viewer database does. Rows answer to an index and to a column name.
-
-Where the database is comes from config.env or the environment (DB_TYPE, DB_HOST, DB_PORT, DB_NAME, DB_USER,
-DB_PASSWORD); with none of them, SQLite in data/ionote.db.
+Where the database is comes from config.env or the environment (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD).
 
 Every note, folder and tag colour carries `rev`, a number from one counter that grows with every change. The
 apps ask for everything changed since the last rev they saw (GET /api/sync?since=), which is how they keep
 their offline copy current. Deletions are kept as tombstones (deleted = 1) for that reason.
 """
 import logging
-import re
-import sqlite3
 import threading
 import time
 from contextlib import contextmanager
-from datetime import datetime, timezone
 
-from iosuite_shared.db import Pool
+import pymysql
+
+from iosuite_shared import db as shared_db, schema
 
 from app import config
 
 log = logging.getLogger("app.db")
-SQLITE_FILE = config.DATA_DIR / "ionote.db"
-KEYS = ("type", "host", "port", "database", "user", "password")
-SCHEMA_VERSION = 4  # recorded in nts_schema_version; the tables are made as SCHEMA says (pre-release: no upgrade steps)
+SCHEMA_VERSION = 4  # recorded in nts_schema_version (iosuite_shared.schema); the tables are made as SCHEMA says
 PREFIX = "nts"
-_cfg = None
+Error = pymysql.err.Error
 _lock = threading.Lock()
 _ready = False
 error = None  # why the configured database could not be used at start
 
-try:
-    import pymysql
-    Error = (sqlite3.Error, pymysql.err.Error)
-except ImportError:  # pragma: no cover
-    pymysql = None
-    Error = (sqlite3.Error,)
-
-# ---- schema: one definition per table, the SQLite and the MySQL spelling. Every table is nts_<name>, the suite's
-# naming convention (the apps can share one database)
-TABLES = {
+# ---- schema: every table is nts_<name>, the suite's naming convention (the apps can share one database), InnoDB
+# and utf8mb4 (migrate() adds that). Accounts live in the Shared ioSuite database (iosuite-shared, app/auth.py)
+SCHEMA = [
     # accounts live in the Shared ioSuite database (iosuite-shared, app/auth.py)
-    "nts_settings": (
-        "CREATE TABLE IF NOT EXISTS nts_settings (name TEXT PRIMARY KEY, value TEXT, updated_at TEXT)",
-        "CREATE TABLE IF NOT EXISTS nts_settings (name VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT, updated_at DATETIME(3) NULL) "
-        "ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
-    "nts_schema_version": (
-        "CREATE TABLE IF NOT EXISTS nts_schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)",
-        "CREATE TABLE IF NOT EXISTS nts_schema_version (version INT PRIMARY KEY, applied_at DATETIME(3) NOT NULL) "
-        "ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    ('CREATE TABLE IF NOT EXISTS nts_settings (name VARCHAR(191) PRIMARY KEY, value MEDIUMTEXT, '
+     'updated_at DATETIME(3) NULL)'),
     # one row per change: its id is the rev stamped on what changed
-    "nts_change_counter": (
-        "CREATE TABLE IF NOT EXISTS nts_change_counter (rev INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER)",
-        "CREATE TABLE IF NOT EXISTS nts_change_counter (rev BIGINT AUTO_INCREMENT PRIMARY KEY, created_at BIGINT) "
-        "ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    ('CREATE TABLE IF NOT EXISTS nts_change_counter (rev BIGINT AUTO_INCREMENT PRIMARY KEY, created_at BIGINT)'),
     # times are seconds since 1970 (UTC) as the apps send them; tags is a JSON list of names; user_id: the account's
     # id in the Shared ioSuite database (0: made while the install was open, before the first account)
-    "nts_notes": (
-        "CREATE TABLE IF NOT EXISTS nts_notes (uuid TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', "
-        "ocr_text TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'manual', source_app TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL, "
-        "tags TEXT NOT NULL DEFAULT '[]', pinned INTEGER NOT NULL DEFAULT 0, folder_id TEXT, has_image INTEGER NOT NULL DEFAULT 0, image_sha TEXT, "
-        "deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0, changed_by TEXT, user_id INTEGER NOT NULL DEFAULT 0)",
-        "CREATE TABLE IF NOT EXISTS nts_notes (uuid VARCHAR(64) PRIMARY KEY, title TEXT NOT NULL, body MEDIUMTEXT NOT NULL, "
-        "ocr_text MEDIUMTEXT NOT NULL, source VARCHAR(32) NOT NULL DEFAULT 'manual', source_app VARCHAR(191), created_at DOUBLE NOT NULL, updated_at DOUBLE NOT NULL, "
-        "tags TEXT NOT NULL, pinned INT NOT NULL DEFAULT 0, folder_id VARCHAR(64), has_image INT NOT NULL DEFAULT 0, image_sha VARCHAR(64), "
-        "deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, changed_by VARCHAR(191), user_id BIGINT NOT NULL DEFAULT 0, "
-        "INDEX idx_nts_notes_rev (rev), INDEX idx_nts_notes_folder (folder_id), INDEX idx_nts_notes_updated (updated_at), "
-        "INDEX idx_nts_notes_user (user_id, rev), "
-        "FULLTEXT INDEX idx_nts_notes_text (title, body, ocr_text, tags)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    ('CREATE TABLE IF NOT EXISTS nts_notes (uuid VARCHAR(64) PRIMARY KEY, title TEXT NOT NULL, '
+     "body MEDIUMTEXT NOT NULL, ocr_text MEDIUMTEXT NOT NULL, source VARCHAR(32) NOT NULL DEFAULT 'manual', "
+     'source_app VARCHAR(191), created_at DOUBLE NOT NULL, updated_at DOUBLE NOT NULL, tags TEXT NOT NULL, '
+     'pinned INT NOT NULL DEFAULT 0, folder_id VARCHAR(64), has_image INT NOT NULL DEFAULT 0, image_sha VARCHAR(64), '
+     'deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, changed_by VARCHAR(191), '
+     'user_id BIGINT NOT NULL DEFAULT 0, INDEX idx_nts_notes_rev (rev), INDEX idx_nts_notes_folder (folder_id), '
+     'INDEX idx_nts_notes_updated (updated_at), INDEX idx_nts_notes_user (user_id, rev), '
+     'FULLTEXT INDEX idx_nts_notes_text (title, body, ocr_text, tags))'),
     # the picture of a note: the bytes as sent, and a small JPEG for lists
-    "nts_note_images": (
-        "CREATE TABLE IF NOT EXISTS nts_note_images (uuid TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL, thumb BLOB, width INTEGER, height INTEGER, "
-        "size_bytes INTEGER, sha TEXT, updated_at REAL)",
-        "CREATE TABLE IF NOT EXISTS nts_note_images (uuid VARCHAR(64) PRIMARY KEY, mime VARCHAR(64) NOT NULL, data LONGBLOB NOT NULL, thumb MEDIUMBLOB, "
-        "width INT, height INT, size_bytes BIGINT, sha VARCHAR(64), updated_at DOUBLE) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
-    "nts_folders": (
-        "CREATE TABLE IF NOT EXISTS nts_folders (uuid TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', color TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL, "
-        "deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0, user_id INTEGER NOT NULL DEFAULT 0)",
-        "CREATE TABLE IF NOT EXISTS nts_folders (uuid VARCHAR(64) PRIMARY KEY, name VARCHAR(255) NOT NULL DEFAULT '', color VARCHAR(16), created_at DOUBLE NOT NULL, "
-        "updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, user_id BIGINT NOT NULL DEFAULT 0, "
-        "INDEX idx_nts_folders_rev (rev), INDEX idx_nts_folders_user (user_id, rev)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    ('CREATE TABLE IF NOT EXISTS nts_note_images (uuid VARCHAR(64) PRIMARY KEY, mime VARCHAR(64) NOT NULL, '
+     'data LONGBLOB NOT NULL, thumb MEDIUMBLOB, width INT, height INT, size_bytes BIGINT, sha VARCHAR(64), '
+     'updated_at DOUBLE)'),
+    ("CREATE TABLE IF NOT EXISTS nts_folders (uuid VARCHAR(64) PRIMARY KEY, name VARCHAR(255) NOT NULL DEFAULT '', "
+     'color VARCHAR(16), created_at DOUBLE NOT NULL, updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, '
+     'rev BIGINT NOT NULL DEFAULT 0, user_id BIGINT NOT NULL DEFAULT 0, INDEX idx_nts_folders_rev (rev), '
+     'INDEX idx_nts_folders_user (user_id, rev))'),
     # a tag's colour; tags themselves are names on notes. tag_key: the name in lower case; two accounts may colour
     # the same tag differently
-    "nts_tag_colors": (
-        "CREATE TABLE IF NOT EXISTS nts_tag_colors (user_id INTEGER NOT NULL DEFAULT 0, tag_key TEXT NOT NULL, name TEXT NOT NULL, color TEXT, "
-        "updated_at REAL NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, tag_key))",
-        "CREATE TABLE IF NOT EXISTS nts_tag_colors (user_id BIGINT NOT NULL DEFAULT 0, tag_key VARCHAR(191) NOT NULL, name VARCHAR(191) NOT NULL, "
-        "color VARCHAR(16), updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, "
-        "PRIMARY KEY (user_id, tag_key), INDEX idx_nts_tag_colors_rev (rev)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    ('CREATE TABLE IF NOT EXISTS nts_tag_colors (user_id BIGINT NOT NULL DEFAULT 0, tag_key VARCHAR(191) NOT NULL, '
+     'name VARCHAR(191) NOT NULL, color VARCHAR(16), updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, '
+     'rev BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (user_id, tag_key), INDEX idx_nts_tag_colors_rev (rev))'),
     # files attached to a note beside its picture (PDFs, more pictures, documents): the bytes, a small JPEG for
     # pictures, and the text found in them (a PDF's text, a picture's text read by RapidOCR, a text file), which search
     # covers. A note's rev moves whenever its attachments change, and the note lists them (notes.py), so the devices
     # learn of them with the note itself
-    "nts_attachments": (
-        "CREATE TABLE IF NOT EXISTS nts_attachments (uuid TEXT PRIMARY KEY, note_uuid TEXT NOT NULL, user_id INTEGER NOT NULL DEFAULT 0, "
-        "name TEXT NOT NULL DEFAULT '', mime TEXT NOT NULL, size_bytes INTEGER NOT NULL DEFAULT 0, sha TEXT, width INTEGER, height INTEGER, "
-        "data BLOB NOT NULL, thumb BLOB, text TEXT NOT NULL DEFAULT '', created_at REAL NOT NULL)",
-        "CREATE TABLE IF NOT EXISTS nts_attachments (uuid VARCHAR(64) PRIMARY KEY, note_uuid VARCHAR(64) NOT NULL, user_id BIGINT NOT NULL DEFAULT 0, "
-        "name VARCHAR(255) NOT NULL DEFAULT '', mime VARCHAR(128) NOT NULL, size_bytes BIGINT NOT NULL DEFAULT 0, sha VARCHAR(64), width INT, height INT, "
-        "data LONGBLOB NOT NULL, thumb MEDIUMBLOB, text MEDIUMTEXT NOT NULL, created_at DOUBLE NOT NULL, "
-        "INDEX idx_nts_attachments_note (note_uuid), FULLTEXT INDEX idx_nts_attachments_text (name, text)) "
-        "ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    ('CREATE TABLE IF NOT EXISTS nts_attachments (uuid VARCHAR(64) PRIMARY KEY, note_uuid VARCHAR(64) NOT NULL, '
+     "user_id BIGINT NOT NULL DEFAULT 0, name VARCHAR(255) NOT NULL DEFAULT '', mime VARCHAR(128) NOT NULL, "
+     'size_bytes BIGINT NOT NULL DEFAULT 0, sha VARCHAR(64), width INT, height INT, data LONGBLOB NOT NULL, '
+     'thumb MEDIUMBLOB, text MEDIUMTEXT NOT NULL, created_at DOUBLE NOT NULL, '
+     'INDEX idx_nts_attachments_note (note_uuid), FULLTEXT INDEX idx_nts_attachments_text (name, text))'),
     # templates for new notes: a title, text, tags and a folder; {{date}} and the like are filled in when a note is
     # made from one. Synced to the devices like folders (rev, tombstones)
-    "nts_templates": (
-        "CREATE TABLE IF NOT EXISTS nts_templates (uuid TEXT PRIMARY KEY, user_id INTEGER NOT NULL DEFAULT 0, name TEXT NOT NULL DEFAULT '', "
-        "title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '[]', folder_id TEXT, "
-        "created_at REAL NOT NULL, updated_at REAL NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0)",
-        "CREATE TABLE IF NOT EXISTS nts_templates (uuid VARCHAR(64) PRIMARY KEY, user_id BIGINT NOT NULL DEFAULT 0, name VARCHAR(255) NOT NULL DEFAULT '', "
-        "title TEXT NOT NULL, body MEDIUMTEXT NOT NULL, tags TEXT NOT NULL, folder_id VARCHAR(64), "
-        "created_at DOUBLE NOT NULL, updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, "
-        "INDEX idx_nts_templates_rev (rev), INDEX idx_nts_templates_user (user_id, rev)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
+    ('CREATE TABLE IF NOT EXISTS nts_templates (uuid VARCHAR(64) PRIMARY KEY, user_id BIGINT NOT NULL DEFAULT 0, '
+     "name VARCHAR(255) NOT NULL DEFAULT '', title TEXT NOT NULL, body MEDIUMTEXT NOT NULL, tags TEXT NOT NULL, "
+     'folder_id VARCHAR(64), created_at DOUBLE NOT NULL, updated_at DOUBLE NOT NULL, deleted INT NOT NULL DEFAULT 0, '
+     'rev BIGINT NOT NULL DEFAULT 0, INDEX idx_nts_templates_rev (rev), INDEX idx_nts_templates_user (user_id, rev))'),
     # what changed and who changed it, for the change log (Manage › Change log)
-    "nts_change_log": (
-        "CREATE TABLE IF NOT EXISTS nts_change_log (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER, user_name TEXT, action TEXT, kind TEXT, "
-        "uuid TEXT, summary TEXT, user_id INTEGER NOT NULL DEFAULT 0)",
-        "CREATE TABLE IF NOT EXISTS nts_change_log (id BIGINT AUTO_INCREMENT PRIMARY KEY, created_at BIGINT, user_name VARCHAR(191), action VARCHAR(32), "
-        "kind VARCHAR(16), uuid VARCHAR(64), summary TEXT, user_id BIGINT NOT NULL DEFAULT 0, INDEX idx_nts_change_log_created (created_at), "
-        "INDEX idx_nts_change_log_user (user_id, id)) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"),
-}
-SQLITE_INDEXES = {  # SQLite's index names are database-wide: named after the table like MySQL's
-    "idx_nts_notes_rev": "nts_notes (rev)",
-    "idx_nts_notes_folder": "nts_notes (folder_id)",
-    "idx_nts_notes_updated": "nts_notes (updated_at)",
-    "idx_nts_notes_user": "nts_notes (user_id, rev)",
-    "idx_nts_folders_rev": "nts_folders (rev)",
-    "idx_nts_folders_user": "nts_folders (user_id, rev)",
-    "idx_nts_tag_colors_rev": "nts_tag_colors (rev)",
-    "idx_nts_attachments_note": "nts_attachments (note_uuid)",
-    "idx_nts_templates_rev": "nts_templates (rev)",
-    "idx_nts_templates_user": "nts_templates (user_id, rev)",
-    "idx_nts_change_log_created": "nts_change_log (created_at)",
-    "idx_nts_change_log_user": "nts_change_log (user_id, id)",
-}
-
-_INSERT_IGNORE = re.compile(r"\bINSERT\s+OR\s+IGNORE\b", re.I)
-_INSERT_REPLACE = re.compile(r"\bINSERT\s+OR\s+REPLACE\b", re.I)
+    ('CREATE TABLE IF NOT EXISTS nts_change_log (id BIGINT AUTO_INCREMENT PRIMARY KEY, created_at BIGINT, '
+     'user_name VARCHAR(191), action VARCHAR(32), kind VARCHAR(16), uuid VARCHAR(64), summary TEXT, '
+     'user_id BIGINT NOT NULL DEFAULT 0, INDEX idx_nts_change_log_created (created_at), '
+     'INDEX idx_nts_change_log_user (user_id, id))'),
+]
 
 
 class Row(tuple):
-    """A row that answers to an index and to a column name, like sqlite3.Row on both databases."""
+    """A row that answers to an index and to a column name."""
 
     def __new__(cls, values, names):
         r = super().__new__(cls, values)
@@ -152,9 +92,6 @@ class Row(tuple):
         if isinstance(k, str):
             return tuple.__getitem__(self, self._names.index(k))
         return tuple.__getitem__(self, k)
-
-    def keys(self):
-        return list(self._names)
 
 
 class Cursor:
@@ -185,149 +122,82 @@ class Cursor:
 
 
 class Conn:
-    def __init__(self, raw, mysql: bool):
-        self.raw, self.mysql = raw, mysql
+    """A connection of the pool as ioNote's code uses it: execute() gives a cursor whose rows answer to names too.
+    connect() lends one for reads (each statement on its own: the connections are in autocommit mode); tx() hands
+    out the thread's transaction."""
 
-    def sql(self, sql: str) -> str:
-        if not self.mysql:
-            return sql
-        sql = _INSERT_IGNORE.sub("INSERT IGNORE", sql)
-        sql = _INSERT_REPLACE.sub("REPLACE", sql)
-        return sql.replace("%", "%%").replace("?", "%s")
+    def __init__(self, raw, lent: bool = False):
+        self.raw, self._lent = raw, lent
 
     def execute(self, sql: str, params=()):
-        if self.mysql:
-            cur = self.raw.cursor()
-            cur.execute(self.sql(sql), tuple(params))
-            return Cursor(cur)
-        return Cursor(self.raw.execute(sql, tuple(params)))
-
-    def executemany(self, sql: str, rows):
-        if self.mysql:
-            cur = self.raw.cursor()
-            cur.executemany(self.sql(sql), [tuple(r) for r in rows])
-            return Cursor(cur)
-        return Cursor(self.raw.executemany(sql, rows))
-
-    def begin(self):
-        """A write transaction. SQLite's BEGIN IMMEDIATE lets one writer in at a time; on MySQL the lock row does the
-        same. That keeps commits in rev order: a reader never sees rev 101 committed while rev 100 is still on its
-        way, which would let a device's sync cursor (GET /api/sync) pass it by for good."""
-        if not self.mysql:
-            self.execute("BEGIN IMMEDIATE")
-            return
-        self.execute("START TRANSACTION")
-        if not self.execute("SELECT value FROM nts_settings WHERE name = 'write_lock' FOR UPDATE").fetchone():
-            self.execute("INSERT IGNORE INTO nts_settings (name, value) VALUES ('write_lock', '')")
-            self.execute("SELECT value FROM nts_settings WHERE name = 'write_lock' FOR UPDATE")
+        cur = self.raw.cursor()
+        cur.execute(sql, tuple(params))
+        return Cursor(cur)
 
     def commit(self):
-        self.raw.commit()
+        """Nothing to do outside tx(): every statement commits by itself."""
 
-    def rollback(self):
-        self.raw.rollback()
-
-    def close(self):
-        """A MySQL connection goes back to the pool, with whatever transaction it had open ended (the next one to
-        borrow it reads the present, not this one's snapshot); a SQLite one is closed."""
+    def close(self, broken: bool = False):
+        """Hands a connection from connect() back to the pool (closed when it failed); tx() ends its own."""
         raw, self.raw = self.raw, None
-        if raw is None:
-            return
-        if not self.mysql:
-            try:
-                raw.close()
-            except Exception:
-                pass
-            return
-        try:
-            raw.rollback()
-        except Exception:
-            _pool.give_back(raw, broken=True)
-        else:
-            _pool.give_back(raw)
+        if raw is not None and self._lent:
+            _db.pool.give_back(raw, broken)
 
     def __enter__(self):
         return self
 
-    def __exit__(self, *exc):
-        self.close()
+    def __exit__(self, kind, *exc):
+        self.close(broken=kind is not None and issubclass(kind, shared_db.BROKEN))
 
 
 # ---- configuration
 def settings() -> dict:
-    """{type, host, port, database, user, password}: from config.env or the environment, else SQLite."""
-    global _cfg
-    if _cfg is None:
-        c = {"type": "sqlite", "host": "", "port": 3306, "database": "ionote", "user": "", "password": ""}
-        for k in KEYS:
-            v = config.db_env(k)
-            if v:
-                c[k] = v
-        c["port"] = int(c.get("port") or 3306)
-        c["type"] = "mysql" if str(c.get("type")).lower() in ("mysql", "mariadb") else "sqlite"
-        _cfg = c
-    return dict(_cfg)
+    """{host, port, database, user, password}: from config.env or the environment."""
+    return {"host": config.DB_HOST, "port": config.DB_PORT, "database": config.DB_NAME, "user": config.DB_USER,
+            "password": config.DB_PASSWORD}
 
 
 def public_settings() -> dict:
     """For the MCP diagnostics: the password replaced by whether one is set."""
     c = settings()
-    return {**{k: v for k, v in c.items() if k != "password"}, "password_set": bool(c["password"]), "error": error,
-            "sqlite_file": str(SQLITE_FILE), "fromEnv": [k for k in KEYS if config.db_env(k)]}
+    return {**{k: v for k, v in c.items() if k != "password"}, "password_set": bool(c["password"]), "error": error}
 
 
-def _open_mysql(c: dict, database=True):
-    if pymysql is None:
-        raise RuntimeError("PyMySQL is not installed")
+def _open(c: dict, database=True):
     return pymysql.connect(host=c["host"], port=int(c["port"]), user=c["user"], password=c["password"],
                            database=c["database"] if database else None, charset="utf8mb4", connect_timeout=8,
-                           read_timeout=120, write_timeout=120, autocommit=False)
+                           read_timeout=120, write_timeout=120, autocommit=True)
 
 
-# MySQL connections, kept open and reused (iosuite-shared's Pool): no new handshake and sign-in for every query.
-# SQLite opens its file each time, which costs next to nothing.
-_pool = Pool(lambda: _open_mysql(settings()))
+# the pool, and the transaction nested calls on one thread share (iosuite_shared.db.Database)
+_db = shared_db.Database(lambda: _open(settings()))
 
 
 def connect() -> Conn:
-    """A connection (MySQL: one from the pool); the caller closes it (with connect() as con: ...), which hands a
-    pooled one back."""
+    """A connection for reads, from the pool; the caller closes it (with connect() as con: ...), which hands it back."""
     if not _ready:
         init()
-    return _raw_connect()
-
-
-def _raw_connect() -> Conn:
-    c = settings()
-    if c["type"] == "mysql":
-        return Conn(_pool.borrow(), True)
-    # isolation_level "": the module opens deferred transactions by itself; Conn.begin issues BEGIN IMMEDIATE for writes
-    raw = sqlite3.connect(str(SQLITE_FILE), timeout=30, isolation_level="")
-    raw.execute("PRAGMA foreign_keys = OFF")
-    raw.execute("PRAGMA busy_timeout = 30000")
-    return Conn(raw, False)
+    return Conn(_db.pool.borrow(), lent=True)
 
 
 @contextmanager
 def tx():
-    """A connection in a write transaction: committed on success, rolled back on an exception."""
-    con = connect()
-    try:
-        con.begin()
+    """A connection in a write transaction: committed on success, rolled back on an exception; nested calls share it.
+    Writers take the lock row first, one at a time. That keeps commits in rev order: a reader never sees rev 101
+    committed while rev 100 is still on its way, which would let a device's sync cursor (GET /api/sync) pass it by
+    for good."""
+    if not _ready:
+        init()
+    with _db.tx() as raw:
+        con = Conn(raw)
+        if not con.execute("SELECT value FROM nts_settings WHERE name = 'write_lock' FOR UPDATE").fetchone():
+            con.execute("INSERT IGNORE INTO nts_settings (name, value) VALUES ('write_lock', '')")
+            con.execute("SELECT value FROM nts_settings WHERE name = 'write_lock' FOR UPDATE")
         yield con
-        con.commit()
-    except BaseException:
-        try:
-            con.rollback()
-        except Exception:
-            pass
-        raise
-    finally:
-        con.close()
 
 
 def same_server(c: dict) -> bool:
-    """Whether c names the configured MySQL server and user, the only place the saved password may be sent."""
+    """Whether c names the configured server and user, the only place the saved password may be sent."""
     cur = settings()
     return (str(c.get("host") or "").strip().lower() == str(cur["host"] or "").strip().lower()
             and int(c.get("port") or 3306) == int(cur["port"] or 3306) and str(c.get("user") or "") == str(cur["user"] or ""))
@@ -335,13 +205,14 @@ def same_server(c: dict) -> bool:
 
 def test(values: dict) -> dict:
     """Try a MySQL/MariaDB connection (setup.sh, the MCP diagnostics): {ok, version} or {ok: False, error}."""
-    c = {**settings(), **{k: v for k, v in values.items() if k in KEYS}}
+    keys = ("host", "port", "database", "user", "password")
+    c = {**settings(), **{k: v for k, v in values.items() if k in keys}}
     if not values.get("password"):  # the saved password, only ever for the server and user it belongs to
         if not same_server(c):
             return {"ok": False, "error": "Enter the password: the saved one is only used for the server and user it belongs to"}
         c["password"] = settings()["password"]
     try:
-        raw = _open_mysql(c)
+        raw = _open(c)
         try:
             cur = raw.cursor()
             cur.execute("SELECT VERSION()")
@@ -360,25 +231,36 @@ def test(values: dict) -> dict:
         return {"ok": False, "error": str(e)[:300]}
 
 
+def ensure_database() -> None:
+    """Create the database when it is missing and the user may (CREATE privilege); otherwise leave it to the admin."""
+    c = settings()
+    try:
+        _open(c).close()
+        return
+    except pymysql.err.OperationalError as e:
+        if e.args[0] != 1049:  # anything but "unknown database"
+            raise
+    con = _open(c, database=False)
+    try:
+        with con.cursor() as cur:
+            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{c['database']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+    finally:
+        con.close()
+
+
 def init():
-    """Create the tables that are missing (idempotent). Called at start and by the first connect()."""
+    """Create the database and the tables that are missing (idempotent). Called at start and by the first connect()."""
     global _ready, error
     with _lock:
         if _ready:
             return
-        con = _raw_connect()
-        try:
-            for name, (lite, my) in TABLES.items():
-                con.execute(my if con.mysql else lite)
-            if not con.mysql:
-                for idx, on in SQLITE_INDEXES.items():
-                    con.execute(f"CREATE INDEX IF NOT EXISTS {idx} ON {on}")
-            con.execute("INSERT OR IGNORE INTO nts_settings (name, value) VALUES ('write_lock', '')")  # Conn.begin
-            con.execute("INSERT OR IGNORE INTO nts_schema_version (version, applied_at) VALUES (?, ?)",
-                        (SCHEMA_VERSION, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23]))
-            con.commit()
-        finally:
-            con.close()
+        ensure_database()
+        with _db.tx() as con, con.cursor() as cur:
+            for stmt in SCHEMA:
+                cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
+            cur.execute("INSERT IGNORE INTO nts_settings (name, value) VALUES ('write_lock', '')")  # tx()
+            schema.ensure_version_table(cur, PREFIX)
+            schema.record_version(cur, PREFIX, SCHEMA_VERSION)
         error = None
         _ready = True
 
@@ -386,19 +268,19 @@ def init():
 # ---- settings table
 def get_setting(key: str, default: str = None):
     with connect() as con:
-        r = con.execute("SELECT value FROM nts_settings WHERE name = ?", (key,)).fetchone()
+        r = con.execute("SELECT value FROM nts_settings WHERE name = %s", (key,)).fetchone()
     return r[0] if r else default
 
 
 def set_setting(key: str, value):
     with tx() as con:
-        con.execute("INSERT OR REPLACE INTO nts_settings (name, value, updated_at) VALUES (?, ?, ?)",
-                    (key, None if value is None else str(value), datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23]))
+        con.execute("REPLACE INTO nts_settings (name, value, updated_at) VALUES (%s, %s, UTC_TIMESTAMP(3))",
+                    (key, None if value is None else str(value)))
 
 
 def next_rev(con: Conn) -> int:
     """A new change number, inside the caller's transaction."""
-    return con.execute("INSERT INTO nts_change_counter (created_at) VALUES (?)", (int(time.time()),)).lastrowid
+    return con.execute("INSERT INTO nts_change_counter (created_at) VALUES (%s)", (int(time.time()),)).lastrowid
 
 
 def current_rev() -> int:

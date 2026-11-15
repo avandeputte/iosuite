@@ -126,13 +126,14 @@ def forget_identity(ids):
 
 
 def _src(lib):
-    """A JPEG the library knows: (path, photo id), read from digiKam's database so the UI test (another process) can use it too."""
+    """A JPEG the library knows, as it knows it (the size digiKam's database has: not rewritten by an earlier test):
+    (path, photo id), read from digiKam's database so the UI test (another process) can use it too."""
     con = sqlite3.connect(lib["db"])
     try:
-        for pid, rel, name in con.execute("SELECT i.id, a.relativePath, i.name FROM Images i JOIN Albums a ON a.id = i.album "
-                                          "WHERE i.status = 1 AND i.fileSize > 20000 AND (i.name LIKE '%.jpg' OR i.name LIKE '%.JPG') ORDER BY i.id"):
+        for pid, rel, name, size in con.execute("SELECT i.id, a.relativePath, i.name, i.fileSize FROM Images i JOIN Albums a ON a.id = i.album "
+                                                "WHERE i.status = 1 AND i.fileSize > 20000 AND (i.name LIKE '%.jpg' OR i.name LIKE '%.JPG') ORDER BY i.id"):
             path = Path(lib["root"]) / rel.strip("/") / name
-            if path.exists() and "zz-" not in str(path):
+            if path.exists() and "zz-" not in str(path) and path.stat().st_size == size:
                 return path, pid
     finally:
         con.close()

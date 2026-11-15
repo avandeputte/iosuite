@@ -4,7 +4,7 @@ import { S, go, hashFor, photosWith, pollSoon, toast, toastError } from './state
 import { G, setBadges } from './grid.js';
 import { confirmDialog, modal } from './actions.js';
 import { placeTagsDialog } from './admin.js';
-import { baseLayers, loadLeaflet, loadMaps, streetView, tiles } from './map.js';
+import { baseLayers, loadLeaflet, loadMaps, removeMap, streetView, tiles } from './map.js';
 import { LB, details, getDetail, renderTitle, showItem } from './lightbox.js';
 import { hasPeople } from './faces.js';
 import { renderInfo } from './info.js';
@@ -420,7 +420,7 @@ export async function locationDialog(ids, current, after) {
   const L = window.L;
   await loadMaps();
   map = L.map(mapEl).setView(current ? [current.lat, current.lon] : [40.4, -80], current ? 13 : 4);
-  { const rm = back.remove; back.remove = () => { try { map.remove(); } catch { /* already gone */ } rm(); }; }  // the map (and its window listeners) goes with the dialog
+  { const rm = back.remove; back.remove = () => { removeMap(map); rm(); }; }  // the map (and its window listeners) goes with the dialog
   baseLayers(map);
   map.on('click', (e) => { lat.value = e.latlng.lat.toFixed(6); lon.value = e.latlng.lng.toFixed(6); place(); });
   lat.onchange = lon.onchange = place;
@@ -464,7 +464,7 @@ async function gpxDialog(ids) {
       mapEl.replaceChildren();
       await loadMaps();
       const map = L.map(mapEl).fitBounds([[t.bbox[0], t.bbox[1]], [t.bbox[2], t.bbox[3]]]);
-      { const rm = back.remove; back.remove = () => { try { map.remove(); } catch { /* already gone */ } rm(); }; }  // the map (and its window listeners) goes with the dialog
+      { const rm = back.remove; back.remove = () => { removeMap(map); rm(); }; }  // the map (and its window listeners) goes with the dialog
       tiles().addTo(map);
       r.matches.slice(0, 500).forEach((m) => L.circleMarker([m.lat, m.lon], { radius: 4, color: '#1a73e8', fillOpacity: .8 }).bindTooltip(h('span', null, m.name)).addTo(map));
     } catch { mapEl.hidden = true; }

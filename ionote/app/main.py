@@ -39,7 +39,7 @@ async def lifespan(_app):
     purge = chores.start(notes_mod.housekeeping, every_s=6 * 3600, name="purge of the trash and of what deletions left behind")
     c = db.settings()
     log.info("ioNote %s started on %s (%s)", __version__,
-             "MariaDB/MySQL " + f"{c['host']}:{c['port']}/{c['database']}" if c["type"] == "mysql" else "SQLite " + str(db.SQLITE_FILE),
+             f"MariaDB/MySQL {c['host']}:{c['port']}/{c['database']}",
              "accounts exist" if users.any_users() else "no accounts yet: open to everyone until one is made")
     sd = suitedb.public()
     log.info("Shared ioSuite database (accounts, suite settings): %s@%s:%s/%s", sd["user"], sd["host"], sd["port"], sd["database"])
