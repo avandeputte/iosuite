@@ -598,7 +598,28 @@ def find_transactions(u: dict, q: str = "", account: int = None, category: str =
     total = db.one(f"SELECT count(*) AS n, COALESCE(SUM(t.amount), 0) AS s {base}", args)
     rows = db.q(f"SELECT t.*, a.owner_id, a.name AS account_name, a.currency {base} ORDER BY t.day DESC, t.id DESC LIMIT %s OFFSET %s",
                 (*args, max(1, min(int(limit), 1000)), max(0, int(offset))))
-    return {"items": [tx_public(r, u) for r in rows], "total": total["n"], "sum": n2(total["s"])}
+    return {"items": with_transfers([tx_public(r, u) for r in rows], u), "total": total["n"], "sum": n2(total["s"])}
+
+
+def with_transfers(items: list[dict], u: dict) -> list[dict]:
+    """Each transaction that is half of a transfer gets transfer: {id, accountId, account, how} (the other half; its
+    account left out when it is someone else's private one)."""
+    from app import transfers
+    halves = transfers.halves_of([t["id"] for t in items])
+    others = {}
+    if halves:
+        ids = list({o for o, _h in halves.values()})
+        for r in db.q(f"SELECT t.id, t.account_id, a.name, a.owner_id FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id "
+                      f"WHERE t.id IN ({db.marks(len(ids))})", ids):
+            others[r["id"]] = r
+    for t in items:
+        if t["id"] in halves:
+            oid, how = halves[t["id"]]
+            o = others.get(oid)
+            seen = bool(o) and can_read(u, o)
+            t["transfer"] = {"id": oid if seen else None, "accountId": o["account_id"] if seen else None,
+                             "account": o["name"] if seen else None, "how": how}
+    return items
 
 
 def _move_balance(aid: int, delta: Decimal) -> None:
@@ -631,6 +652,8 @@ def create_transaction(u: dict, a: dict, b: dict) -> dict:
                 "words, created_by) VALUES (%s, 'manual', %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (a["id"], on, amt, merchant, cat, grp, notes, hidden, words(merchant, cat, notes, a["name"]), u["id"]))
     _move_balance(a["id"], amt)
+    from app import transfers
+    transfers.link("t.id = %s", (tid,))
     return tx_row(tid)
 
 
@@ -681,7 +704,10 @@ def categories(u: dict) -> list[dict]:
 
 
 def _not_transfer() -> str:
-    return "(t.category_group IS NULL OR LOWER(t.category_group) NOT IN ('transfers', 'transfer'))"
+    """Neither half of a transfer between the household's own accounts: linked (app/transfers.py), or in Monarch's
+    Transfers group."""
+    return ("(t.category_group IS NULL OR LOWER(t.category_group) NOT IN ('transfers', 'transfer')) "
+            "AND NOT EXISTS (SELECT 1 FROM mny_transfers x WHERE x.out_id = t.id OR x.in_id = t.id)")
 
 
 def spending(u: dict, start, end) -> dict:
@@ -1128,7 +1154,10 @@ def apply_rules(where: str = "1 = 1", args=(), rs: list[dict] = None) -> int:
 def apply_all_rules(u: dict) -> int:
     """Every rule over every transaction not changed by hand (Apply now, after a new rule)."""
     _need(shared_users.can_write(u), "Only editors change the rules")
-    return apply_rules()
+    n = apply_rules()
+    from app import transfers
+    transfers.link()  # a category a rule set can make a transfer plain
+    return n
 
 
 def try_rule(u: dict, b: dict, limit: int = 5) -> dict:

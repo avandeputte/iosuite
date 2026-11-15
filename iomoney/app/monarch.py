@@ -16,6 +16,10 @@ What a sync does (sync(); every SYNC_HOURS hours from the chores in app/main.py,
 - transactions: those since the last sync (two weeks back, for late changes), or the past INITIAL_DAYS the first time.
   A transaction whose category, notes or hidden was changed here keeps those. One that disappeared from Monarch inside
   the window (a pending one that posted under another id, one deleted there) goes here too.
+- an account Monarch reports that is not here, after the first sync, is held (mny_monarch_new) with its transactions
+  until an admin says whether it is new or an account here that was deleted and made again in Monarch (when its bank
+  link broke). An existing one takes the new id, and the next sync matches the transactions Monarch sends under it
+  with those kept (same amount, a few days apart): none is there twice, and what was changed here stays.
 - holdings of the investment accounts, with Monarch's last price (used while there is no quote).
 - the recurring transactions from a month back to two months ahead: the bills ioCalendar shows.
 """
@@ -23,10 +27,12 @@ import asyncio
 import datetime as dt
 import json
 import logging
+import re
 import threading
 from decimal import Decimal
 
 from iosuite_shared import credentials
+from iosuite_shared.errors import Invalid
 
 from app import config, db, model
 
@@ -48,6 +54,13 @@ TIMEOUT = 60
 SYNC_HOURS = 6
 
 _lock = threading.Lock()
+_progress = {"stage": None, "count": 0, "started": None}  # what the running sync is at, for Settings › Money
+
+
+def _at(stage: str, count: int = 0) -> None:
+    _progress.update(stage=stage, count=count)
+
+
 client_factory = None   # tests: a function (token) -> a stand-in for MonarchMoney
 
 
@@ -200,48 +213,210 @@ async def _history(mm, ext: str, aid: int, is_asset: bool) -> int:
     return len(rows)
 
 
-async def _transactions(mm, ids: dict, since: dt.date, today: dt.date, groups: dict) -> int:
-    seen, offset, n = set(), 0, 0
+def _put_tx(t: dict, aid: int, groups: dict) -> None:
+    """Insert or refresh one Monarch transaction in account aid (what was changed here by hand stays)."""
+    cat = (t.get("category") or {})
+    merchant = (t.get("merchant") or {}).get("name")
+    tags = [x.get("name") for x in (t.get("tags") or []) if x.get("name")]
+    day = dt.date.fromisoformat(str(t["date"])[:10])
+    amt = Decimal(str(t.get("amount") or 0)).quantize(model.CENT)
+    grp = groups.get(str(cat.get("id"))) if cat else None
+    w = model.words(merchant, t.get("plaidName"), cat.get("name"), grp, t.get("notes"), ",".join(tags))
+    db.ex("INSERT INTO mny_transactions (account_id, source, external_id, day, amount, merchant, description, category, "
+          "category_group, notes, tags, pending, hidden, recurring, words) "
+          "VALUES (%s, 'monarch', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+          "ON DUPLICATE KEY UPDATE account_id = VALUES(account_id), day = VALUES(day), amount = VALUES(amount), "
+          "description = VALUES(description), tags = VALUES(tags), pending = VALUES(pending), recurring = VALUES(recurring), "
+          "merchant = IF(edited, merchant, VALUES(merchant)), category = IF(edited, category, VALUES(category)), "
+          "category_group = IF(edited, category_group, VALUES(category_group)), notes = IF(edited, notes, VALUES(notes)), "
+          "hidden = IF(edited, hidden, VALUES(hidden)), words = IF(edited, words, VALUES(words))",
+          (aid, str(t["id"]), day, amt, (merchant or "")[:255] or None, (t.get("plaidName") or "")[:255] or None,
+           (cat.get("name") or "")[:128] or None, (grp or "")[:128] or None, t.get("notes") or None,
+           json.dumps(tags) if tags else None, 1 if t.get("pending") else 0, 1 if t.get("hideFromReports") else 0,
+           1 if t.get("isRecurring") else 0, w))
+
+
+async def _pages(mm, start: dt.date, end: dt.date, **kw):
+    """Monarch's transactions from start to end, a page at a time."""
+    offset = 0
     while True:
-        got = await mm.get_transactions(limit=PAGE, offset=offset, start_date=since.isoformat(), end_date=today.isoformat())
+        got = await mm.get_transactions(limit=PAGE, offset=offset, start_date=start.isoformat(), end_date=end.isoformat(), **kw)
         page = ((got or {}).get("allTransactions") or {}).get("results") or []
+        yield page
+        if len(page) < PAGE:
+            return
+        offset += PAGE
+
+
+async def _transactions(mm, ids: dict, since: dt.date, today: dt.date, groups: dict) -> int:
+    seen, n = set(), 0
+    async for page in _pages(mm, since, today):
         for t in page:
             aid = ids.get(str((t.get("account") or {}).get("id")))
             if not aid:
-                continue
-            ext = str(t["id"])
-            seen.add(ext)
-            cat = (t.get("category") or {})
-            merchant = (t.get("merchant") or {}).get("name")
-            tags = [x.get("name") for x in (t.get("tags") or []) if x.get("name")]
-            day = dt.date.fromisoformat(str(t["date"])[:10])
-            amt = Decimal(str(t.get("amount") or 0)).quantize(model.CENT)
-            grp = groups.get(str(cat.get("id"))) if cat else None
-            w = model.words(merchant, t.get("plaidName"), cat.get("name"), grp, t.get("notes"), ",".join(tags))
-            db.ex("INSERT INTO mny_transactions (account_id, source, external_id, day, amount, merchant, description, category, "
-                  "category_group, notes, tags, pending, hidden, recurring, words) "
-                  "VALUES (%s, 'monarch', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
-                  "ON DUPLICATE KEY UPDATE account_id = VALUES(account_id), day = VALUES(day), amount = VALUES(amount), "
-                  "description = VALUES(description), tags = VALUES(tags), pending = VALUES(pending), recurring = VALUES(recurring), "
-                  "merchant = IF(edited, merchant, VALUES(merchant)), category = IF(edited, category, VALUES(category)), "
-                  "category_group = IF(edited, category_group, VALUES(category_group)), notes = IF(edited, notes, VALUES(notes)), "
-                  "hidden = IF(edited, hidden, VALUES(hidden)), words = IF(edited, words, VALUES(words))",
-                  (aid, ext, day, amt, (merchant or "")[:255] or None, (t.get("plaidName") or "")[:255] or None,
-                   (cat.get("name") or "")[:128] or None, (grp or "")[:128] or None, t.get("notes") or None,
-                   json.dumps(tags) if tags else None, 1 if t.get("pending") else 0, 1 if t.get("hideFromReports") else 0,
-                   1 if t.get("isRecurring") else 0, w))
+                continue  # an account held for a person to say what it is, or one Monarch no longer lists
+            seen.add(str(t["id"]))
+            _put_tx(t, aid, groups)
             n += 1
-        if len(page) < PAGE:
-            break
-        offset += PAGE
-    # gone from Monarch inside the window: a pending one that posted under another id, one deleted there
-    old = db.q("SELECT id, external_id FROM mny_transactions WHERE source = 'monarch' AND day BETWEEN %s AND %s", (since, today))
-    gone = [r["id"] for r in old if r["external_id"] not in seen]
-    if gone:
-        db.ex(f"DELETE FROM mny_transactions WHERE id IN ({db.marks(len(gone))})", gone)
+        _at("Transactions", n)
+    # gone from Monarch inside the window: a pending one that posted under another id, one deleted there. Only in the
+    # accounts Monarch still lists: an account deleted there (to be made again) keeps its transactions until they
+    # are matched with the new account's
+    aids = sorted(set(ids.values()))
+    if aids:
+        old = db.q("SELECT id, external_id FROM mny_transactions WHERE source = 'monarch' AND day BETWEEN %s AND %s "
+                   f"AND account_id IN ({db.marks(len(aids))})", (since, today, *aids))
+        gone = [r["id"] for r in old if r["external_id"] not in seen]
+        if gone:
+            db.ex(f"DELETE FROM mny_transactions WHERE id IN ({db.marks(len(gone))})", gone)
     # the household's rules, over what just came in (Monarch's own payee and category, unless changed here by hand)
+    _at("Rules and transfers", n)
     model.apply_rules("t.source = 'monarch' AND t.day BETWEEN %s AND %s", (since, today))
+    from app import transfers
+    transfers.link("t.day BETWEEN %s AND %s", (since - dt.timedelta(days=transfers.DAYS), today))
     return n
+
+
+# ------------------------------------------------------------------ accounts Monarch reports as new
+
+MATCH_DAYS = 3  # a transaction under the new account is one kept under the old when the amount is the same, this near
+
+
+def _known(ext: str) -> bool:
+    return bool(db.one("SELECT 1 AS x FROM mny_accounts WHERE source = 'monarch' AND external_id = %s", (ext,)))
+
+
+def _hold(acc: dict) -> None:
+    db.ex("INSERT INTO mny_monarch_new (external_id, data) VALUES (%s, %s) ON DUPLICATE KEY UPDATE data = VALUES(data)",
+          (str(acc["id"]), json.dumps(acc, default=str)))
+
+
+async def _adopt(mm, move: dict, aid: int, today: dt.date, groups: dict) -> int:
+    """An account here now has a new Monarch id (move): take every transaction Monarch has under it, and give each
+    one that is already here under the old id (same amount, at most MATCH_DAYS apart, the nearest and the same payee
+    first) the new id, so it keeps what was changed here by hand and is not there twice. The rest come in new."""
+    ext = move["new_external_id"]
+    old = db.q("SELECT id, external_id, day, amount, merchant, description FROM mny_transactions "
+               "WHERE account_id = %s AND source IN ('monarch', 'manual')", (aid,))  # manual: an account typed in before
+    first = min([r["day"] for r in old], default=today) - dt.timedelta(days=MATCH_DAYS + 7)
+    first = min(first, today - dt.timedelta(days=INITIAL_DAYS))
+    incoming = []
+    async for page in _pages(mm, first, today, account_ids=[ext]):
+        incoming += [t for t in page if str((t.get("account") or {}).get("id")) == ext]
+        _at("Matching the account's transactions", len(incoming))
+    ids_in = {str(t["id"]) for t in incoming}
+    orphans = [r for r in old if r["external_id"] not in ids_in]
+    used, n = set(), 0
+    for t in sorted(incoming, key=lambda x: str(x.get("date"))):
+        if _known_tx(str(t["id"])):
+            continue
+        amt = Decimal(str(t.get("amount") or 0)).quantize(model.CENT)
+        day = dt.date.fromisoformat(str(t["date"])[:10])
+        name = ((t.get("merchant") or {}).get("name") or t.get("plaidName") or "").lower()
+        best = None
+        for r in orphans:
+            gap = abs((r["day"] - day).days)
+            if r["id"] in used or Decimal(r["amount"]) != amt or gap > MATCH_DAYS:
+                continue
+            same = name and name in ((r["merchant"] or "") + " " + (r["description"] or "")).lower()
+            score = (gap, 0 if same else 1)
+            if best is None or score < best[0]:
+                best = (score, r)
+        if best:
+            db.ex("UPDATE mny_transactions SET source = 'monarch', external_id = %s WHERE id = %s", (str(t["id"]), best[1]["id"]))
+            used.add(best[1]["id"])
+            n += 1
+    for t in incoming:
+        _put_tx(t, aid, groups)
+    model.apply_rules("t.account_id = %s", (aid,))
+    from app import transfers
+    transfers.link("t.account_id = %s", (aid,))
+    db.ex("UPDATE mny_monarch_moves SET done_at = NOW(), matched = %s WHERE account_id = %s", (n, aid))
+    return n
+
+
+def _known_tx(ext: str) -> bool:
+    return bool(db.one("SELECT 1 AS x FROM mny_transactions WHERE source = 'monarch' AND external_id = %s", (ext,)))
+
+
+def _account_look(acc: dict) -> dict:
+    is_asset = bool(acc.get("isAsset", True))
+    inst = (acc.get("institution") or {}).get("name") or ((acc.get("credential") or {}).get("institution") or {}).get("name")
+    bal = _bal(acc)
+    return {"externalId": str(acc["id"]), "name": acc.get("displayName") or "Account", "institution": inst,
+            "kind": model.kind_of_monarch(((acc.get("type") or {}).get("name") or ""), is_asset),
+            "subtype": (acc.get("subtype") or {}).get("display"), "mask": acc.get("mask") or None,
+            "balance": float(bal if is_asset else abs(bal)), "closed": bool(acc.get("deactivatedAt"))}
+
+
+def _similar(a: str, b: str) -> float:
+    wa, wb = set(re.findall(r"[a-z0-9]+", (a or "").lower())), set(re.findall(r"[a-z0-9]+", (b or "").lower()))
+    return len(wa & wb) / len(wa | wb) if wa and wb else 0.0
+
+
+def held() -> list[dict]:
+    """The accounts Monarch reported that wait for an admin: each with the accounts here it could be, likeliest first
+    (an account whose Monarch id Monarch no longer lists, of the same kind, bank and last digits, a like name)."""
+    rows = db.q("SELECT * FROM mny_monarch_new WHERE decision IS NULL ORDER BY first_seen, external_id")
+    if not rows:
+        return []
+    listed = set(json.loads(model.setting("monarch_ids", "[]") or "[]"))
+    accts = db.q("SELECT id, name, institution, kind, mask, source, external_id, closed, balance FROM mny_accounts "
+                 "WHERE owner_id IS NULL ORDER BY name")
+    out = []
+    for r in rows:
+        look = _account_look(json.loads(r["data"]))
+        cands = []
+        for a in accts:
+            missing = a["source"] == "monarch" and a["external_id"] not in listed
+            score = ((40 if missing else 0) + (25 if a["mask"] and a["mask"] == look["mask"] else 0)
+                     + (20 if a["kind"] == look["kind"] else 0)
+                     + (15 if a["institution"] and a["institution"] == look["institution"] else 0)
+                     + round(20 * _similar(a["name"], look["name"])))
+            alike = bool(a["mask"] and a["mask"] == look["mask"]) or _similar(a["name"], look["name"]) >= 0.5
+            cands.append({"id": a["id"], "name": a["name"], "institution": a["institution"], "kind": a["kind"],
+                          "mask": a["mask"], "source": a["source"], "balance": float(a["balance"] or 0),
+                          "gone": missing, "closed": bool(a["closed"]), "score": score, "alike": alike})
+        # the accounts of its group (a bank account for a bank account), and any whose Monarch id is gone
+        group = model.GROUP_OF.get(look["kind"], "asset")
+        cands = [c for c in cands if c["gone"] or model.GROUP_OF.get(c["kind"], "asset") == group]
+        cands.sort(key=lambda c: (-c["score"], c["name"]))
+        # a sure guess: gone from Monarch, the same last digits or a like name, and clearly ahead of the next one
+        top = cands[0] if cands else None
+        sure = top and top["gone"] and top["alike"] and (len(cands) < 2 or top["score"] - cands[1]["score"] >= 15)
+        out.append({**look, "firstSeen": r["first_seen"].isoformat(), "candidates": cands, "likely": top["id"] if sure else None})
+    return out
+
+
+def held_count() -> int:
+    return db.one("SELECT COUNT(*) AS n FROM mny_monarch_new WHERE decision IS NULL")["n"]
+
+
+def decide(ext: str, how: str, account_id: int = None, by: int = None) -> dict:
+    """An admin's answer for a held account: 'new' (the next sync adds it, with its history and transactions), or
+    'existing' with the account here it is (that account takes the new Monarch id; the next sync matches the
+    transactions so none is there twice)."""
+    row = db.one("SELECT * FROM mny_monarch_new WHERE external_id = %s AND decision IS NULL", (ext,))
+    if not row:
+        raise model.NotFound("No such account waits")
+    if how == "new":
+        db.ex("UPDATE mny_monarch_new SET decision = 'new', decided_by = %s WHERE external_id = %s", (by, ext))
+        return {"ok": True}
+    if how != "existing":
+        raise Invalid("Say new or existing")
+    a = db.one("SELECT * FROM mny_accounts WHERE id = %s AND owner_id IS NULL", (account_id,)) if account_id else None
+    if not a:
+        raise Invalid("Pick the account it is")
+    if a["source"] == "monarch" and a["external_id"] in set(json.loads(model.setting("monarch_ids", "[]") or "[]")):
+        raise Invalid(f"{a['name']} is still in Monarch Money under its own id")
+    acc = json.loads(row["data"])
+    with db.tx():
+        db.ex("UPDATE mny_accounts SET source = 'monarch', external_id = %s WHERE id = %s", (ext, a["id"]))
+        db.ex("REPLACE INTO mny_monarch_moves (account_id, old_external_id, new_external_id, moved_by) VALUES (%s, %s, %s, %s)",
+              (a["id"], a["external_id"] if a["source"] == "monarch" else None, ext, by))
+        db.ex("DELETE FROM mny_monarch_new WHERE external_id = %s", (ext,))
+    log.info("Monarch account %s (%s) is account %s here", ext, acc.get("displayName"), a["id"])
+    return {"ok": True, "accountId": a["id"]}
 
 
 KIND_OF_SECURITY = {"equity": "stock", "stock": "stock", "etf": "etf", "mutual_fund": "fund", "fund": "fund",
@@ -320,20 +495,45 @@ async def _bills(mm, ids: dict, today: dt.date) -> int:
 
 async def _run(full: bool) -> dict:
     today = dt.date.today()
+    _at("Signing in")
     mm = await _client()
+    _at("Accounts")
     cats = await mm.get_transaction_categories()
     groups = {str(c.get("id")): ((c.get("group") or {}).get("name")) for c in (cats or {}).get("categories") or []}
     accts = (await mm.get_accounts() or {}).get("accounts") or []
-    ids, n_hold = {}, 0
-    for acc in accts:
+    ids, n_hold, n_held = {}, 0, 0
+    # after the first sync, an account Monarch reports that is not here waits for an admin: new, or an account here
+    # made again in Monarch (when its bank link broke) under a new id
+    ask = bool(db.one("SELECT 1 AS x FROM mny_accounts WHERE source = 'monarch' LIMIT 1"))
+    said_new = {r["external_id"] for r in db.q("SELECT external_id FROM mny_monarch_new WHERE decision = 'new'")}
+    listed = [str(a["id"]) for a in accts]
+    for n, acc in enumerate(accts, 1):
+        _at("Accounts and their history", n)
+        ext = str(acc["id"])
+        if ask and ext not in said_new and not _known(ext):
+            _hold(acc)
+            n_held += 1
+            continue
         aid, new = _put_account(acc, today)
-        ids[str(acc["id"])] = aid
+        ids[ext] = aid
         if new:
-            await _history(mm, str(acc["id"]), aid, bool(acc.get("isAsset", True)))
+            await _history(mm, ext, aid, bool(acc.get("isAsset", True)))
+    db.ex("DELETE FROM mny_monarch_new WHERE decision = 'new' OR external_id NOT IN "
+          f"({db.marks(len(listed)) if listed else 'NULL'})", tuple(listed))
+    db.set_setting("monarch_ids", json.dumps(listed))
+    # accounts given a new Monarch id: their transactions matched with those kept under the old one
+    for mv in db.q("SELECT * FROM mny_monarch_moves WHERE done_at IS NULL"):
+        if mv["new_external_id"] in ids:
+            _at("Matching the account's transactions")
+            await _adopt(mm, mv, ids[mv["new_external_id"]], today, groups)
     last = db.one("SELECT MAX(started_at) AS t FROM mny_syncs WHERE ok = 1")["t"]
     since = today - dt.timedelta(days=INITIAL_DAYS) if full or not last else last.date() - dt.timedelta(days=OVERLAP_DAYS)
+    _at("Transactions")
     n_tx = await _transactions(mm, ids, since, today, groups)
+    _at("Holdings")
     for acc in accts:
+        if str(acc["id"]) not in ids:
+            continue
         if ((acc.get("type") or {}).get("name") == "brokerage" or acc.get("holdingsCount")) and not acc.get("deactivatedAt"):
             try:
                 n_hold += await _holdings(mm, str(acc["id"]), ids[str(acc["id"])])
@@ -341,17 +541,42 @@ async def _run(full: bool) -> dict:
                 if _unauthorized(e):
                     raise
                 log.warning("holdings of Monarch account %s: %s", acc["id"], e)
+    _at("Bills")
     try:
         await _bills(mm, ids, today)
     except Exception as e:  # noqa: BLE001 - the bills are a bonus
         if _unauthorized(e):
             raise
         log.warning("Monarch's recurring transactions: %s", e)
-    return {"accounts": len(accts), "transactions": n_tx, "holdings": n_hold}
+    return {"accounts": len(ids), "transactions": n_tx, "holdings": n_hold, "held": n_held}
 
 
 def running() -> bool:
     return _lock.locked()
+
+
+def start(by: int = None, full: bool = False, wait: float = 0) -> dict:
+    """Sync in the background (a first sync of two years takes minutes, longer than a browser or a proxy waits) and
+    wait for it up to `wait` seconds: its result when it ended by then, else {running: true, progress}."""
+    if running():
+        return {"ok": None, "running": True, "message": "A sync is already running", "progress": progress()}
+    done = threading.Event()
+    box = {}
+
+    def go():
+        box["r"] = sync(by, full)
+        done.set()
+    threading.Thread(target=go, name="monarch-sync", daemon=True).start()
+    if done.wait(wait):
+        return box["r"]
+    return {"ok": None, "running": True, "message": "Syncing with Monarch Money", "progress": progress()}
+
+
+def progress() -> dict | None:
+    if not running():
+        return None
+    return {"stage": _progress["stage"], "count": _progress["count"],
+            "started": _progress["started"].isoformat() if _progress["started"] else None}
 
 
 def sync(by: int = None, full: bool = False) -> dict:
@@ -359,10 +584,13 @@ def sync(by: int = None, full: bool = False) -> dict:
     if not _lock.acquire(blocking=False):
         return {"ok": False, "message": "A sync is already running"}
     started = dt.datetime.now().replace(microsecond=0)
+    _progress.update(stage="Starting", count=0, started=started)
     sid = db.ex("INSERT INTO mny_syncs (started_at, by_user) VALUES (%s, %s)", (started, by))
     try:
         got = asyncio.run(_run(full))
         msg = f"{got['accounts']} accounts, {got['transactions']} transactions, {got['holdings']} holdings"
+        if got["held"]:
+            msg += f"; {got['held']} new account{'s' if got['held'] > 1 else ''} wait{'' if got['held'] > 1 else 's'} for you to say what {'they are' if got['held'] > 1 else 'it is'}"
         db.ex("UPDATE mny_syncs SET finished_at = NOW(), ok = 1, message = %s, accounts = %s, transactions = %s, holdings = %s "
               "WHERE id = %s", (msg, got["accounts"], got["transactions"], got["holdings"], sid))
         log.info("Monarch sync: %s", msg)
@@ -389,7 +617,7 @@ def status() -> dict:
     last = db.one("SELECT * FROM mny_syncs ORDER BY id DESC LIMIT 1")
     good = db.one("SELECT finished_at FROM mny_syncs WHERE ok = 1 ORDER BY id DESC LIMIT 1")
     keys = {k["name"]: credentials.is_set(APP, k["name"]) for k in KEYS}
-    return {"configured": configured(), "keys": keys, "running": running(), "every": SYNC_HOURS,
+    return {"configured": configured(), "keys": keys, "running": running(), "progress": progress(), "every": SYNC_HOURS,
             "auto": model.setting("monarch_auto", "1") == "1",
             "last": {"started": last["started_at"].isoformat(), "finished": last["finished_at"].isoformat() if last["finished_at"] else None,
                      "ok": bool(last["ok"]), "message": last["message"]} if last else None,

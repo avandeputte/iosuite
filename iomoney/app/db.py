@@ -179,6 +179,65 @@ SCHEMA = [
         KEY idx_mny_rules_position (position),
         CONSTRAINT fk_mny_rules_account FOREIGN KEY (account_id) REFERENCES mny_accounts(id) ON DELETE CASCADE
     )""",
+    # transfers between the household's own accounts: the money out of one account (out_id) and the same money into
+    # another (in_id), linked (app/transfers.py). how: auto (found by the amount, the days and the payee), rule (a
+    # transfer rule found it) or hand. A linked pair is neither spending nor income.
+    """CREATE TABLE IF NOT EXISTS mny_transfers (
+        out_id INT NOT NULL PRIMARY KEY,
+        in_id INT NOT NULL,
+        how VARCHAR(8) NOT NULL DEFAULT 'auto',
+        created_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_mny_transfers_in (in_id),
+        CONSTRAINT fk_mny_transfers_out FOREIGN KEY (out_id) REFERENCES mny_transactions(id) ON DELETE CASCADE,
+        CONSTRAINT fk_mny_transfers_in FOREIGN KEY (in_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
+    )""",
+    # two transactions unlinked by hand: never linked again by themselves
+    """CREATE TABLE IF NOT EXISTS mny_transfer_nots (
+        out_id INT NOT NULL,
+        in_id INT NOT NULL,
+        PRIMARY KEY (out_id, in_id),
+        CONSTRAINT fk_mny_transfer_nots_out FOREIGN KEY (out_id) REFERENCES mny_transactions(id) ON DELETE CASCADE,
+        CONSTRAINT fk_mny_transfer_nots_in FOREIGN KEY (in_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
+    )""",
+    # transfer rules: a transaction in account_id whose payee or bank's text contains pattern is a transfer with
+    # other_id, its other half the same amount the other way within days. source: learned (made when a transfer was
+    # found by itself, so the next one is found surely) or hand.
+    """CREATE TABLE IF NOT EXISTS mny_transfer_rules (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        account_id INT NOT NULL,
+        pattern VARCHAR(255) NOT NULL,
+        other_id INT NOT NULL,
+        days INT NOT NULL DEFAULT 5,
+        source VARCHAR(8) NOT NULL DEFAULT 'hand',
+        created_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_mny_transfer_rules (account_id, other_id, pattern),
+        CONSTRAINT fk_mny_transfer_rules_account FOREIGN KEY (account_id) REFERENCES mny_accounts(id) ON DELETE CASCADE,
+        CONSTRAINT fk_mny_transfer_rules_other FOREIGN KEY (other_id) REFERENCES mny_accounts(id) ON DELETE CASCADE
+    )""",
+    # an account Monarch Money reports that ioMoney did not know, after the first sync: held until an admin says whether
+    # it is new or the new id of an account here (one deleted and made again in Monarch when its bank link broke);
+    # decision 'new' lets the next sync add it. Its transactions wait with it.
+    """CREATE TABLE IF NOT EXISTS mny_monarch_new (
+        external_id VARCHAR(64) PRIMARY KEY,
+        data LONGTEXT NOT NULL,
+        first_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        decision VARCHAR(8) NULL,
+        decided_by INT NULL
+    )""",
+    # an account here given a new Monarch id: the next sync matches the transactions Monarch sends under the new
+    # account with the ones kept under the old (same amount, a day or two apart), so none is there twice
+    """CREATE TABLE IF NOT EXISTS mny_monarch_moves (
+        account_id INT PRIMARY KEY,
+        old_external_id VARCHAR(64) NULL,
+        new_external_id VARCHAR(64) NOT NULL,
+        moved_by INT NULL,
+        moved_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        done_at DATETIME NULL,
+        matched INT NOT NULL DEFAULT 0,
+        CONSTRAINT fk_mny_monarch_moves_account FOREIGN KEY (account_id) REFERENCES mny_accounts(id) ON DELETE CASCADE
+    )""",
     # each Monarch Money sync: when, how it went, what came in
     """CREATE TABLE IF NOT EXISTS mny_syncs (
         id INT AUTO_INCREMENT PRIMARY KEY,
