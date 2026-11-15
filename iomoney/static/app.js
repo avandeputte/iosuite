@@ -46,6 +46,9 @@ const ICONS = {
   prev: 'M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z',
   next: 'M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z',
   minus: 'M19 13H5v-2h14v2z',
+  eye: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+  copy: 'M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z',
+  phone: 'M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z',
 };
 const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
 
@@ -461,6 +464,7 @@ async function showAccount(page, r) {
   const menu = h('button', { class: 'iconbtn', title: 'More', 'aria-label': 'More', onclick: (e) => popMenu(e.currentTarget, [
     a.writable ? ['edit', 'Rename', () => renameAccount(a)] : null,
     a.writable ? ['tune', 'Edit', () => accountDialog(a)] : null,
+    a.writable && !thing ? ['bank', 'Bank details', () => infoDialog(a)] : null,
     a.writable && a.source === 'manual' && valued ? ['add', 'Add a value', () => valueDialog(a)] : null,
     a.writable && a.source === 'manual' && a.kind === 'investment' ? ['add', 'Add a holding', () => holdingDialog(null, a.id)] : null,
     a.writable && a.source === 'manual' && tx ? ['add', 'Add a transaction', () => txDialog(null, a)] : null,
@@ -489,6 +493,7 @@ async function showAccount(page, r) {
       ['Yearly change', d.yearlyRate != null ? `${d.yearlyRate}%` : null], ['Loan', a.loan ? h('a', { class: 'lnk', href: `#/account/${a.loan.id}` }, a.loan.name) : null]].filter(([, v]) => v != null && v !== '');
     if (facts.length || d.notes) put(page, h('div', { class: 'box' }, h('h2', null, icon('tune'), 'Details'), h('div', { class: 'kvs' }, facts.flatMap(([k, v]) => [h('span', null, k), h('span', null, v)])), d.notes ? h('p', { class: 'notes' }, d.notes) : null));
   }
+  if (!thing) put(page, await infoBox(a));
   if (a.kind === 'investment') await drawHoldings(page, a.id, a);
   if (valued) {
     const vals = (await api(`api/accounts/${a.id}/values`)).items || [];
@@ -505,6 +510,54 @@ async function showAccount(page, r) {
     put(page, h('h2', null, 'Recent transactions'), txList(t.items, false),
       t.total > t.items.length ? h('div', { class: 'more' }, h('a', { class: 'pillbtn', href: `#/transactions?account=${a.id}` }, `All ${t.total}`)) : null);
   }
+}
+// what is kept to deal with the account's bank: [field, label, how it is typed in]; the numbers are shown hidden
+const INFO = [['accountNumber', 'Account number', { autocomplete: 'off', spellcheck: 'false' }], ['routingNumber', 'Routing number', { inputmode: 'numeric', autocomplete: 'off' }],
+  ['iban', 'IBAN', { autocomplete: 'off', spellcheck: 'false' }], ['swift', 'SWIFT / BIC', { maxlength: 11, autocomplete: 'off' }],
+  ['phone', 'Customer service', { type: 'tel', placeholder: '1-800-…' }], ['phoneAbroad', 'From abroad', { type: 'tel' }],
+  ['website', 'Website', { type: 'url', placeholder: 'https://…' }], ['email', 'Email', { type: 'email' }], ['username', 'Sign-in name', { autocomplete: 'off' }],
+  ['openedOn', 'Opened on', { type: 'date' }], ['address', 'Mailing address', null], ['notes', 'Notes', null]];
+const INFO_SECRET = ['accountNumber', 'routingNumber', 'iban'];
+async function copyText(v) { try { await navigator.clipboard.writeText(v); toast('Copied'); } catch { toast('Could not copy'); } }
+/** "Bank details" on an account's page: its numbers (hidden until shown), customer service and the rest. */
+async function infoBox(a) {
+  let info = {};
+  try { info = await api(`api/accounts/${a.id}/info`); } catch { return null; }
+  const have = INFO.filter(([k]) => info[k]);
+  if (!have.length && !a.writable) return null;
+  const val = (k, v) => {
+    if (INFO_SECRET.includes(k)) {
+      const tail = v.replace(/\s/g, '').slice(-4);
+      const shown = h('span', { class: 'num' }, `•••• ${tail}`);
+      let open = false;
+      return h('span', { class: 'secret' }, shown,
+        h('button', { class: 'iconbtn', title: 'Show', 'aria-label': 'Show', onclick: (e) => { open = !open; shown.textContent = open ? v : `•••• ${tail}`; e.currentTarget.title = open ? 'Hide' : 'Show'; } }, icon('eye', 's')),
+        h('button', { class: 'iconbtn', title: 'Copy', 'aria-label': 'Copy', onclick: () => copyText(v.replace(/\s/g, '')) }, icon('copy', 's')));
+    }
+    if (k === 'phone' || k === 'phoneAbroad') return h('a', { class: 'lnk', href: `tel:${v.replace(/[^0-9+]/g, '')}` }, v);
+    if (k === 'website') return h('a', { class: 'lnk', href: v, target: '_blank', rel: 'noopener noreferrer' }, v.replace(/^https?:\/\//i, '').replace(/\/$/, ''));
+    if (k === 'email') return h('a', { class: 'lnk', href: `mailto:${v}` }, v);
+    if (k === 'openedOn') return fmtDay(v, true);
+    if (k === 'swift' || k === 'username') return h('span', { class: 'secret' }, v, h('button', { class: 'iconbtn', title: 'Copy', 'aria-label': 'Copy', onclick: () => copyText(v) }, icon('copy', 's')));
+    return v;
+  };
+  return h('div', { class: 'box' }, h('h2', null, icon('bank'), 'Bank details', h('span', { class: 'grow' }),
+    a.writable ? h('button', { class: 'pillbtn tiny', onclick: () => infoDialog(a, info) }, icon(have.length ? 'edit' : 'add', 'xs'), have.length ? 'Edit' : 'Add') : null),
+  have.length ? h('div', { class: 'kvs info' }, have.filter(([k]) => k !== 'notes' && k !== 'address').flatMap(([k, l]) => [h('span', null, l), h('span', null, val(k, info[k]))]),
+    info.address ? [h('span', null, 'Mailing address'), h('span', { class: 'pre' }, info.address)] : null) : h('p', { class: 'muted small' }, 'Account and routing numbers, customer service and the like, to have at hand.'),
+  info.notes ? h('p', { class: 'notes' }, info.notes) : null);
+}
+/** Change the bank details of an account (one from Monarch Money too: they are kept here alone). */
+async function infoDialog(a, info) {
+  if (!info) { try { info = await api(`api/accounts/${a.id}/info`); } catch (e) { fail(e); return; } }
+  const f = Object.fromEntries(INFO.map(([k, , attrs]) => [k, k === 'address' || k === 'notes'
+    ? h('textarea', { class: 't', rows: k === 'notes' ? 3 : 2 }, info[k] || '') : inp(info[k], attrs || {})]));
+  const body = h('div', null, h('div', { class: 'grid' }, INFO.map(([k, l]) => fld(l, f[k], k === 'address' || k === 'notes' || k === 'website'))),
+    h('p', { class: 'muted small' }, 'Seen by whoever sees this account; the numbers stay hidden until shown, and are never given to AI assistants (MCP). Keep passwords in a password manager, not here.'));
+  if (!await dialog(`Bank details: ${a.name}`, body, [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }], 'wide')) return;
+  const b = Object.fromEntries(INFO.map(([k]) => [k, f[k].value.trim()]).filter(([k, v]) => v !== (info[k] || '')));
+  if (!Object.keys(b).length) return;
+  try { await api(`api/accounts/${a.id}/info`, { method: 'PUT', json: b }); toast('Saved'); onRoute(); } catch (e) { fail(e); }
 }
 let linkUi = null;
 /** "Linked" under a house or a car: the events, tasks, notes, contacts and photos of the other apps linked to it. */

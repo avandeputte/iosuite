@@ -58,6 +58,11 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
 - **Reconciled**: each transaction can be ticked as reconciled with the bank's statement (the tick at the end of its
   row, or its dialog); the list filters on it, and **Mark these reconciled** ticks every one shown. The sync leaves it
   as it is, and it does not count as a change to the transaction.
+- **Bank details** on each account's page (from Monarch Money too): account and routing numbers, IBAN, SWIFT/BIC,
+  customer service phone (and from abroad), website, email, sign-in name, opened on, mailing address and notes. The
+  numbers show as •••• and their last four digits until shown, with a copy button; whoever sees the account sees
+  them, whoever may change it changes them. They are kept apart from the account (mny_account_info), so no list,
+  summary or MCP tool carries them; the MCP tool `bank_contact` gives the phone, website, email and address only.
 - **Rules**: the household's rules rename the payee, set the category or hide a transaction when the payee or the
   bank's own text contains, is or starts with some words (optionally only in one account, money out or in, between two
   amounts). They run over what each sync brings and over a transaction added by hand; **Apply now** runs them over the
@@ -175,6 +180,7 @@ Updates, releases, the reverse proxy and Cloudflare Access work as in every app 
 | --- | --- |
 | The net worth now and day by day, by kind | `GET /api/summary`, `GET /api/networth?days=365` |
 | Accounts: list, one, add, change, delete (by hand), history, values | `/api/accounts`, `/api/accounts/{id}`, `/api/accounts/{id}/history`, `/api/accounts/{id}/values` |
+| An account's bank details: read, change (the fields given; empty removes) | `GET`, `PUT /api/accounts/{id}/info` |
 | Transactions: search, add (by hand), change, delete | `GET /api/transactions?q=&account=&category=&month=&flow=`, `POST /api/accounts/{id}/transactions`, `/api/transactions/{id}` |
 | Spending and cash flow | `GET /api/spending?month=2026-11`, `GET /api/cashflow?months=12`, `GET /api/categories` |
 | Transfers: one transaction's other half and candidates, link, unlink; link all; what is left | `GET/PUT/DELETE /api/transactions/{id}/transfer`, `POST /api/transfers/link`, `GET /api/transfers/possible` |
@@ -199,7 +205,7 @@ curl -u alex:APP-PASSWORD -X PATCH -H 'Content-Type: application/json' -d '{"cat
 ## MCP server
 
 Off until an admin turns it on in **Settings › Server**. The tools: `overview`, `net_worth_history`,
-`search_transactions`, `spending`, `cash_flow`, `categories`, `update_transaction`, `add_transaction`, `rules`, `add_rule`,
+`search_transactions`, `bank_contact`, `spending`, `cash_flow`, `categories`, `update_transaction`, `add_transaction`, `rules`, `add_rule`,
 `test_rule`, `update_rule`, `delete_rule`, `apply_rules`, `link_transfers`, `possible_transfers`, `link_transaction`, `unlink_transaction`,
 `transfer_rules`, `add_transfer_rule`, `delete_transfer_rule`, `portfolio`,
 `get_quote`, `add_holding`, `update_holding`, `delete_holding`, `add_account`, `update_account`, `add_valuation`,
@@ -220,7 +226,8 @@ Covered: roles (none, viewer, member, editor), private and household accounts, t
 accounts followed by their value or their transactions and the five groups, transactions and their search, rules (tried,
 kept, ordered, applied, run by the sync), transfers (found by a named payee, a transfer category or a payment's payee, a card's and a loan's
 payment, not without evidence, a tie left for a person, learned and typed rules, unlinked for good, linked by hand, the
-maintenance's list of what is left and why), reconciled (marked, filtered, in bulk, not by a viewer), spending and cash flow without transfers, the portfolio with a holding in another
+maintenance's list of what is left and why), reconciled (marked, filtered, in bulk, not by a viewer), bank details (kept, changed, removed, not in the account
+or by a viewer), spending and cash flow without transfers, the portfolio with a holding in another
 currency, a house's estimate and its equity after the mortgage, bills, the Monarch sync against a stand-in for the
 library (first sync, later syncs keeping local changes, a session Monarch no longer takes, a wrong sign-in, a code by
 hand, an account made again in Monarch matched with its transactions none twice, a new one held until said), the MCP server and a person's data deleted.

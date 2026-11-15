@@ -45,6 +45,17 @@ def net_worth_history(days: int = 365, kind: Optional[str] = None, account: Opti
 
 
 @server.tool(annotations=READ_ONLY)
+def bank_contact(account: str) -> dict:
+    """How to reach an account's bank, as the household keeps it in its Bank details: phone (customer service),
+    phoneAbroad, website, email, address, swift, openedOn. Account and routing numbers, the IBAN, the sign-in name and
+    the notes are never given here (they are on the account's page)."""
+    u = who()
+    _need_role(u)
+    info = model.account_info(u, find_account(u, account))
+    return {k: v for k, v in info.items() if k not in (*model.INFO_SECRET, "username", "notes")}
+
+
+@server.tool(annotations=READ_ONLY)
 def search_transactions(query: Optional[str] = None, account: Optional[str] = None, category: Optional[str] = None,
                         start: Optional[str] = None, end: Optional[str] = None, flow: Optional[Literal["in", "out"]] = None,
                         reconciled: Optional[bool] = None, limit: int = 50) -> dict:
