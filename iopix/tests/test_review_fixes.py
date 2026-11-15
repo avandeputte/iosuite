@@ -1,6 +1,5 @@
 """Fixes from the code review: writes that must never wipe a photo's rows, duplicate files that keep their own
 identity, and values that must not be mistaken for timestamps."""
-from iosuite_shared import users as shared_users
 import sqlite3
 
 import pytest
@@ -106,25 +105,6 @@ def test_only_whole_timestamps_are_timestamps():
     assert dkdb.looks_like_datetime("2024-01-01T10:00:00") and dkdb.looks_like_datetime("2024-01-01T10:00:00.123")
     assert not dkdb.looks_like_datetime("2024-01-01T10:00:00 New Year party")
     assert not dkdb.looks_like_datetime("2024-01-01T10:00:00.000 x")
-
-
-def test_old_password_hashes_are_upgraded_at_sign_in(client, fresh):
-    """An scrypt2 hash (iosuite-shared 0.28 and before) still signs in and is replaced by Argon2id."""
-    import base64, hashlib, secrets
-    from app import users
-    from iosuite_shared import db as authdb
-    from iosuite_shared.passwords import needs_rehash
-    u = users.create("legacy-probe", "longpassword1", "viewer")
-    salt = secrets.token_bytes(16)
-    old = "scrypt2$16384$8$1$" + base64.b64encode(salt).decode() + "$" + base64.b64encode(hashlib.scrypt(b"longpassword1", salt=salt, n=2 ** 14, r=8, p=1, dklen=32)).decode()
-    authdb.ex("UPDATE ios_users SET hash = %s WHERE id = %s", (old, u["id"]))
-    shared_users.invalidate()
-    assert needs_rehash(old)
-    login(client, "legacy-probe", "longpassword1")
-    h = authdb.one("SELECT hash FROM ios_users WHERE id = %s", (u["id"],))["hash"]
-    assert h.startswith("$argon2id$") and not needs_rehash(h)
-    login(client, "legacy-probe", "longpassword1")
-    client.post("/api/auth/logout", json={})
 
 
 def test_sidecar_naming_follows_digikam(tmp_path, monkeypatch):

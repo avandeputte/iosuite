@@ -26,7 +26,8 @@ server = shared_mcp.make_server(
         "scope='this', or scope='following' for it and the ones after. People on an event are noted, never invited: "
         "nothing is sent to them. Events can be tagged with the family members they are for (members: names from "
         "overview's family); agenda and search_events filter by member. The shared Holidays calendars (one per country) hold the public "
-        "holidays and cannot be changed. Ask before deleting events or calendars."
+        "holidays and cannot be changed; neither can calendars of kind 'subscribed' (outside calendars fetched from a web "
+        "address, such as a school's or a sports club's). Ask before deleting events or calendars."
     ),
 )
 

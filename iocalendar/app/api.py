@@ -16,7 +16,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import access, config, contacts, holiday, ical, members, model, tasks, users
+from app import access, config, contacts, holiday, ical, members, model, subscribe, tasks, users
 from iosuite_shared import appleprofile, prefix, users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
@@ -189,7 +189,8 @@ async def edit_calendar(cid: int, request: Request):
 
     def edit():
         c = readable_calendar(u, cid)
-        if not (model.is_shared(c) and c.get("kind") in model.READ_ONLY_KINDS and shared_users.is_admin(u)):  # admins name and color those
+        if not (model.is_shared(c) and c.get("kind") in model.READ_ONLY_KINDS and shared_users.is_admin(u)  # admins name and color those
+                or subscribe.can_manage(u, c)):  # and whoever manages an outside calendar
             writable_calendar(u, cid)
         model.update_calendar(cid, **{k: b[k] for k in ("name", "description", "color", "timezone", "sort") if k in b})
         return model.calendar(cid)
@@ -199,15 +200,77 @@ async def edit_calendar(cid: int, request: Request):
 @router.delete("/api/calendars/{cid}", dependencies=[access.signed_in])
 def del_calendar(cid: int, request: Request):
     u = request.state.user
-    c = writable_calendar(u, cid)
+    c = readable_calendar(u, cid)
+    if not subscribe.can_manage(u, c):  # an outside calendar goes like any other; the others must be changeable
+        writable_calendar(u, cid)
     if model.is_shared(c) and not shared_users.is_admin(u):
         raise HTTPException(403, "Only an admin deletes a shared calendar")
-    if model.is_shared(c) and len([x for x in model.calendars_for(u) if x["owner_id"] is None and x["kind"] == "events"]) <= 1:
+    if model.is_shared(c) and c["kind"] == "events" and len([x for x in model.calendars_for(u) if x["owner_id"] is None and x["kind"] == "events"]) <= 1:
         raise HTTPException(400, "The last shared calendar stays")
-    if not model.is_shared(c) and members.in_family(u["id"]) and len([x for x in model.calendars_for(u) if x["owner_id"] == u["id"]]) <= 1:
+    if not model.is_shared(c) and c["kind"] == "events" and members.in_family(u["id"]) and \
+            len([x for x in model.calendars_for(u) if x["owner_id"] == u["id"] and x["kind"] == "events"]) <= 1:
         raise HTTPException(400, "Your last private calendar stays")
     model.delete_calendar(cid)
     return {"ok": True}
+
+
+# ------------------------------------------------------------------ outside calendars (subscribed by web address)
+
+@router.post("/api/subscriptions", dependencies=[access.signed_in])
+async def add_subscription(request: Request):
+    """{url, name?, color?, shared?, refreshHours?}: a read-only calendar filled from an outside calendar's web address
+    (https://, http:// or webcal://) and fetched again every refreshHours (1, 3, 6, 12, 24 or 168; 6 when not given).
+    Shared ones are made by editors and admins, private ones by members. The address is read first: nothing is made
+    when it does not give a calendar."""
+    u = request.state.user
+    b = await json_body(request)
+    shared = bool(b.get("shared"))
+    if shared and not shared_users.can_write(u):
+        raise HTTPException(403, "Only editors make shared calendars")
+    if not shared and not shared_users.is_member(u):
+        raise HTTPException(403, "A viewer only looks; a member keeps calendars of their own")
+
+    def make():
+        c = model.calendar(subscribe.add(u, b.get("url"), b.get("name"), b.get("color"), shared, b.get("refreshHours")))
+        c["n"] = db_count(c["id"])
+        return c
+    c = await run_in_threadpool(make)
+    return JSONResponse({"calendar": model.calendar_public(c, u)}, status_code=201)
+
+
+def db_count(cid: int) -> int:
+    return len(model.rows(cid, listing=True))
+
+
+def managed_subscription(u: dict, cid) -> dict:
+    c = readable_calendar(u, cid)
+    if c.get("kind") != subscribe.KIND:
+        raise HTTPException(404, "That calendar is not a subscription")
+    if not subscribe.can_manage(u, c):
+        raise HTTPException(403, "Editors and admins manage shared outside calendars" if model.is_shared(c) else "You cannot change this calendar")
+    return c
+
+
+@router.patch("/api/subscriptions/{cid}", dependencies=[access.signed_in])
+async def edit_subscription(cid: int, request: Request):
+    """{url?, refreshHours?}: a new address is read before it is kept (a wrong one leaves the old one in place)."""
+    u = request.state.user
+    b = await json_body(request)
+
+    def edit():
+        managed_subscription(u, cid)
+        sync = subscribe.change(cid, b.get("url"), b.get("refreshHours"))
+        c = model.calendar(cid)
+        c["n"] = db_count(cid)
+        return {"calendar": model.calendar_public(c, u), **({"sync": sync} if sync else {})}
+    return await run_in_threadpool(edit)
+
+
+@router.post("/api/subscriptions/{cid}/refresh", dependencies=[access.signed_in])
+def refresh_subscription(cid: int, request: Request):
+    """Fetch the outside calendar now (those who manage it): {ok, events, changed} or {ok: false, error}."""
+    managed_subscription(request.state.user, cid)
+    return subscribe.refresh(cid, force=True)
 
 
 @router.get("/api/calendars/{cid}/export", dependencies=[access.signed_in])
