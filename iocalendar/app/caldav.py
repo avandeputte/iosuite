@@ -100,7 +100,7 @@ class Calendars(webdav.CalDAV):
 
     def collection_prop(self, ctx, c, name, ok):
         if name == q(C, "schedule-calendar-transp"):
-            webdav.sub(webdav.sub(ok, C, "schedule-calendar-transp"), C, "transparent" if c.get("kind") in model.READ_ONLY_KINDS else "opaque")
+            webdav.sub(webdav.sub(ok, C, "schedule-calendar-transp"), C, "transparent" if c.get("kind") in model.FREE_KINDS else "opaque")
             return True
         return super().collection_prop(ctx, c, name, ok)
 

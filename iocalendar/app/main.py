@@ -13,7 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 from iosuite_shared import chores, mcp as shared_mcp, pages
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, caldav, config, contacts, db, holiday, ical, mcp, model, notify, tasks, users
+from app import __version__, api, caldav, config, contacts, db, holiday, ical, mcp, model, notify, subscribe, tasks, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -35,11 +35,13 @@ async def lifespan(app: FastAPI):
     holiday.start_sync()    # the Holidays calendar, every day
     purge = chores.start(model.purge_deleted, name="purge of old deletion markers")  # once a day: KEEP_DELETED_DAYS
     notes = chores.start(notify.tick, every_s=60, first_s=20, name="notifications")  # the events' reminders
+    outside = chores.start(subscribe.tick, every_s=300, first_s=30, name="outside calendars")  # each fetched again when its time comes
     log.info("ioCalendar %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
     async with shared_mcp.running(mcp.server):  # the MCP endpoint (/mcp) lives in this process
         yield
     purge.cancel()
     notes.cancel()
+    outside.cancel()
 
 
 app = FastAPI(title="ioCalendar", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,

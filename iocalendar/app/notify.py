@@ -50,7 +50,7 @@ def run(now: dt.datetime = None, long: bool = False) -> int:
         return 0
     now = now or dt.datetime.now(dt.timezone.utc)
     ahead, late = LONG if long else SHORT
-    cals = {c["id"]: c for c in db.q("SELECT * FROM cal_calendars WHERE kind NOT IN ('birthdays', 'holidays')")}
+    cals = {c["id"]: c for c in db.q("SELECT * FROM cal_calendars WHERE kind NOT IN ('birthdays', 'holidays', 'subscribed')")}
     rows = [r for r in model.rows_in_range(list(cals), now - late - dt.timedelta(days=7), now + ahead) if "VALARM" in (r["ics"] or "")]
     fam = members.family()
     sent = 0
