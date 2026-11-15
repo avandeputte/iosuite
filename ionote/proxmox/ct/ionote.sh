@@ -2,8 +2,8 @@
 # ionote LXC for Proxmox VE, in the community-scripts (ProxmoxVE) framework layout, the same as iopix's:
 # this is the ct/ script; proxmox/install/ionote-install.sh runs inside the container.
 #
-# It asks about the app first: where the notes are kept (MariaDB/MySQL host, port, database, user, password, or a
-# SQLite file in the container), where the Shared ioSuite database is (accounts and suite-wide settings, shared by
+# It asks about the app first: where the notes are kept (MariaDB/MySQL host, port, database, user, password),
+# where the Shared ioSuite database is (accounts and suite-wide settings, shared by
 # the ioThing apps; database and user `iosuite` by default), whether pictures added in the web app get their text read (RapidOCR), and the
 # admin account; then the framework's own questions (resources, network). It then creates the container and runs
 # the app's own setup.sh inside with those answers, which installs the packages, writes the settings, creates the
@@ -36,7 +36,7 @@ color
 catch_errors
 
 # ---- the app's own questions (whiptail on the host; env vars IONOTE_* skip them for unattended runs)
-#   IONOTE_DB        sqlite, or host:port/db:user:pass (MariaDB/MySQL)
+#   IONOTE_DB        host:port/db:user:pass (MariaDB/MySQL)
 #   IONOTE_SUITE_DB  host:port/db:user:pass (the Shared ioSuite database, MariaDB)
 #   IONOTE_FEATURES  ocr or none
 #   IONOTE_ADMIN     name:password (empty: create the admin later in the web app)
@@ -45,21 +45,17 @@ catch_errors
 ask_app_settings() {
   local bt="ionote"
   if [[ -z "${IONOTE_DB:-}" ]]; then
-    if whiptail --backtitle "$bt" --yesno "Keep the notes in MySQL/MariaDB?\n\nIt holds the notes, their pictures (as BLOBs), folders, tags, users and settings.\n\nNo: a SQLite file in the container's data folder (a quick try; the apps' sync works the same)." 14 76 3>&1 1>&2 2>&3; then
-      local h p d u w
-      h=$(whiptail --backtitle "$bt" --inputbox "MariaDB host or IP" 9 60 "127.0.0.1" 3>&1 1>&2 2>&3) || exit 1
-      p=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
-      d=$(whiptail --backtitle "$bt" --inputbox "Database (created if the user may)" 9 60 "notes" 3>&1 1>&2 2>&3) || exit 1
-      u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "notes" 3>&1 1>&2 2>&3) || exit 1
-      w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
-      IONOTE_DB="$h:$p/$d:$u:$w"
-    else
-      IONOTE_DB="sqlite"
-    fi
+    local h p d u w
+    h=$(whiptail --backtitle "$bt" --inputbox "The notes' MariaDB/MySQL database: host or IP\n\nIt holds the notes, their pictures (as BLOBs), folders, tags and settings." 12 76 "127.0.0.1" 3>&1 1>&2 2>&3) || exit 1
+    p=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
+    d=$(whiptail --backtitle "$bt" --inputbox "Database (created if the user may)" 9 60 "notes" 3>&1 1>&2 2>&3) || exit 1
+    u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "notes" 3>&1 1>&2 2>&3) || exit 1
+    w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
+    IONOTE_DB="$h:$p/$d:$u:$w"
   fi
   if [[ -z "${IONOTE_SUITE_DB:-}" ]]; then
     local sh sp sd su sw
-    sh="${IONOTE_DB%%/*}"; sh="${sh%%:*}"; [[ "$IONOTE_DB" == sqlite ]] && sh="127.0.0.1"
+    sh="${IONOTE_DB%%/*}"; sh="${sh%%:*}"
     sh=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: MariaDB host or IP\n\nAccounts, sessions and suite-wide settings, shared with the other ioThing apps (one sign-in for all)." 12 76 "$sh" 3>&1 1>&2 2>&3) || exit 1
     sp=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
     sd=$(whiptail --backtitle "$bt" --inputbox "Shared ioSuite database: database (created if the user may)" 9 72 "iosuite" 3>&1 1>&2 2>&3) || exit 1
@@ -138,11 +134,7 @@ description
 # ---- the app's own setup with the answers
 msg_info "Running the app's setup inside the container (packages, settings, tables, admin, service)"
 SECRETS=""  # setup.sh reads IONOTE_DB, IONOTE_SUITE_DB and IONOTE_ADMIN from its environment: the passwords stay off every command line
-if [[ "${IONOTE_DB:-sqlite}" == sqlite ]]; then
-  DBARG="--sqlite"
-else
-  DBARG=""; SECRETS+="IONOTE_DB=$(printf '%q' "$IONOTE_DB")"$'\n'
-fi
+SECRETS+="IONOTE_DB=$(printf '%q' "$IONOTE_DB")"$'\n'
 if [[ -n "${IONOTE_SUITE_DB:-}" ]]; then SECRETS+="IONOTE_SUITE_DB=$(printf '%q' "$IONOTE_SUITE_DB")"$'\n'; fi
 if [[ -n "${IONOTE_ADMIN:-}" ]]; then SECRETS+="IONOTE_ADMIN=$(printf '%q' "$IONOTE_ADMIN")"$'\n'; ADMINARG=""; else ADMINARG="--no-admin"; fi
 # the answers with passwords go in as a root-only file (pushed, read into setup.sh's environment, removed), never as arguments
@@ -150,7 +142,7 @@ if [[ -n "${IONOTE_ADMIN:-}" ]]; then SECRETS+="IONOTE_ADMIN=$(printf '%q' "$ION
 SECF="$(mktemp)"; chmod 600 "$SECF"; printf '%s' "$SECRETS" > "$SECF"
 pct push "$CTID" "$SECF" /opt/ionote/setup.env --perms 0600 --user 0 --group 0
 rm -f "$SECF"
-SETUP_CMD="cd /opt/ionote/app && sh ./setup.sh --yes $DBARG $ADMINARG --data /opt/ionote/data --features '${IONOTE_FEATURES:-none}' --service --no-system-deps --port 8610 --public-url '${IONOTE_PUBLIC_URL:-}' --cookie-domain '${IONOTE_COOKIE_DOMAIN:-}' --also '${IONOTE_ALSO:-none}'"
+SETUP_CMD="cd /opt/ionote/app && sh ./setup.sh --yes $ADMINARG --data /opt/ionote/data --features '${IONOTE_FEATURES:-none}' --service --no-system-deps --port 8610 --public-url '${IONOTE_PUBLIC_URL:-}' --cookie-domain '${IONOTE_COOKIE_DOMAIN:-}' --also '${IONOTE_ALSO:-none}'"
 WRAPPED="set -a; . /opt/ionote/setup.env; set +a; rm -f /opt/ionote/setup.env; $SETUP_CMD > /opt/ionote/setup.log 2>&1"
 # the setup's output is kept in the container; on failure the last lines are shown here
 if ! pct exec "$CTID" -- bash -c "$WRAPPED"; then
