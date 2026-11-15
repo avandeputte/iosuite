@@ -3,6 +3,7 @@ its result file. (The suite's daily-check switch and the rows the apps write are
 import json
 import os
 import time
+import urllib.error
 
 import pytest
 from fastapi import FastAPI
@@ -26,15 +27,23 @@ def make_updater(tmp_path, monkeypatch, version="1.2.0", **kw):
     return u
 
 
-def github(sha="abcdef0123456789", remote_version="1.3.0", msg="v1.3.0: better", fail=False):
-    """GitHub as the Updater asks it: the branch's commit and the suite's version file at that commit
-    (shared/iosuite_shared/__init__.py)."""
+def github(sha="abcdef0123456789", remote_version="1.3.0", msg="v1.3.0: better", fail=False, refs=True, limited=False):
+    """GitHub as the Updater asks it: the branch's commit (from git's info/refs, or with refs=False only from the API,
+    which limited=True has used up) and the suite's version file at that commit (shared/iosuite_shared/__init__.py)."""
+    full = sha.ljust(40, "0")
     def _get(url, accept=""):
         if fail:
             raise OSError("no network")
+        if url.endswith(".git/info/refs?service=git-upload-pack"):
+            if not refs:
+                raise OSError("github.com away")
+            return (f"001e# service=git-upload-pack\n0000015b{full} HEAD\x00multi_ack symref=HEAD:refs/heads/main\n"
+                    f"003f{'1' * 40} refs/heads/feature\n003f{full} refs/heads/main\n0000").encode()
         if "api.github.com" in url:
-            return json.dumps({"sha": sha, "commit": {"committer": {"date": "2026-11-05T01:02:03Z"}, "message": msg + "\n\nmore"}}).encode()
-        assert url.endswith("/fedcba9876543210/" + updates.VERSION_FILE), url
+            if limited:
+                raise urllib.error.HTTPError(url, 403, "rate limit exceeded", {}, None)
+            return json.dumps({"sha": full, "commit": {"committer": {"date": "2026-11-05T01:02:03Z"}, "message": msg + "\n\nmore"}}).encode()
+        assert url.endswith(f"/{'fedcba9876543210'.ljust(40, '0')}/" + updates.VERSION_FILE), url
         if remote_version is None:
             return b"nothing here"
         return f'__version__ = "{remote_version}"\n'.encode()
@@ -54,8 +63,16 @@ def test_commit_from_file_and_check_outcomes(tmp_path, monkeypatch):
 
     u._get_url = github(sha="fedcba9876543210")
     c = u.check()
-    assert c["status"] == "update" and c["remoteVersion"] == "1.3.0" and c["remote"] == "fedcba9" and c["remoteDate"] == "2026-11-05"
-    assert c["remoteMessage"] == "v1.3.0: better"
+    assert c["status"] == "update" and c["remoteVersion"] == "1.3.0" and c["remote"] == "fedcba9" and "remoteDate" not in c
+    # github.com's git address away: the API (with the date and the message), and its hourly limit said plainly
+    u._get_url = github(sha="fedcba9876543210", refs=False)
+    c = u.check()
+    assert c["status"] == "update" and c["remote"] == "fedcba9" and c["remoteDate"] == "2026-11-05" and c["remoteMessage"] == "v1.3.0: better"
+    u._get_url = github(sha="fedcba9876543210", refs=False, limited=True)
+    c = u.check()
+    assert c["status"] == "error" and "hourly limit" in c["error"]
+    assert updates.head_from_refs(github()("https://github.com/a/b.git/info/refs?service=git-upload-pack"), "feature") == "1" * 40
+    assert updates.head_from_refs(b"0000", "main") is None
 
     u._get_url = github(sha="fedcba9876543210", remote_version="1.2.0")  # another commit, the same version: nothing to install
     assert u.check()["status"] == "current"
