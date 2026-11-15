@@ -45,5 +45,5 @@ to addresses on your own network; anything else must be HTTPS.
 | Port | 8650 (the web app and the phone's uploads) |
 | Source | [iohealth](https://github.com/avandeputte/iosuite/tree/main/iohealth) (server), [iohealth-apps](https://github.com/avandeputte/iosuite-apps/tree/main/iohealth) (the ioHealthSync iPhone app) |
 
-The iPhone app is built from [iohealth-apps](https://github.com/avandeputte/iosuite-apps/tree/main/iohealth) with Xcode. See
+The iPhone app is built from [iosuite-apps/iohealth](https://github.com/avandeputte/iosuite-apps/tree/main/iohealth) with Xcode. See
 [Phones, Macs and other apps](devices.md).

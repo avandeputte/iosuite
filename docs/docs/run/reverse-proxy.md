@@ -216,7 +216,7 @@ any app:
 | Proxy | `cloudflare`, `haproxy`, `nginx`, `caddy`, `traefik` or `header` |
 | Header | the header with the user (`Remote-User`, `X-Forwarded-User`, `X-Auth-Request-Email`...; for Cloudflare `Cf-Access-Authenticated-User-Email`) |
 | Reverse proxy addresses | the addresses the proxy connects from ([above](#tell-the-apps-where-the-proxy-is)): the header is believed from there only, and a proxy that names the user in a header cannot be saved without them |
-| New people | `viewer` or `editor` to make an account for someone the proxy lets in, `deny` for a "No access" page |
+| New people | `viewer`, `member` or `editor` to make an account for someone the proxy lets in, `deny` for a "No access" page |
 | Cloudflare team and AUD | for Cloudflare Access: the signed token is checked against your team's keys |
 
 The header must not be fakeable: the proxy must replace it on every request, and the app must be reachable only

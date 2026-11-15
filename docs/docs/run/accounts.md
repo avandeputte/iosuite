@@ -11,18 +11,21 @@ with several, everyone has **one name and one password for all of them**, and on
 
 | Shared (one per person) | Per app |
 | --- | --- |
-| name, display name, email, password | the role: `none`, `viewer`, `editor` or `admin` |
+| name, display name, email, password | the role: `none`, `viewer`, `member`, `editor` or `admin` |
 | sessions (the `iothing_session` cookie) | settings and other per-person data |
 | suite admin, shown on the sign-in screen or not | app passwords (each made in, and for, one app) |
 | sign-in at the proxy (Cloudflare Access...) | sign-in required, default role |
 
 - A **suite admin** is admin in every app and manages the accounts. The first account is one.
 - An app's **admin** manages that app's settings, its updates and server log, and the accounts' roles there.
-- An **editor** changes shared things (shared calendars, the Family address book); a **viewer** reads them and changes
-  only their own. What is private stays private: notes and health data belong to one account, admins included.
-- An account without a role in an app holds that app's **default role** (`viewer` unless changed). Set the default to
+- An **editor** changes shared things (the Family calendar, the Family address book) as well as their own.
+- A **member** keeps private things of their own (a Personal calendar, their own lists and recipes) and sees the
+  family's read-only.
+- A **viewer** only reads: nothing is changed with that role.
+- What is private stays private: notes and health data belong to one account, admins included.
+- An account without a role in an app holds that app's **default role** (`member` unless changed). Set the default to
   `none` and the app is by invitation only.
-- A **passwordless** account signs in with one click, on the home network only, and is a viewer at most everywhere:
+- A **passwordless** account signs in with one click, on the home network only, and is a member at most everywhere:
   for a child, or a tablet on the kitchen wall.
 
 ## Where to manage them

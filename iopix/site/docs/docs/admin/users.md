@@ -15,8 +15,9 @@ Create the admin account during install, from **Settings › Create the admin ac
 | Who | Can |
 | --- | --- |
 | Not signed in | browse and search everything, read-only; display settings stay in the browser |
-| **Viewer** | the same, plus settings, favorites and private albums kept with the account, so they follow you to other devices |
-| **Viewer without a password** | the same, and signs in with one tap from the account picker, like a profile on a media server. Can never be more than a viewer |
+| **Viewer** | the same, plus display settings kept with the account; only looks |
+| **Member** (the default) | plus favorites and private albums kept with the account, so they follow you to other devices |
+| **Without a password** | signs in with one tap from the account picker, like a profile on a media server. Can never be more than a member |
 | **Editor** | plus every change to the library: edits, tags, faces, places, imports, moves, the trash |
 | **Admin** | plus settings, maintenance, models, backups and updates. Accounts and roles are managed by suite admins (Settings › Security) |
 
@@ -30,14 +31,14 @@ The server enforces all of this; hiding a button is never the only protection.
 
 Accounts are shared by every app in the suite and kept in the Shared ioSuite database. A suite admin manages them in **Settings › Security › People** (the same panel in every io app). For each:
 
-- **role** in ioPix and in every other app, and **password** (or none, for a one-tap viewer),
+- **role** in ioPix and in every other app, and **password** (or none, for a one-tap account),
 - **email address**, used to match sign-ins from a proxy such as Cloudflare Access,
 - **sign-in list**: take an account off the tiles on the sign-in screen (it then signs in through **Other**, by name and password),
 - **person in photos**: link the account to someone in People, so their face is the account's picture and "Photos of me" shows their photos. The panel reads People from ioPix, so this works from any io app.
 
 ## Signing in
 
-The person icon opens the sign-in dialog, with a tile per account. A passwordless viewer signs in with one tap; the others ask for their password.
+The person icon opens the sign-in dialog, with a tile per account. An account without a password signs in with one tap; the others ask for their password.
 
 Sessions last 30 days and renew as you use them. Passwords are stored hashed, never in clear.
 

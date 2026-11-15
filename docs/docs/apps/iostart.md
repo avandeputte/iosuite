@@ -20,13 +20,16 @@ every app works without it. It earns its place once you run two or more apps.
 - **Weather** (AccuWeather, a free key), **Home Assistant** entities you can switch from the page, and **bookmarks**.
 - **A wall display** for a tablet: photos behind a big clock, the weather, today's and the coming days' events.
 - **Your own page**: each person hides and orders tiles and cards.
+- **One MCP server for the whole suite** (off until an admin turns it on under Settings › Server): connect an AI
+  assistant here once and it gets every app's tools, each app still deciding what you may do there. See
+  [AI assistants](../run/assistants.md).
 - **One address for the whole suite**, when a suite admin turns it on: the start page answers for every app, each in
   a folder (`…/calendar/`, `…/notes/`), so one name, one certificate and one port reach them all. See
   [Reverse proxy and HTTPS](../run/reverse-proxy.md#one-address-without-a-proxy-the-start-page-answers-for-every-app).
 
 ## Bookmarks in your browser
 
-The **ioSuite Bookmarks** extension keeps a browser's own bookmarks the same as the start page's, both ways: the
+The **ioStart Bookmarks** extension keeps a browser's own bookmarks the same as the start page's, both ways: the
 bookmarks bar, Other bookmarks (and Firefox's bookmarks menu) match folders on the start page, and an add, change or
 delete in one browser reaches every other browser within a minute.
 

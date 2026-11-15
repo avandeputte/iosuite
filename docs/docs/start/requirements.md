@@ -10,7 +10,7 @@ Every app keeps its data in **MariaDB or MySQL**, in two databases:
 
 | Database | Default name and user | Holds |
 | --- | --- | --- |
-| the app's own | `iopix`, `notes`, `calendar`, `suite`, `contacts`, `health` or `tasks` | everything the app keeps |
+| the app's own | the app's name: `iopix`, `ionote`, `iocalendar`, `iostart`, `iocontact`, `iohealth`, `iotask`, `iorecipe`, `iothings` or `iomoney` | everything the app keeps |
 | the **Shared ioSuite database** | `iosuite` | accounts, sessions, roles, app passwords, the suite-wide settings and the list of installed apps |
 
 Both can live on the same server, and the Shared ioSuite database is one per household: every app you install points at

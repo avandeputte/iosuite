@@ -24,7 +24,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main
 
 The app does not look for the others, does not show empty spaces for them, and does not need the
 [ioStart start page](../apps/iostart.md). Its Settings show Security and Global settings to suite admins all the same:
-those manage the accounts in the Shared ioSuite database, whether one app uses them or seven.
+those manage the accounts in the Shared ioSuite database, whether one app uses them or all of them.
 
 | You want | Install |
 | --- | --- |
@@ -44,7 +44,7 @@ Install the second app the same way, and give it the **same Shared ioSuite datab
 then on:
 
 - **Everyone already has an account.** The accounts, passwords and app passwords are the Shared ioSuite database's, so
-  the new app knows everybody. Each person gets the app's default role there (viewer, unless an admin changes it in
+  the new app knows everybody. Each person gets the app's default role there (member, unless an admin changes it in
   Settings › Global settings › Apps).
 - **One sign-in covers both** when they share a domain: set `COOKIE_DOMAIN=example.com` in each app and a person signed
   in at `photos.example.com` is signed in at `calendar.example.com` too.
@@ -76,5 +76,5 @@ included. Run it again later to add, remove or reconfigure apps. See [Several ap
 
 Stop it and remove it the way you installed it (delete the container, the stack, or the service and its folder). The
 other apps don't notice. The app's row stays in the suite's list of apps until a suite admin forgets it under Settings ›
-Global settings › Apps, which can also drop the roles, settings, app passwords and keys it kept in the Shared ioStart
+Global settings › Apps, which can also drop the roles, settings, app passwords and keys it kept in the Shared ioSuite
 database. Its own database is left for you to drop.

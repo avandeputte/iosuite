@@ -36,6 +36,7 @@ one. It can sit on the same server as the app databases.
 | ioBackup | `iobackup` | `bkp_` |
 | ioRecipe | `iorecipe` | `rcp_` |
 | ioThings | `iothings` | `thg_` |
+| ioMoney | `iomoney` | `mny_` |
 
 Every table carries its app's prefix, so all of them could share one database if you wanted. The tables are created
 on the first start, and every app keeps a `<prefix>_schema_version` table and brings its tables up to date by itself

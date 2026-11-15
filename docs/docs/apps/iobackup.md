@@ -10,7 +10,8 @@ pick: whole databases, single tables, users and roles.
 
 !!! note "An admin tool"
     ioBackup is a utility for the person who runs the servers, not an app for the family. Only suite admins can open
-    it (a backup holds everybody's data); they find it on the start page and in the app switcher. Nobody else sees it, and
+    it (a backup holds everybody's data); they find it in the start page's gear menu, under
+    Admin tools, and in the app switcher. Nobody else sees it, and
     it takes no roles.
 
 ## What it does

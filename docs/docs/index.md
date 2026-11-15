@@ -46,8 +46,9 @@ Every app is built the same way, so what you learn in one holds in the others:
 - **The same Settings**: Account and Display for everyone; Server (version, log, restart) for admins;
   Security and Global settings for suite admins.
 - **One version, one update**: a daily check, then one **Update** button for every app under Settings › Global settings › Updates. See [Updates](run/updates.md).
-- **An MCP server** at `/mcp` in ioPix, ioNote, ioCalendar, ioTask, ioRecipe, ioThings and ioContact, so an AI assistant such as Claude can
-  work with them as you, with an app password. See [AI assistants](run/assistants.md).
+- **An MCP server** at `/mcp` in ioPix, ioNote, ioCalendar, ioTask, ioRecipe, ioThings, ioMoney and ioContact, so an AI
+  assistant such as Claude can work with them as you, with an app password; ioStart's `/mcp` passes on every app's
+  tools through one connection. See [AI assistants](run/assistants.md).
 - **Free and open source**, GPL-3.0-or-later.
 
 ## Where to start

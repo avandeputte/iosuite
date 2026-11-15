@@ -10,15 +10,15 @@ container or one database server:
 | App | Port | Database | Folder (as root) |
 | --- | --- | --- | --- |
 | ioPix | 8600 | `iopix` | `/opt/iopix/app` |
-| ioNote | 8610 | `notes` | `/opt/ionote/app` |
-| ioCalendar | 8620 | `calendar` | `/opt/iocalendar/app` |
-| ioStart | 8630 | `suite` | `/opt/iostart/app` |
-| ioContact | 8640 (LDAP 3890) | `contacts` | `/opt/iocontact/app` |
-| ioHealth | 8650 | `health` | `/opt/iohealth/app` |
-| ioTask | 8670 | `tasks` | `/opt/iotask/app` |
-| ioRecipe | 8690 | `recipe` | `/opt/iorecipe/app` |
-| ioThings | 8700 | `things` | `/opt/iothings/app` |
-| ioMoney | 8710 | `money` | `/opt/iomoney/app` |
+| ioNote | 8610 | `ionote` | `/opt/ionote/app` |
+| ioCalendar | 8620 | `iocalendar` | `/opt/iocalendar/app` |
+| ioStart | 8630 | `iostart` | `/opt/iostart/app` |
+| ioContact | 8640 (LDAP 3890) | `iocontact` | `/opt/iocontact/app` |
+| ioHealth | 8650 | `iohealth` | `/opt/iohealth/app` |
+| ioTask | 8670 | `iotask` | `/opt/iotask/app` |
+| ioRecipe | 8690 | `iorecipe` | `/opt/iorecipe/app` |
+| ioThings | 8700 | `iothings` | `/opt/iothings/app` |
+| ioMoney | 8710 | `iomoney` | `/opt/iomoney/app` |
 
 ## One line: install, add, remove, reconfigure
 
