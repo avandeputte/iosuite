@@ -4,10 +4,13 @@ completed maintenance log. Homebox's CSV export has no files and no log; its API
 
 Homebox's API (sysadminsmedia/homebox, backend/app/api): POST /api/v1/users/login with the user name and password
 gives a token ("Bearer ..."), sent as Authorization. Two shapes are read:
-- up to v0.2x: /v1/items (paged), /v1/items/{id}, /v1/locations/tree, /v1/labels, /v1/items/{id}/maintenance,
+- up to v0.25: /v1/items (paged), /v1/items/{id}, /v1/locations/tree, /v1/labels, /v1/items/{id}/maintenance,
   /v1/items/{id}/attachments/{attachment}
-- later: the same under /v1/entities (places are entities too, entityType.isLocation) and /v1/tags.
-Older versions answer an attachment with a one-time {token} for /attachments/download?token=; that is followed.
+- v0.26 on: the same under /v1/entities (places are entities too, entityType.isLocation) and /v1/tags.
+Differences between versions that are handled: up to v0.14 the maintenance log is {entries: [...]} (later a list) and its
+filter is not "status" (an unknown query key is a 500 there, so the log is asked for without one: every version then
+gives all of it); an attachment's title is in "document" up to v0.14; some versions answer an attachment with a one-time
+{token} for /attachments/download?token=, which is followed.
 
 Running it again brings the same Homebox up to date instead of adding it twice: a thing it made remembers Homebox's id
 (import_ref "homebox:<id>"); a thing from an earlier CSV import of the same Homebox is found by its name and place and
@@ -63,6 +66,8 @@ class Homebox:
         self.token = ""
         self.attachment_token = ""
         self.shape = "items"
+        self.version = ""
+        self.log_problem = ""
         self._open = outbound.opener(_allowed).open
 
     def _req(self, path: str, params: dict | None = None, body=None, form: bool = False, auth: bool = True):
@@ -108,6 +113,10 @@ class Homebox:
             if e.code != 404:
                 raise Invalid(f"Homebox answered {e.code} when asked for its things") from e
             self.shape = "entities"
+        try:
+            self.version = str(((self.json("/v1/status") or {}).get("build") or {}).get("version") or "")[:40]
+        except (urllib.error.URLError, OSError, ValueError, AttributeError):
+            self.version = ""
 
     # ---- what there is
     def places(self) -> dict:
@@ -128,8 +137,8 @@ class Homebox:
     def labels(self) -> list[dict]:
         return self.json("/v1/labels" if self.shape == "items" else "/v1/tags") or []
 
-    def ids(self) -> list[str]:
-        """Every thing's id, the archived ones too."""
+    def ids(self) -> list[tuple[str, str]]:
+        """(id, name) of every thing, the archived ones too."""
         out, page = [], 1
         path = "/v1/items" if self.shape == "items" else "/v1/entities"
         while True:
@@ -138,7 +147,7 @@ class Homebox:
             for x in rows:
                 if self.shape == "entities" and ((x.get("entityType") or {}).get("isLocation")):
                     continue
-                out.append(x["id"])
+                out.append((x["id"], (x.get("name") or "").strip() or x["id"]))
             total = r.get("total") or 0
             if not rows or page * PAGE >= total or page > 1000:
                 return out
@@ -148,12 +157,17 @@ class Homebox:
         return self.json(f"/v1/{self.shape}/{hid}") or {}
 
     def maintenance(self, hid: str) -> list[dict]:
+        """Every entry of one thing's maintenance log, done and scheduled. No filter is sent: with none, every version
+        gives all of it, while a filter one version knows is a 500 in another."""
         try:
-            return self.json(f"/v1/{self.shape}/{hid}/maintenance", {"status": "both"}) or []
+            r = self.json(f"/v1/{self.shape}/{hid}/maintenance")
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 return []
             raise
+        if isinstance(r, dict):  # up to v0.14: {itemId, costTotal, costAverage, entries}
+            r = r.get("entries")
+        return [m for m in r or [] if isinstance(m, dict)]
 
     def attachment(self, hid: str, aid: str) -> tuple[bytes, str]:
         """(bytes, type) of one attachment."""
@@ -296,7 +310,8 @@ def start(u: dict, url: str, user: str, password: str, background: bool = True) 
     with _lock:
         _job.clear()
         _job.update(state="running", source=hb.base, by=u.get("displayName") or u.get("name"), started=dt.datetime.now().isoformat(timespec="seconds"),
-                    total=0, done=0, added=0, changed=0, files=0, log=0, skipped=[], error=None, step="Reading the places and labels")
+                    total=0, done=0, added=0, changed=0, failed=0, files=0, listed=0, log=0, skipped=[], error=None,
+                    version=hb.version, step="Reading the places and labels")
     if background:
         threading.Thread(target=_run, args=(u, hb), name="homebox-import", daemon=True).start()
     else:
@@ -317,18 +332,33 @@ def _run(u: dict, hb: Homebox) -> None:
         _set(step="Listing the things")
         ids = hb.ids()
         _set(total=len(ids), step="Bringing the things over")
-        for hid in ids:
+        first = None
+        for hid, name in ids:
             try:
                 _one(u, hb, hid, places, cache)
             except Exception as e:  # one thing that fails does not stop the rest
-                log.warning("Homebox import: %s: %s", hid, e)
-                _note(f"{hid}: {e}")
+                log.warning("Homebox import: %s (%s): %s", name, hid, e)
+                _note(f"{name}: {_why(e)}")
+                first = first or e
+                with _lock:
+                    _job["failed"] += 1
             with _lock:
                 _job["done"] += 1
-        _set(state="done", step=None, finished=dt.datetime.now().isoformat(timespec="seconds"))
+        now = dt.datetime.now().isoformat(timespec="seconds")
+        if ids and _job["failed"] == len(ids):  # nothing came over: that is a failure, not "done"
+            _set(state="failed", step=None, finished=now, error=f"not one of the {len(ids)} things came over: {_why(first)}")
+        else:
+            _set(state="done", step=None, finished=now)
     except Exception as e:
         log.exception("Homebox import failed")
-        _set(state="failed", error=str(e) or e.__class__.__name__, finished=dt.datetime.now().isoformat(timespec="seconds"))
+        _set(state="failed", error=_why(e), finished=dt.datetime.now().isoformat(timespec="seconds"))
+
+
+def _why(e) -> str:
+    """An error in words: which Homebox answer it was, for an HTTP error."""
+    if isinstance(e, urllib.error.HTTPError):
+        return f"Homebox answered {e.code} ({e.reason}) to {urllib.parse.urlsplit(e.url or '').path or 'a request'}"
+    return str(e) or e.__class__.__name__
 
 
 def _one(u: dict, hb: Homebox, hid: str, places: dict, cache: dict) -> None:
@@ -350,13 +380,16 @@ def _one(u: dict, hb: Homebox, hid: str, places: dict, cache: dict) -> None:
     atts = sorted(x.get("attachments") or [], key=lambda a: (not a.get("primary"), a.get("type") != "photo", a.get("createdAt") or ""))
     for a in atts:
         kind = KINDS.get(a.get("type") or "attachment")
-        if not kind:  # Homebox's own small pictures
+        if not kind or not a.get("id"):  # Homebox's own small pictures
             continue
-        name = (a.get("title") or a.get("path") or "").rsplit("/", 1)[-1] or "file"
+        with _lock:
+            _job["listed"] += 1
+        doc = a.get("document") or {}  # up to v0.14
+        name = (a.get("title") or doc.get("title") or a.get("path") or doc.get("path") or "").rsplit("/", 1)[-1] or "file"
         try:
             raw, mime = hb.attachment(hid, a["id"])
         except (urllib.error.URLError, OSError) as e:
-            _note(f"{data['name']}: {name}: not fetched ({getattr(e, 'code', '') or getattr(e, 'reason', e)})")
+            _note(f"{data['name']}: {name}: not fetched ({_why(e)})")
             continue
         if len(raw) > config.MAX_FILE_BYTES:
             _note(f"{data['name']}: {name}: larger than {config.MAX_FILE_BYTES // 1048576} MB")
@@ -380,7 +413,14 @@ def _one(u: dict, hb: Homebox, hid: str, places: dict, cache: dict) -> None:
             _job["files"] += 1
     logged = {(str(r["done_on"]), r["title"].lower()) for r in db.q("SELECT done_on, title FROM thg_maintenance WHERE item_id = %s", (item["id"],))}
     later = 0
-    for m in hb.maintenance(hid):
+    entries = []
+    if not hb.log_problem:
+        try:
+            entries = hb.maintenance(hid)
+        except (urllib.error.URLError, OSError, ValueError) as e:  # the thing and its files came over all the same
+            hb.log_problem = _why(e)
+            _note(f"The maintenance log could not be read ({hb.log_problem}), so no log lines were brought; the rest was")
+    for m in entries:
         day = _day(m.get("completedDate"))
         title = (m.get("name") or "").strip() or "Maintenance"
         if not day:

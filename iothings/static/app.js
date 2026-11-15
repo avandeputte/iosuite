@@ -31,6 +31,7 @@ const ICONS = {
   logout: 'M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z',
   more: 'M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
   check: 'M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
+  alert: 'M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z',
   tune: 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
   ai: 'M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z',
   theme: 'M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z',
@@ -827,9 +828,11 @@ async function showImport(page) {
     const counts = `${j.added} added, ${j.changed} brought up to date, ${j.files} ${j.files === 1 ? 'file' : 'files'}, ${j.log} log ${j.log === 1 ? 'line' : 'lines'}`;
     fill(srvOut,
       j.state === 'running' ? h('div', { class: 'draftnote' }, icon('download', 's'), j.total ? `${j.done} of ${j.total} things: ${counts}…` : `${j.step || 'Starting'}…`)
-        : j.state === 'failed' ? h('p', { class: 'err' }, `The import stopped: ${j.error}`)
-          : h('div', { class: 'draftnote' }, icon('check', 's'), `Done: ${j.total} things from ${j.source}. ${counts}.`),
-      j.skipped && j.skipped.length ? [h('p', null, `Left out (${j.skipped.length}):`), h('ul', { class: 'muted small' }, j.skipped.map((x) => h('li', null, x)))] : null,
+        : j.state === 'failed' ? h('p', { class: 'err' }, `The import failed: ${j.error}`)
+          : h('div', { class: 'draftnote' }, icon(j.skipped && j.skipped.length ? 'alert' : 'check', 's'),
+            `${j.skipped && j.skipped.length ? 'Done, with problems' : 'Done'}: ${j.total} things from ${j.source}${j.version ? ` (Homebox ${j.version})` : ''}. ${counts}${j.failed ? `, ${j.failed} not brought` : ''}.`),
+      j.state !== 'running' && j.total && !j.listed && j.state === 'done' ? h('p', { class: 'muted small' }, 'Homebox listed no photos or attachments for these things.') : null,
+      j.skipped && j.skipped.length ? [h('p', null, `Problems (${j.skipped.length}):`), h('ul', { class: 'muted small' }, j.skipped.map((x) => h('li', null, x)))] : null,
       j.state === 'done' ? h('p', null, h('a', { class: 'pillbtn', href: '#/' }, 'See them')) : null);
     clearTimeout(timer);
     if (j.state === 'running') timer = setTimeout(poll, 1500);
