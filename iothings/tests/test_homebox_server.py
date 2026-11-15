@@ -23,10 +23,12 @@ PDF = b"%PDF-1.4\n%manual\n" + b"x" * 5000
 PHOTO = png()
 
 
-def homebox(shape: str):
+def homebox(shape: str, broken_log: bool = False, broken_things: bool = False):
     """A small Homebox: two places, two labels, a fridge (photo, manual, receipt, a done and a scheduled maintenance, a
-    field) and an archived drill."""
-    S = "items" if shape == "items" else "entities"
+    field) and an archived drill. Shapes: "old" (v0.14 and before: the log is {entries}, a query key it does not know is
+    a 500 as in Homebox, an attachment's title is in "document"), "items" (to v0.25) and "entities" (v0.26 on)."""
+    old = shape == "old"
+    S = "entities" if shape == "entities" else "items"
     tree = [{"id": "L1", "name": "Home", "type": "location", "children": [{"id": "L2", "name": "Kitchen", "type": "location", "children": []}]}]
     things = {
         "I1": {"id": "I1", "name": "Fridge", "description": "Big one", "quantity": 1, "manufacturer": "Samsung", "modelNumber": "RB38",
@@ -42,6 +44,10 @@ def homebox(shape: str):
         "I2": {"id": "I2", "name": "Drill", "quantity": 2, "archived": True, "purchasePrice": 0, "location": {"id": "L1", "name": "Home"},
                "fields": [], "attachments": []},
     }
+    if old:
+        for a in things["I1"]["attachments"]:
+            a["document"] = {"id": "D" + a["id"], "title": a.pop("title"), "path": "/data/x"}
+            a.pop("mimeType", None)
     files = {"A1": (PHOTO, "image/png"), "A2": (PDF, "application/pdf"), "A3": (PDF + b"r", "application/pdf")}
     seen = {"logins": 0}
 
@@ -70,6 +76,8 @@ def homebox(shape: str):
             u = urlsplit(self.path)
             q = parse_qs(u.query)
             p = u.path
+            if p == "/api/v1/status":
+                return self.send(200, {"health": True, "build": {"version": "v0.14.2" if old else "v0.25.0"}})
             if self.headers.get("Authorization") != "Bearer T":
                 return self.send(401, {})
             if p == f"/api/v1/{'locations' if S == 'items' else 'entities'}/tree":
@@ -85,11 +93,16 @@ def homebox(shape: str):
             parts = p.split("/")  # /api/v1/<S>/<id>[/maintenance|/attachments/<aid>]
             if len(parts) >= 5 and parts[3] == S and parts[4] in things:
                 if len(parts) == 5:
+                    if broken_things:
+                        return self.send(500, {"error": "boom"})
                     return self.send(200, things[parts[4]])
                 if parts[5] == "maintenance":
-                    return self.send(200, [{"id": "M1", "name": "Defrost", "completedDate": "2025-04-01", "cost": "12.50", "description": "All good"},
-                                           {"id": "M2", "name": "Service", "completedDate": "0001-01-01T00:00:00Z", "scheduledDate": "2027-01-01"}]
-                                     if parts[4] == "I1" else [])
+                    if broken_log or (old and q) or (not old and q and q.get("status") != ["both"]):
+                        return self.send(500, {"error": "schema: invalid path"})
+                    log = ([{"id": "M1", "name": "Defrost", "completedDate": "2025-04-01", "cost": "12.50", "description": "All good"},
+                            {"id": "M2", "name": "Service", "completedDate": "0001-01-01T00:00:00Z", "scheduledDate": "2027-01-01"}]
+                           if parts[4] == "I1" else [])
+                    return self.send(200, {"itemId": parts[4], "costTotal": 12.5, "costAverage": 12.5, "entries": log} if old else log)
                 if parts[5] == "attachments" and parts[6] in files:
                     raw, ctype = files[parts[6]]
                     return self.send(200, raw, ctype)
@@ -100,7 +113,7 @@ def homebox(shape: str):
     return srv, seen
 
 
-@pytest.mark.parametrize("shape", ["items", "entities"])
+@pytest.mark.parametrize("shape", ["old", "items", "entities"])
 def test_import_from_a_homebox_server(client, shape):
     srv, seen = homebox(shape)
     url = f"http://127.0.0.1:{srv.server_address[1]}"
@@ -113,7 +126,8 @@ def test_import_from_a_homebox_server(client, shape):
         u = client.get("/api/auth/me").json()
         r = homebox_api.start(u.get("user", u), url, "a@b.c", "pw", background=False)
         assert r["state"] == "done", r
-        assert (r["total"], r["added"], r["changed"], r["files"], r["log"]) == (2, 2, 0, 3, 1), r
+        assert (r["total"], r["added"], r["changed"], r["failed"], r["files"], r["listed"], r["log"]) == (2, 2, 0, 0, 3, 3, 1), r
+        assert r["version"] == ("v0.14.2" if shape == "old" else "v0.25.0")
         assert any("scheduled maintenance" in s for s in r["skipped"])
         items = {x["name"]: x for x in client.get("/api/items?archived=also").json()["items"]}
         f = client.get(f"/api/items/{items['Fridge']['id']}").json()
@@ -148,5 +162,26 @@ def test_a_csv_import_is_taken_over_and_only_editors_may(client, as_user):
         assert client.post("/api/import/homebox-server", json={"url": url, "username": "a", "password": "pw"}).status_code == 403
         sign_in(client, "alex")
         assert client.post("/api/import/homebox-server", json={"url": "http://169.254.169.254", "username": "a", "password": "pw"}).status_code == 400
+    finally:
+        srv.shutdown()
+
+
+def test_a_log_homebox_cannot_give_leaves_the_rest_and_a_homebox_that_gives_nothing_fails(client):
+    u = client.get("/api/auth/me").json()
+    srv, _ = homebox("items", broken_log=True)
+    url = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        r = homebox_api.start(u.get("user", u), url, "a@b.c", "pw", background=False)
+        assert r["state"] == "done" and (r["added"], r["failed"], r["files"], r["log"]) == (2, 0, 3, 0), r
+        assert len(r["skipped"]) == 1 and "maintenance log could not be read" in r["skipped"][0] and "500" in r["skipped"][0], r
+    finally:
+        srv.shutdown()
+    srv, _ = homebox("items", broken_things=True)
+    url = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        r = homebox_api.start(u.get("user", u), url, "a@b.c", "pw", background=False)
+        assert r["state"] == "failed" and r["failed"] == 2 and "not one of the 2 things" in r["error"], r
+        assert sorted(x.split(":")[0] for x in r["skipped"]) == ["Drill", "Fridge"], "names, not ids"
+        assert "Homebox answered 500" in r["skipped"][0] and "/api/v1/items/" in r["skipped"][0]
     finally:
         srv.shutdown()
