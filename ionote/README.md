@@ -68,9 +68,8 @@ password is used once and not written anywhere.
 
 `setup.sh` is the installer, the same as every app's of the suite (made from `shared/templates/setup.sh`): it asks
 for the notes' MariaDB/MySQL database (host, port, database, user, password; `ionote` by default), the **Shared ioSuite
-database** (below; database and user `iosuite` by default), the web port (8610), then ioNote's own questions: the
-folder for its own files (session secret, log; `data/`) and whether pictures added in the web app should have their text
-read (RapidOCR, ~60 MB); then the public address, the domain the sign-in is shared on, an admin account and, optionally,
+database** (below; database and user `iosuite` by default), the web port (8610), then ioNote's own question: whether
+pictures added in the web app should have their text read (RapidOCR, ~60 MB); then the public address, the domain the sign-in is shared on, an admin account and, optionally,
 a MariaDB administrator who creates the databases and users. Then it creates the Python environment, installs the
 packages, writes `config.env`, creates the tables and the admin and installs the service: systemd on Linux when run as
 root, a login item (launchd) on a Mac. Run it again at any time: what `config.env` holds is the default of every

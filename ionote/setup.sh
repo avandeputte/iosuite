@@ -129,7 +129,7 @@ fi
 split SUITE "$ADBS"
 [ -n "$PORT" ] || { P="$(getenv PORT)"; ask PORT "Web port" "${P:-8610}"; }
 # >>> own: questions
-[ -n "$DATA" ] || { D2="$(getenv DATA_DIR)"; ask DATA "Folder for ioNote's own files (session secret, log)" "${D2:-$APP/data}"; }
+[ -n "$DATA" ] || DATA="$(getenv DATA_DIR)"; [ -n "$DATA" ] || DATA="$APP/data"  # not asked, as in the other apps (--data sets it)
 if [ -z "$FEATURES" ]; then
   case "$(getenv OCR)" in 0) F=n;; *) F=y;; esac  # what config.env says, else on
   ask F "Read the text in pictures added in the web app (RapidOCR, ~60 MB; the Mac and iPhone apps read it themselves), y/n" "$F"
