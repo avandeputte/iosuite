@@ -1,7 +1,7 @@
 """Linked items: an event linked to its meeting notes, a task to a recipe, a note to a contact, across the apps.
 
 A link joins two items of the suite, each named by its kind and its id in its app (KINDS: event, task, note, contact,
-recipe, photo, item: a thing in ioThings). It is one row of ios_related in the Shared ioSuite database and works both ways: the task shows the
+recipe, photo, item: a thing in ioThings, asset: a house, a car or another thing of value in ioMoney). It is one row of ios_related in the Shared ioSuite database and works both ways: the task shows the
 recipe and the recipe shows the task. Nothing about the items is kept with it; what a link shows (the title, the date,
 the small picture) is asked of the item's own app every time, with the viewer's own sign-in, so a link shows only to
 someone who may see both of its items, and always as the item is now. A note is its owner's alone: an event linked to
@@ -49,6 +49,7 @@ KINDS = {
     "recipe": {"app": "iorecipe", "label": "Recipe", "plural": "Recipes"},
     "photo": {"app": "iopix", "label": "Photo", "plural": "Photos"},
     "item": {"app": "iothings", "label": "Thing", "plural": "Things"},
+    "asset": {"app": "iomoney", "label": "House or car", "plural": "Houses and cars"},
 }
 MAX_LINKS = 200  # links per item
 TIMEOUT = 5      # seconds, per request to an app
@@ -186,7 +187,7 @@ def _item(kind: str, item_id, title: str, text: str = "", when: str = None, all_
     app = KINDS[kind]["app"]
     base = links.url(app) or ""
     href = {"event": "#/event/{}", "task": "#/task/{}", "note": "#/note/{}", "contact": "#/c/{}", "recipe": "#/recipe/{}",
-            "photo": "#/photos?p={}", "item": "#/item/{}"}[kind].format(urllib.parse.quote(str(item_id)))
+            "photo": "#/photos?p={}", "item": "#/item/{}", "asset": "#/account/{}"}[kind].format(urllib.parse.quote(str(item_id)))
     return {"kind": kind, "id": str(item_id), "app": app, "title": (title or "").strip()[:120] or "(no title)",
             "text": (text or "").strip()[:140], "when": when, "allDay": bool(all_day), "done": bool(done),
             "image": image, "url": f"{base}/{href}" if base else None}
@@ -220,6 +221,13 @@ def _recipe(r: dict) -> dict:
     m = re.search(r"/photos/(\d+)$", str(r.get("photo") or ""))
     mins = r.get("totalMinutes")
     return _item("recipe", r.get("id"), r.get("title"), f"{mins} min" if mins else "", image=m.group(1) if m else None)
+
+
+def _asset(a: dict) -> dict:
+    """A house, a car or another thing of value (an account of ioMoney): its kind and what it is worth."""
+    v = a.get("estimate") if a.get("estimate") is not None else a.get("balance")
+    worth = f"{a.get('currency') or ''} {float(v):,.0f}".strip() if isinstance(v, (int, float)) else ""
+    return _item("asset", a.get("id"), a.get("name"), " · ".join(x for x in (a.get("kindLabel"), worth) if x))
 
 
 def _photo(p: dict) -> dict:
@@ -267,6 +275,8 @@ def find(request: Request, kind: str, q: str, n: int = 6) -> list[dict]:
         return [_recipe(x) for x in ask(request, app, "/api/recipes", {"q": q, "limit": n}).get("items", [])[:n]]
     if kind == "item":
         return [_thing(x) for x in ask(request, app, "/api/items", {"q": q, "limit": n}).get("items", [])[:n]]
+    if kind == "asset":
+        return [_asset(x) for x in ask(request, app, "/api/accounts", {"things": "true", "q": q}).get("items", [])[:n]]
     if kind == "photo":
         got = ask(request, app, "/api/photos", {"q": q, "type": "photo"})
         return [_photo({"id": pid, "ts": ts}) for pid, ts in list(zip(got.get("id") or [], got.get("ts") or []))[:max(n, 12)]]
@@ -295,6 +305,8 @@ def get(request: Request, kind: str, item_id: str) -> dict:
         return _photo(ask(request, app, f"/api/photo/{q}"))
     if kind == "item":
         return _thing(ask(request, app, f"/api/items/{q}"))
+    if kind == "asset":
+        return _asset(ask(request, app, f"/api/accounts/{q}"))
     raise Unavailable(404, "No such kind of item")
 
 

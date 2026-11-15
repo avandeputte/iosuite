@@ -16,7 +16,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import access, config, contacts, holiday, ical, members, model, subscribe, tasks, users, weather
+from app import access, bills, config, contacts, holiday, ical, members, model, subscribe, tasks, users, weather
 from iosuite_shared import appleprofile, prefix, users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
@@ -771,6 +771,23 @@ async def event_weather(eid: int, request: Request, start: str):
         return await run_in_threadpool(weather.at_event, r["location"], start, bool(r.get("all_day")))
     except weather.WeatherError as e:
         return {"found": False, "error": str(e)}
+
+
+# ------------------------------------------------------------------ bills from ioMoney
+
+@router.get("/api/bills", dependencies=[access.signed_in])
+def due_bills(request: Request, start: str, end: str):
+    """The household's coming bills from ioMoney (Monarch Money's recurring transactions) due from start up to end
+    (days, YYYY-MM-DD; end not included): {available, url, items: [{id, day, merchant, amount, currency, approximate,
+    frequency, category, account, paid}]}. ioMoney is asked as you, so only someone with a role there has any; when it
+    is not part of the suite, does not answer or does not let you in: {available: false, reason} and no items."""
+    s, e = _date(start, "start"), _date(end, "end")
+    if not s < e <= s + dt.timedelta(days=400):
+        raise HTTPException(400, "end comes after start, a year later at most")
+    try:
+        return {"available": True, "url": bills.url(), "items": bills.between(request, s, e)}
+    except bills.Unavailable as x:
+        return {"available": False, "reason": str(x), "url": bills.url(), "items": []}
 
 
 # ------------------------------------------------------------------ ioContact

@@ -2,7 +2,7 @@
 
 The website of the suite, in `docs/` of the suite's repository. The source of [iosuite.iothing.net](https://iosuite.iothing.net): the landing page for the ioThing suite
 ([ioPix](https://github.com/avandeputte/iosuite/tree/main/iopix), [ioNote](https://github.com/avandeputte/iosuite/tree/main/ionote),
-[ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar), [ioTask](https://github.com/avandeputte/iosuite/tree/main/iotask), [ioRecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe), [ioThings](https://github.com/avandeputte/iosuite/tree/main/iothings), [ioContact](https://github.com/avandeputte/iosuite/tree/main/iocontact),
+[ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar), [ioTask](https://github.com/avandeputte/iosuite/tree/main/iotask), [ioRecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe), [ioThings](https://github.com/avandeputte/iosuite/tree/main/iothings), [ioMoney](https://github.com/avandeputte/iosuite/tree/main/iomoney), [ioContact](https://github.com/avandeputte/iosuite/tree/main/iocontact),
 [ioHealth](https://github.com/avandeputte/iosuite/tree/main/iohealth) and the [ioStart](https://github.com/avandeputte/iosuite/tree/main/iostart) start
 page), and its guide under [/docs/](https://iosuite.iothing.net/docs/).
 

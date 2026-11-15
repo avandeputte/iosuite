@@ -81,7 +81,7 @@ ask_app_settings() {
     fi
   fi
   if [[ -z "${IODNS_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
-    IODNS_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 19 78 9 \
+    IODNS_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 20 78 10 \
       iostart "ioStart (the start page)  (8630)" OFF \
       iocalendar "ioCalendar  (8620)" OFF \
       iocontact "ioContact  (8640, LDAP 3890)" OFF \
@@ -90,6 +90,7 @@ ask_app_settings() {
       iotask "ioTask  (8670)" OFF \
       iorecipe "ioRecipe  (8690)" OFF \
       iothings "ioThings  (8700)" OFF \
+      iomoney "ioMoney  (8710)" OFF \
       iobackup "ioBackup  (8680, admin tool)" OFF 3>&1 1>&2 2>&3) || exit 1
     IODNS_ALSO=$(echo "$IODNS_ALSO" | tr -d '"' | tr ' ' ',')
   fi
@@ -147,6 +148,6 @@ echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:${IODNS_PORT:-8660}${CL}"
 for a in ${IODNS_ALSO//,/ }; do
-  case "$a" in iostart) p=8630;; iocalendar) p=8620;; iocontact) p=8640;; ionote) p=8610;; iohealth) p=8650;; iotask) p=8670;; iorecipe) p=8690;; iothings) p=8700;; iodns) p=8660;; iobackup) p=8680;; iopix) p=8600;; *) p="";; esac
+  case "$a" in iostart) p=8630;; iocalendar) p=8620;; iocontact) p=8640;; ionote) p=8610;; iohealth) p=8650;; iotask) p=8670;; iorecipe) p=8690;; iothings) p=8700;; iomoney) p=8710;; iodns) p=8660;; iobackup) p=8680;; iopix) p=8600;; *) p="";; esac
   [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
 done

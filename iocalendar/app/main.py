@@ -13,7 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 from iosuite_shared import chores, mcp as shared_mcp, pages
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, caldav, config, contacts, db, holiday, ical, mcp, model, notify, subscribe, tasks, users
+from app import __version__, api, bills, caldav, config, contacts, db, holiday, ical, mcp, model, notify, subscribe, tasks, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -76,7 +76,8 @@ auth.install(app, limit_for=_limit_for, not_found=(model.NotFound,))
 def _status_extra(request) -> dict:
     """ioCalendar's own fields of GET /api/status, beside the suite's."""
     u = request.state.user
-    return {"timezone": ical.default_tz(), "iocontact": contacts.enabled() if u else None, "iotask": tasks.enabled() if u else None, "mcp": mcp_enabled() if u else None}
+    return {"timezone": ical.default_tz(), "iocontact": contacts.enabled() if u else None, "iotask": tasks.enabled() if u else None,
+            "iomoney": bills.enabled() if u else None, "mcp": mcp_enabled() if u else None}
 
 
 app.include_router(auth.router())        # /api/auth/*: sign-in, accounts, me, settings, password, sessions, app passwords, suite
