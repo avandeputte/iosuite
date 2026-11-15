@@ -18,6 +18,7 @@ container or one database server:
 | ioTask | 8670 | `tasks` | `/opt/iotask/app` |
 | ioRecipe | 8690 | `recipe` | `/opt/iorecipe/app` |
 | ioThings | 8700 | `things` | `/opt/iothings/app` |
+| ioMoney | 8710 | `money` | `/opt/iomoney/app` |
 
 ## One line: install, add, remove, reconfigure
 

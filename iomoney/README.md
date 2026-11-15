@@ -1,0 +1,208 @@
+# ioMoney
+
+*The household's finances, in the ioThing suite (with [ioPix](https://github.com/avandeputte/iosuite/tree/main/iopix), [ioNote](https://github.com/avandeputte/iosuite/tree/main/ionote), [ioContact](https://github.com/avandeputte/iosuite/tree/main/iocontact), [ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar), [ioTask](https://github.com/avandeputte/iosuite/tree/main/iotask), [ioRecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe), [ioThings](https://github.com/avandeputte/iosuite/tree/main/iothings), [ioHealth](https://github.com/avandeputte/iosuite/tree/main/iohealth) and the [ioStart](https://github.com/avandeputte/iosuite/tree/main/iostart) start page).*
+
+A self-hosted overview of the household's money: the accounts, balances and transactions copied in from Monarch Money,
+the portfolio with its quotes from Yahoo Finance, and what the house and the cars are worth after their loans. FastAPI
+and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and the suite's shared library
+(`iosuite-shared`, in [iosuite-shared](https://github.com/avandeputte/iosuite/tree/main/shared)).
+
+## What it does
+
+- **Monarch Money**: every account Monarch has (bank accounts, credit cards, investments, loans, and the house from
+  Zillow and the cars it values) with its balance history, the transactions of the past two years, the holdings of the
+  investment accounts and the coming bills, copied in every six hours and on **Sync now**. ioMoney only reads: nothing
+  is changed in Monarch. Monarch has no public API; ioMoney uses the community's Python library
+  ([`monarchmoneycommunity`](https://pypi.org/project/monarchmoneycommunity/)), which speaks to the API Monarch's web
+  app uses.
+- **Accounts by hand** beside Monarch's: a savings account elsewhere, an investment account with what it holds, a car
+  with its value. A house or a car typed in can follow a yearly change (3 % up for a house, 15 % down for a car)
+  between the values you give it, marked as an estimate.
+- **Its value only, or its transactions**: each account says what is followed. *Its transactions* (the usual for bank
+  accounts and credit cards): they are listed, searched and counted in the spending, and in an account kept by hand
+  each one moves the balance. *Its value only* (the usual for the rest): the balance or value alone, typed in now and
+  then or as Monarch has it, and the account's transactions stay out of the lists and the spending. Changed in the
+  account's Edit, also for Monarch's accounts, and kept through the syncs.
+- **Five groups**: the accounts are shown, added up and listed in the sidebar as Cash (bank accounts), Investments,
+  Credit cards, Loans, and Assets (real estate, vehicles and other things of value).
+- **The net worth**: what the household owns less what it owes, now and day by day (a month, three, a year, five),
+  by kind of account. An account or a holding in another currency is converted at the day's rate.
+- **Transactions**: searched by words, account, category, month and direction; a category, a payee, notes or hidden
+  changed here stays as changed through later syncs (Monarch itself is not changed).
+- **Rules**: the household's rules rename the payee, set the category or hide a transaction when the payee or the
+  bank's own text contains, is or starts with some words (optionally only in one account, money out or in, between two
+  amounts). They run over what each sync brings and over a transaction added by hand; **Apply now** runs them over the
+  transactions there are. They are tried from the top, and for each of the three the first that matches wins. As a rule
+  is typed, the transactions it matches are shown; **Make a rule** on a transaction starts one from it. A transaction
+  changed by hand is left as it is. Everyone with a role sees them; editors change them.
+- **Spending**: a month by category, and twelve months of money in and out (transfers between your own accounts are
+  left out).
+- **Portfolio**: every holding with its price, today's change, its value and its gain over what it cost, by account or
+  by symbol, and the allocation. Quotes come from Yahoo Finance, without a key or an account: a symbol as Yahoo writes
+  it (AAPL, VWCE.DE on Xetra, VOD.L in London, BTC-USD), asked at most every fifteen minutes and only for what somebody
+  holds.
+- **Assets**: the house and the cars, each with its value, its loan and the equity left, its details (address; year, make, model,
+  mileage; what it cost), the values it had and the items of the other apps linked to it.
+- **Who sees it**: only the people given a role in ioMoney; others are told they have none. Viewers read; members keep
+  their own private accounts; editors and admins change the household's. Settings › Money (admins) has the
+  household's currency and Monarch Money.
+- **Bills in ioCalendar**: Monarch's recurring transactions show on the day they are due in ioCalendar, to the people
+  with a role in ioMoney (asked as them, so nobody else sees them).
+- **Everywhere**: a REST API with OpenAPI docs at `/api/docs`, and an MCP server for AI assistants.
+
+## Monarch Money's sign-in
+
+The sign-in is kept with the suite's keys and tokens (**Settings › Global settings › Keys and tokens**, ioMoney, suite
+admins), never in a config file:
+
+| Key | What it is |
+| --- | --- |
+| `monarch_email`, `monarch_password` | how you sign in to Monarch Money |
+| `monarch_mfa_secret` | the authenticator key: the text under the QR code Monarch shows when you set up an authenticator app (Monarch › Settings › Security). With it ioMoney makes the six-digit code itself, as your authenticator app does |
+| `monarch_token` | the session Monarch gives on sign-in, kept by ioMoney: later syncs use it and sign in again only when Monarch no longer takes it |
+
+Without an authenticator key, Settings › Money takes the code your authenticator app shows, once. When Monarch refuses
+the sign-in (it can ask for a CAPTCHA), the sync says so in Settings › Money; sign in at monarch.com from the same
+network, then Sync now.
+
+## Run
+
+ioMoney needs Python 3.10+ and a MariaDB or MySQL database. Give it its own database and user, for example:
+
+```sql
+CREATE DATABASE money CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'money'@'app-host' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL ON money.* TO 'money'@'app-host';
+```
+
+`app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine). The accounts and the
+suite-wide settings live in the Shared ioSuite database (`iosuite`, user `iosuite`; the one every app of the suite
+uses). The tables are created on the first start and updated by later versions by themselves.
+
+### Proxmox VE (LXC)
+
+On the Proxmox host, as root:
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iomoney/proxmox/ct/iomoney.sh)"
+```
+
+It asks for the money database, the Shared ioSuite database, the web port (8710), the time zone, the public address
+(optional), the domain the sign-in is shared on (optional) and the admin account, and which other apps of the suite go
+in the same container; then the framework's own questions. For unattended runs set `IOMONEY_DB` and `IOMONEY_SUITE_DB`
+(`host:port/db:user:password`), `IOMONEY_ADMIN` (`name:password`), `IOMONEY_PORT`, `IOMONEY_TIMEZONE`,
+`IOMONEY_PUBLIC_URL` and `IOMONEY_COOKIE_DOMAIN`.
+
+### Docker
+
+```sh
+docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
+```
+
+The image (`ghcr.io/avandeputte/iosuite/iomoney`) holds no data: everything is in the database.
+
+### Any Linux or Mac
+
+```sh
+git clone https://github.com/avandeputte/iosuite && cd iosuite/iomoney
+./setup.sh          # asks for the databases, port, time zone and admin; installs a systemd service when run as root
+./run.sh            # or start it in the foreground
+./update.sh         # later: the latest code, same settings
+```
+
+Its last step is the list of the suite's apps on this machine, to add or remove others beside ioMoney (the
+[one-line installer](../README.md#install) does the same from anywhere). `setup.sh` takes the same flags as every app
+of the suite (`--db`, `--suite-db`, `--db-admin`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`,
+`--also`, `--yes`). From a shell: `python -m app.cli sync` (`--full`: two years of transactions again), `quotes` and
+`check`.
+
+## Configuration
+
+`config.env` in the app folder (written by `setup.sh`; `config.env.example` lists every setting), or the environment,
+which wins:
+
+| Setting | Meaning |
+| --- | --- |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`money`) |
+| `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`, on `DB_HOST` unless set) |
+| `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`) |
+| `HOST`, `PORT` | where the server listens (all addresses, 8710) |
+| `TLS_CERT_FILE`, `TLS_KEY_FILE` | serve HTTPS directly instead of behind a reverse proxy |
+| `TZ` | the time zone the server log is written in |
+| `PUBLIC_URL` | the address people use (behind a proxy), for the links the MCP tools give |
+| `ADMIN_USER`, `ADMIN_PASSWORD` | the first admin, made on the first start when there are no accounts |
+| `SYNC` | `0`: no Monarch sync and no quotes in the background (Sync now and Quotes still work) |
+| `MCP` | `1` keeps the MCP server on, whatever the setting says |
+| `MCP_USER` | the account `python -m app.mcp` (stdio) acts as |
+| `UPDATE_CHECK` | `0` turns the daily version check off for good |
+| `DATA_DIR`, `LOG_FILE` | where the app writes on its own (`data/`), and the server log (`DATA_DIR/iomoney.log`) |
+
+Updates, releases, the reverse proxy and Cloudflare Access work as in every app of the suite (see
+[ioRecipe's README](../iorecipe/README.md#updates)).
+
+## API
+
+| For | Where |
+| --- | --- |
+| The net worth now and day by day, by kind | `GET /api/summary`, `GET /api/networth?days=365` |
+| Accounts: list, one, add, change, delete (by hand), history, values | `/api/accounts`, `/api/accounts/{id}`, `/api/accounts/{id}/history`, `/api/accounts/{id}/values` |
+| Transactions: search, add (by hand), change, delete | `GET /api/transactions?q=&account=&category=&month=&flow=`, `POST /api/accounts/{id}/transactions`, `/api/transactions/{id}` |
+| Spending and cash flow | `GET /api/spending?month=2026-11`, `GET /api/cashflow?months=12`, `GET /api/categories` |
+| Rules: list, add, try, apply, order, change, delete | `/api/rules`, `POST /api/rules/test`, `POST /api/rules/apply`, `PUT /api/rules/order`, `/api/rules/{id}` |
+| The portfolio and quotes | `GET /api/portfolio`, `POST /api/accounts/{id}/holdings`, `/api/holdings/{id}`, `GET /api/quotes/{symbol}`, `POST /api/quotes/refresh` |
+| Bills (Monarch's recurring transactions) | `GET /api/bills?start=&end=` |
+| Monarch Money (admins) | `GET /api/monarch`, `POST /api/monarch/sync`, `POST /api/monarch/code`, `DELETE /api/monarch/session` |
+| The household's currency, the automatic sync | `GET /api/settings`, `PUT /api/settings` (admins) |
+
+Amounts are signed as Monarch signs them: money out is negative. Settings › Account makes **app passwords** for the
+REST API (HTTP Basic, or `Authorization: Bearer <app password>`) and for MCP.
+
+```sh
+curl -u alex:APP-PASSWORD "https://money.example.com/api/networth?days=90"
+curl -u alex:APP-PASSWORD "https://money.example.com/api/transactions?q=grocer&month=2026-11"
+curl -u alex:APP-PASSWORD -X PATCH -H 'Content-Type: application/json' -d '{"category": "Party", "notes": "birthday"}' https://money.example.com/api/transactions/812
+```
+
+## MCP server
+
+Off until an admin turns it on in **Settings › Server**. The tools: `overview`, `net_worth_history`,
+`search_transactions`, `spending`, `cash_flow`, `categories`, `update_transaction`, `add_transaction`, `rules`, `add_rule`,
+`test_rule`, `update_rule`, `delete_rule`, `apply_rules`, `portfolio`,
+`get_quote`, `add_holding`, `update_holding`, `delete_holding`, `add_account`, `update_account`, `add_valuation`,
+`bills`, `sync_monarch`; and for admins `diagnostics`.
+
+```sh
+claude mcp add --transport http iomoney https://money.example.com/mcp --header "Authorization: Bearer APP-PASSWORD"
+```
+
+## Tests
+
+```sh
+pip install -e '.[test]'
+python -m pytest tests     # on a test MariaDB of its own: a Docker container it starts, or IOSUITE_TEST_DB=host:port:user:password
+```
+
+Covered: roles (none, viewer, member, editor), private and household accounts, the net worth and its history,
+accounts followed by their value or their transactions and the five groups, transactions and their search, rules (tried,
+kept, ordered, applied, run by the sync), spending and cash flow without transfers, the portfolio with a holding in another
+currency, a house's estimate and its equity after the mortgage, bills, the Monarch sync against a stand-in for the
+library (first sync, later syncs keeping local changes, a session Monarch no longer takes, a wrong sign-in, a code by
+hand), the MCP server and a person's data deleted.
+
+## Layout
+
+```
+app/main.py        the application: start-up, the background chores (Monarch sync, quotes, estimates), routes
+app/api.py         the REST API
+app/model.py       accounts, balances, transactions, holdings and bills in MariaDB: who sees and changes what, the sums
+app/monarch.py     Monarch Money: the sign-in (from the suite's keys and tokens) and the sync
+app/quotes.py      quotes and exchange rates from Yahoo Finance
+app/persondata.py  what a person keeps here, for the suite's delete-a-person
+app/mcp/           the MCP server: money and admin tools
+static/            the web app (index.html, app.js, app.css, icons)
+proxmox/           the community-scripts LXC installer      setup.sh, run.sh, update.sh, Dockerfile
+```
+
+## License
+
+GPL-3.0-or-later (the GNU General Public License, version 3 or later).

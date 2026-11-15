@@ -98,6 +98,7 @@ nav:
       - ioTask: apps/iotask.md
       - ioRecipe: apps/iorecipe.md
       - ioThings: apps/iothings.md
+      - ioMoney: apps/iomoney.md
       - ioContact: apps/iocontact.md
       - ioHealth: apps/iohealth.md
       - ioStart start page: apps/iostart.md

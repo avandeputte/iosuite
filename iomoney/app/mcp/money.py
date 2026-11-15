@@ -1,0 +1,314 @@
+"""The money tools, with the same permissions as the web app: nobody without a role in ioMoney sees anything, a
+viewer only reads, a member keeps private accounts of their own, editors and admins change the household's."""
+import datetime as dt
+from typing import Literal, Optional
+
+from mcp.server.mcpserver.exceptions import ToolError
+
+from app import __version__, config, model, monarch, quotes
+from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, clamp, find_account, guard, link, need_admin, server, who
+
+
+def _need_role(u: dict) -> None:
+    if model.role_rank(u) < 1:
+        raise ToolError("You have no role in ioMoney: a suite admin gives one (Settings › Security)")
+
+
+def _acct(u: dict, a: dict) -> dict:
+    j = model.account_public(a, u)
+    j["youCanChange"] = j.pop("writable")
+    if link(f"account/{a['id']}"):
+        j["webUrl"] = link(f"account/{a['id']}")
+    return {k: v for k, v in j.items() if v not in (None, "", [], {}) or k in ("balance", "value")}
+
+
+@server.tool(annotations=READ_ONLY)
+def overview() -> dict:
+    """Who you are, the household's currency, the net worth now (assets, what is owed, by kind), the accounts with
+    their balances, and when Monarch Money was last synced. Start here."""
+    u = who()
+    _need_role(u)
+    return {"you": {"name": u["name"], "role": u.get("role")}, "currency": model.home_currency(),
+            "netWorth": model.net_worth(u), "accounts": [_acct(u, a) for a in model.accounts(u)],
+            "monarchLastSync": monarch.status()["lastGood"], "version": __version__, "webApp": config.PUBLIC_URL or None}
+
+
+@server.tool(annotations=READ_ONLY)
+def net_worth_history(days: int = 365, kind: Optional[str] = None, account: Optional[str] = None) -> list:
+    """The net worth day by day over the past days (weekly beyond three months, monthly beyond two years), in the
+    household's currency. kind: one kind's value only (cash, investment, property, vehicle, credit, loan, ...);
+    account: one account's (its id or name)."""
+    u = who()
+    _need_role(u)
+    aid = find_account(u, account)["id"] if account else None
+    return model.history(u, clamp(days, 7, 3660), kind=kind, account_id=aid)
+
+
+@server.tool(annotations=READ_ONLY)
+def search_transactions(query: Optional[str] = None, account: Optional[str] = None, category: Optional[str] = None,
+                        start: Optional[str] = None, end: Optional[str] = None, flow: Optional[Literal["in", "out"]] = None,
+                        limit: int = 50) -> dict:
+    """Transactions, the newest first: query (words in the payee, the bank's text, the category, the notes),
+    account (id or name), category (exact name), start and end (YYYY-MM-DD), flow (out: money out; in: money in).
+    With how many match and their sum."""
+    u = who()
+    _need_role(u)
+    aid = find_account(u, account)["id"] if account else None
+    r = guard(model.find_transactions, u, query or "", aid, category, start, end, flow, clamp(limit, 1, 500))
+    for t in r["items"]:
+        for k in ("writable", "edited", "source"):
+            t.pop(k, None)
+    return r
+
+
+@server.tool(annotations=READ_ONLY)
+def spending(month: Optional[str] = None, start: Optional[str] = None, end: Optional[str] = None) -> dict:
+    """Money out and in by category for a month (YYYY-MM; this month as left out) or between start and end
+    (YYYY-MM-DD), in the household's currency; transfers between the household's own accounts left out."""
+    u = who()
+    _need_role(u)
+    if not (start and end):
+        from app.api import _month_bounds
+        start, end = guard(_month_bounds, month)
+    return guard(model.spending, u, start, end)
+
+
+@server.tool(annotations=READ_ONLY)
+def cash_flow(months: int = 12) -> list:
+    """Money in, money out and what was left, month by month, the current month last."""
+    u = who()
+    _need_role(u)
+    return model.cash_flow(u, clamp(months, 1, 60))
+
+
+@server.tool(annotations=READ_ONLY)
+def categories() -> list:
+    """The categories in use (with their group and how many transactions have each)."""
+    u = who()
+    _need_role(u)
+    return model.categories(u)
+
+
+@server.tool(annotations=WRITES)
+def update_transaction(transaction_id: int, category: Optional[str] = None, notes: Optional[str] = None,
+                       hidden: Optional[bool] = None, merchant: Optional[str] = None) -> dict:
+    """Change a transaction: its category, notes, payee name, or hidden (left out of the sums). Kept as changed
+    here, also by the next Monarch sync (Monarch itself is not changed)."""
+    u = who()
+    b = {k: v for k, v in {"category": category, "notes": notes, "hidden": hidden, "merchant": merchant}.items() if v is not None}
+    t = guard(model.update_transaction, u, guard(model.transaction, u, transaction_id), b)
+    return model.tx_public(t)
+
+
+@server.tool(annotations=ADDS)
+def add_transaction(account: str, amount: float, day: Optional[str] = None, merchant: Optional[str] = None,
+                    category: Optional[str] = None, notes: Optional[str] = None) -> dict:
+    """A transaction in a manual account (id or name): amount negative for money out; day YYYY-MM-DD (today as left out)."""
+    u = who()
+    a = find_account(u, account)
+    t = guard(model.create_transaction, u, a, {"amount": amount, "day": day, "merchant": merchant, "category": category, "notes": notes})
+    return model.tx_public(t)
+
+
+@server.tool(annotations=READ_ONLY)
+def rules() -> dict:
+    """The household's rules for transactions, in the order they are tried: when the payee or the bank's text matches
+    (contains, is, starts), the payee is renamed, the category set or the transaction hidden."""
+    u = who()
+    _need_role(u)
+    return {"items": [model.rule_public(r, u) for r in model.rules(u)]}
+
+
+@server.tool(annotations=ADDS)
+def add_rule(pattern: str, rename_to: Optional[str] = None, category: Optional[str] = None, hide: Optional[bool] = None,
+             field: Literal["either", "merchant", "description"] = "either", how: Literal["contains", "is", "starts"] = "contains",
+             account: Optional[str] = None, flow: Optional[Literal["out", "in"]] = None, amount_min: Optional[float] = None,
+             amount_max: Optional[float] = None, apply_now: bool = True) -> dict:
+    """A rule (editors): the transactions whose payee (field merchant), bank's text (description) or either
+    contains / is / starts with pattern (any case), optionally only in one account (id or name), money out or in,
+    between two amounts, get the payee rename_to, the category, and/or are hidden. apply_now: also over the
+    transactions there are now (those changed by hand stay as they are). Try it first with test_rule."""
+    u = who()
+    b = {"pattern": pattern, "field": field, "how": how, "flow": flow, "amountMin": amount_min, "amountMax": amount_max,
+         "setMerchant": rename_to, "setCategory": category, "setHidden": hide}
+    if account:
+        b["accountId"] = find_account(u, account)["id"]
+    r = guard(model.create_rule, u, b)
+    out = model.rule_public(r, u)
+    if apply_now:
+        out["changed"] = model.apply_rules()
+    return out
+
+
+@server.tool(annotations=READ_ONLY)
+def test_rule(pattern: str, field: Literal["either", "merchant", "description"] = "either",
+              how: Literal["contains", "is", "starts"] = "contains", account: Optional[str] = None,
+              flow: Optional[Literal["out", "in"]] = None, amount_min: Optional[float] = None, amount_max: Optional[float] = None) -> dict:
+    """Which transactions a rule would match, without keeping it: how many, how many of them were changed by hand
+    (a rule leaves those), and the newest few."""
+    u = who()
+    _need_role(u)
+    b = {"pattern": pattern, "field": field, "how": how, "flow": flow, "amountMin": amount_min, "amountMax": amount_max}
+    if account:
+        b["accountId"] = find_account(u, account)["id"]
+    return guard(model.try_rule, u, b)
+
+
+@server.tool(annotations=WRITES)
+def update_rule(rule_id: int, pattern: Optional[str] = None, rename_to: Optional[str] = None, category: Optional[str] = None,
+                hide: Optional[bool] = None, enabled: Optional[bool] = None, position: Optional[int] = None,
+                apply_now: bool = False) -> dict:
+    """Change a rule (its id, from rules): only what is given changes; rename_to or category '' takes that action
+    away. position: where it is tried (1 first)."""
+    u = who()
+    b = {k: v for k, v in {"pattern": pattern, "setMerchant": rename_to, "setCategory": category, "setHidden": hide,
+                           "enabled": enabled, "position": position}.items() if v is not None}
+    r = guard(model.update_rule, u, guard(model.rule, u, rule_id), b)
+    out = model.rule_public(r, u)
+    if apply_now:
+        out["changed"] = model.apply_rules()
+    return out
+
+
+@server.tool(annotations=DELETES)
+def delete_rule(rule_id: int) -> dict:
+    """Remove a rule (its id, from rules). The transactions it changed keep their payee and category until Monarch
+    sends them again. Ask first."""
+    u = who()
+    r = guard(model.rule, u, rule_id)
+    guard(model.delete_rule, u, r)
+    return {"deleted": r["pattern"]}
+
+
+@server.tool(annotations=WRITES)
+def apply_rules() -> dict:
+    """Run every rule over every transaction (except those changed by hand): how many changed (editors)."""
+    u = who()
+    return {"changed": guard(model.apply_all_rules, u)}
+
+
+@server.tool(annotations=READ_ONLY)
+def portfolio(account: Optional[str] = None) -> dict:
+    """Every holding, priced with the latest quote: shares, price, value, the day's change, the gain over the cost
+    basis; the totals; the same symbol added up across accounts; the allocation by kind. account: one account only."""
+    u = who()
+    _need_role(u)
+    aid = find_account(u, account)["id"] if account else None
+    return model.portfolio(u, aid)
+
+
+@server.tool(annotations=READ_ONLY)
+def get_quote(symbol: str) -> dict:
+    """The latest price of a symbol as Yahoo Finance writes it (AAPL, VWCE.DE, BTC-USD, EURUSD=X), with the previous
+    close and the day's change; asked of Yahoo when the one kept is more than 15 minutes old."""
+    u = who()
+    _need_role(u)
+    s = guard(model.symbol, symbol)
+    if not s:
+        raise ToolError("Name a symbol")
+    return quotes.quote(s)
+
+
+@server.tool(annotations=ADDS)
+def add_holding(account: str, symbol: Optional[str] = None, shares: float = 0, cost_basis: Optional[float] = None,
+                name: Optional[str] = None, kind: Optional[str] = None, price: Optional[float] = None) -> dict:
+    """Add a holding to a manual investment account (id or name): symbol as Yahoo Finance writes it, shares, and
+    cost_basis (what was paid for all of them). Something without a symbol: a name and a price. kind: stock, etf,
+    fund, bond, crypto, cash, option or other."""
+    u = who()
+    a = find_account(u, account)
+    b = {"symbol": symbol, "shares": shares, "costBasis": cost_basis, "name": name, "kind": kind or "stock"}
+    if price is not None:
+        b["price"] = price
+    h = guard(model.create_holding, u, a, b)
+    if h["symbol"]:
+        quotes.refresh(symbols=[h["symbol"]])
+    model.revalue_manual_investments()
+    return next((p for p in model.portfolio(u, a["id"])["items"] if p["id"] == h["id"]), {"id": h["id"]})
+
+
+@server.tool(annotations=WRITES)
+def update_holding(holding_id: int, shares: Optional[float] = None, cost_basis: Optional[float] = None,
+                   price: Optional[float] = None, name: Optional[str] = None) -> dict:
+    """Change a manual holding (its id, from portfolio): only what is given changes."""
+    u = who()
+    b = {k: v for k, v in {"shares": shares, "costBasis": cost_basis, "price": price, "name": name}.items() if v is not None}
+    h = guard(model.update_holding, u, guard(model.holding, u, holding_id), b)
+    model.revalue_manual_investments()
+    return {"id": h["id"], "shares": float(h["shares"])}
+
+
+@server.tool(annotations=DELETES)
+def delete_holding(holding_id: int) -> dict:
+    """Remove a manual holding (its id, from portfolio). Ask first."""
+    u = who()
+    h = guard(model.holding, u, holding_id)
+    guard(model.delete_holding, u, h)
+    model.revalue_manual_investments(h["account_id"])
+    return {"deleted": h["symbol"] or h["name"]}
+
+
+@server.tool(annotations=ADDS)
+def add_account(name: str, kind: str, balance: float = 0, currency: Optional[str] = None, institution: Optional[str] = None,
+                household: Optional[bool] = None, yearly_rate: Optional[float] = None, track: Optional[str] = None) -> dict:
+    """A manual account: kind cash, investment, property (a house), vehicle (a car), other_asset, credit, loan or
+    other_liability; track 'value' (its balance or value alone) or 'transactions' (its transactions move the balance;
+    left out, transactions for cash and credit cards, the value for the rest); balance (for a house or a car, what it is worth; for a loan, what is owed); currency (the
+    household's as left out); household true for the household's (editors), false for your own. yearly_rate: for a
+    house or a car, the change a year in percent used to estimate its value between valuations (3, or -15)."""
+    u = who()
+    b = {"name": name, "kind": kind, "balance": balance, "currency": currency, "institution": institution, "track": track}
+    if household is not None:
+        b["household"] = household
+    if yearly_rate is not None:
+        b["details"] = {"yearlyRate": yearly_rate}
+    return _acct(u, guard(model.create_account, u, b))
+
+
+@server.tool(annotations=WRITES)
+def update_account(account: str, name: Optional[str] = None, hidden: Optional[bool] = None, in_net_worth: Optional[bool] = None,
+                   balance: Optional[float] = None, loan: Optional[str] = None, yearly_rate: Optional[float] = None,
+                   track: Optional[str] = None) -> dict:
+    """Change an account (id or name): its name, hidden, counted in the net worth, the balance (manual accounts),
+    the loan against a house or a car (the loan's id or name; '' for none), its yearly change in percent, and what
+    is followed: track 'value' (the balance or value alone, its transactions out of sight) or 'transactions'."""
+    u = who()
+    a = find_account(u, account)
+    b = {}
+    for k, v in (("name", name), ("hidden", hidden), ("inNetWorth", in_net_worth), ("balance", balance), ("track", track)):
+        if v is not None:
+            b[k] = v
+    if loan is not None:
+        b["loanId"] = find_account(u, loan)["id"] if loan else None
+    if yearly_rate is not None:
+        b["details"] = {"yearlyRate": yearly_rate}
+    return _acct(u, guard(model.update_account, u, a, b))
+
+
+@server.tool(annotations=WRITES)
+def add_valuation(account: str, value: float, day: Optional[str] = None, note: Optional[str] = None) -> dict:
+    """What a manual house, car or other asset (id or name) was worth on a day (YYYY-MM-DD, today as left out), e.g.
+    from an appraisal or a price guide. Accounts from Monarch Money get their value from Monarch."""
+    u = who()
+    a = find_account(u, account)
+    guard(model.add_valuation, u, a, {"value": value, "day": day, "note": note})
+    return _acct(u, model.account(u, a["id"]))
+
+
+@server.tool(annotations=READ_ONLY)
+def bills(start: Optional[str] = None, end: Optional[str] = None) -> list:
+    """The bills (Monarch's recurring transactions) between start and end (YYYY-MM-DD; today to a month ahead as
+    left out): day, payee, amount, the account it is paid from, paid or not."""
+    u = who()
+    _need_role(u)
+    s = guard(model.day, start) if start else dt.date.today()
+    e = guard(model.day, end) if end else s + dt.timedelta(days=31)
+    return model.bills(u, s, e)
+
+
+@server.tool(annotations=WRITES)
+def sync_monarch() -> dict:
+    """Admins: copy Monarch Money in now (accounts, balances, transactions, holdings, bills) and say how it went."""
+    u = who()
+    need_admin()
+    return monarch.sync(u["id"])

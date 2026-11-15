@@ -34,6 +34,7 @@ those manage the accounts in the Shared ioSuite database, whether one app uses t
 | Shared task lists, in Apple Reminders too | [ioTask](../apps/iotask.md) |
 | The family's recipes, typed in or imported from the web | [ioRecipe](../apps/iorecipe.md) |
 | Everything you own, its manuals, warranties and upkeep (instead of Homebox) | [ioThings](../apps/iothings.md) |
+| The household's net worth, transactions from Monarch Money, a portfolio, the house and the cars | [ioMoney](../apps/iomoney.md) |
 | A family address book on every phone and in every mail app | [ioContact](../apps/iocontact.md) |
 | Your Apple Health data, kept and charted at home | [ioHealth](../apps/iohealth.md) and the ioHealthSync iPhone app |
 

@@ -45,7 +45,7 @@ From a shell, in any app's folder:
 
 Delete an account under **Settings › Security › People**: open the person and press Delete. Before anything happens,
 the panel asks every app what is only that person's and lists it: their private calendars, lists, address book,
-recipes and cookbooks, notes, health data, favourites, private albums, own bookmarks and home page layout, and their
+recipes and cookbooks, private money accounts, notes, health data, favourites, private albums, own bookmarks and home page layout, and their
 sessions, app passwords and notification devices. To go ahead you type their user name. Each app then removes its
 part, the account goes, and the panel shows what was removed.
 

@@ -157,7 +157,7 @@ export const RANK = { none: 0, viewer: 1, member: 2, editor: 3, admin: 4 };
 export const roleAtLeast = (r) => (RANK[S.user && S.user.role] || 0) >= RANK[r];
 export const canOwn = () => roleAtLeast('member');
 export const canShared = () => roleAtLeast('editor');
-export const S = { status: {}, user: null, suite: [], settings: {}, cals: [], hidden: new Set(), members: [], who: new Set(), view: 'month', date: dayStart(new Date()), occ: [], q: '', mini: null, editing: null, tasks: { items: [] } };
+export const S = { status: {}, user: null, suite: [], settings: {}, cals: [], hidden: new Set(), members: [], who: new Set(), view: 'month', date: dayStart(new Date()), occ: [], q: '', mini: null, editing: null, tasks: { items: [] }, bills: { items: [] } };
 export const calOf = (id) => S.cals.find((c) => c.id === id) || {};
 export const colorOf = (id) => calOf(id).color || 'var(--brand)';
 export const writable = () => S.cals.filter((c) => c.writable);
@@ -203,6 +203,29 @@ export async function tickTask(o) {
     toast(next ? `Done. It comes back on ${next}` : r.done ? 'Done' : 'Open again');
   } catch (e) { fail(e); }
   if (['month', 'week', 'day', 'agenda'].includes(route().view)) drawView();
+}
+// the household's coming bills from ioMoney (Monarch Money's recurring transactions), for those with a role there
+export const billsOn = () => !!S.status.iomoney && S.settings.hideBills !== '1';
+/** ioMoney did answer this person (a role there): the sidebar offers the bills, and remembers why they are away. */
+export const billsOffered = () => !!S.status.iomoney && !/not part of the suite|No role/.test(S.bills.reason || '');
+export const billOcc = (b) => ({ ...b, bill: true, allDay: true, title: b.merchant, start: b.day, end: ymd(addDays(parseDay(b.day), 1)) });
+export function toggleBills() {
+  saveSettings({ hideBills: billsOn() ? '1' : '' });
+  drawNav();
+  if (['month', 'week', 'day', 'agenda'].includes(route().view)) drawView();
+}
+const moneyFmt = {};
+export function billAmount(o) {
+  const cur = o.currency || 'USD';
+  let s;
+  try { s = (moneyFmt[cur] = moneyFmt[cur] || new Intl.NumberFormat([], { style: 'currency', currency: cur })).format(Math.abs(+o.amount || 0)); } catch { s = `${Math.abs(+o.amount || 0).toFixed(2)} ${cur}`; }
+  return `${o.approximate ? '≈ ' : ''}${o.amount > 0 ? '+' : ''}${s}`;
+}
+export const billTitle = (o) => `${o.merchant}: ${billAmount(o)}${o.amount > 0 ? ' in' : ''}\n${[o.category, o.account, o.frequency, o.paid ? 'paid' : null].filter(Boolean).join(' · ')}`;
+export function openBill(o) { if (S.bills.url) window.open(`${S.bills.url}/#/transactions?${new URLSearchParams({ q: o.merchant })}`, '_blank', 'noopener'); }
+export function billChip(o) {
+  return h('div', { class: `chip-ev bill ${o.paid ? 'done' : ''}`, style: { '--c': '#94650a' }, title: billTitle(o), onclick: (ev) => { ev.stopPropagation(); openBill(o); } },
+    h('span', { class: 'bm' }, '$'), h('span', { class: 'nm' }, o.merchant), h('span', { class: 'amt' }, billAmount(o)));
 }
 export const taskTitle = (o) => `${o.title}\n${o.list ? `${o.list} · ` : ''}${o.allDay ? 'Due this day' : `Due at ${fmtTime(span(o)[0])}`}${o.done ? ' · done' : ''}${o.repeats ? ' · repeats' : ''}`;
 export function taskChip(o) {
