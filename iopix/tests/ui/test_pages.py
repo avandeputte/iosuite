@@ -587,7 +587,7 @@ def test_settings_explain_the_model_choices(page, server):
 def test_a_paused_job_says_why_and_can_be_tried_again(page, server):
     """A job stopped twice for memory shows as paused with the reason and Try again, which asks for that job; the
     memory line above the table says what is in use and which job was stopped last."""
-    gb, asked = 1024 ** 3, []
+    gb = 1024 ** 3
     why = "it needed more memory than analysis may use on this server (the most is 6.0 GB)"
 
     def analysis(route):
@@ -599,7 +599,7 @@ def test_a_paused_job_says_why_and_can_be_tried_again(page, server):
         route.fulfill(response=r, json=a)
 
     page.route("**/api/analysis", analysis)
-    page.route("**/api/analysis/run", lambda route: (asked.append(route.request.post_data_json), route.fulfill(json={"ok": True})))
+    page.route("**/api/analysis/run", lambda route: route.fulfill(json={"ok": True}))
     page.goto(server + "/#/settings/ai")
     row = page.locator(".mtable tr[data-job=quality]")
     row.locator(".mheld").wait_for(timeout=15000)
@@ -607,8 +607,11 @@ def test_a_paused_job_says_why_and_can_be_tried_again(page, server):
     assert why in row.locator(".mheld").inner_text()
     mem = page.locator(".mmem").inner_text()
     assert "3.0 GB of 10.0 GB in use" in mem and "up to 6.0 GB" in mem and "Last stopped: Sharpness and exposure" in mem
-    row.locator(".mheld button").click()
-    assert _eventually(lambda: asked == [{"job": "quality"}]), asked
+    # waited for through Playwright: a route handler runs only while Playwright is working, never during a plain
+    # sleep, so polling a list it fills saw nothing on a slower runner
+    with page.expect_request("**/api/analysis/run") as req:
+        row.locator(".mheld button").click()
+    assert req.value.post_data_json == {"job": "quality"}
 
 
 SHOWN = "(id) => { return [...document.querySelectorAll('#grid img')].some((i) => new RegExp(`(^|/)thumb/${id}(\\D|$)`).test(i.getAttribute('src'))); }"  # the photo's tile is on the page

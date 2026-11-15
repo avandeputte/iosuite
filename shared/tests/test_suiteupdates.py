@@ -203,8 +203,18 @@ def test_the_restart_that_ends_update_sh_is_not_a_failure(tmp_path, monkeypatch)
             break
         time.sleep(0.05)
     assert cal.progress["error"] is None
+    # the restart is under way: the row says "running" until the new version starts, so the Updates page keeps
+    # following an app that takes a while to come back (it would otherwise see the old version and stop)
+    suiteupdates.publish("iocalendar", installed="1.0.0", latest="1.1.0", status="update")
     a = suiteupdates.overview()[0]
-    assert a["state"] == "ok" and a["message"] == "updated to 1.1.0"
+    assert a["state"] == "running" and a["message"] == "updated to 1.1.0; restarting"
+    assert suiteupdates.summary()["status"] == "updating"
+    (tmp_path / "next").mkdir()
+    new = updater(tmp_path / "next", monkeypatch, version="1.1.0")
+    new.result_file = cal.result_file
+    new._said_hello()
+    a = suiteupdates.overview()[0]
+    assert a["state"] == "ok" and a["message"] == "updated to 1.1.0" and suiteupdates.summary()["status"] == "current"
 
     # a row an older version marked failed that way is put right by the next start
     suiteupdates.publish("iocalendar", state="failed", message="==> Restarting the service")
