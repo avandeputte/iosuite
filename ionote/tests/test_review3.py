@@ -32,14 +32,14 @@ def test_what_a_deletion_leaves_behind_goes_after_a_while(client, admin):
     assert notes.purge_deleted() == {"folders": 0, "changes": 0}
     long_ago = time.time() - 200 * 86400
     with db.tx() as con:
-        con.execute("UPDATE nts_notes SET updated_at = ? WHERE uuid = ?", (long_ago, NID))
-        con.execute("UPDATE nts_folders SET updated_at = ? WHERE uuid = ?", (long_ago, f["id"]))
-        con.execute("UPDATE nts_change_log SET created_at = ? WHERE uuid = ?", (int(long_ago), NID))
+        con.execute("UPDATE nts_notes SET updated_at = %s WHERE uuid = %s", (long_ago, NID))
+        con.execute("UPDATE nts_folders SET updated_at = %s WHERE uuid = %s", (long_ago, f["id"]))
+        con.execute("UPDATE nts_change_log SET created_at = %s WHERE uuid = %s", (int(long_ago), NID))
     notes.housekeeping()
     with db.connect() as con:
-        r = con.execute("SELECT title, body, tags, deleted FROM nts_notes WHERE uuid = ?", (NID,)).fetchone()
+        r = con.execute("SELECT title, body, tags, deleted FROM nts_notes WHERE uuid = %s", (NID,)).fetchone()
         assert (r["title"], r["body"], r["tags"], r["deleted"]) == ("", "", "[]", notes.PURGED)
-        assert con.execute("SELECT name FROM nts_folders WHERE uuid = ?", (f["id"],)).fetchone()[0] == ""
+        assert con.execute("SELECT name FROM nts_folders WHERE uuid = %s", (f["id"],)).fetchone()[0] == ""
         assert con.execute("SELECT count(*) FROM nts_change_counter").fetchone()[0] == 1
     # a device that syncs from the start still learns of the deletion, and the rev goes on from where it was
     s = client.get("/api/sync").json()

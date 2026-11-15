@@ -60,7 +60,7 @@ def test_plan_shares_the_answers(tmp_path):
 
 
 def test_plan_without_an_app_database_lends_the_shared_one(tmp_path):
-    cfg = install.read_env_file(tmp_path / "missing")  # ionote on SQLite: no DB_* at all
+    cfg = install.read_env_file(tmp_path / "missing")  # no app database yet (ioPix before its set-up page): no DB_* at all
     cfg.update(IOSUITE_DB_HOST="db.lan", IOSUITE_DB_PASSWORD="pw")
     [e] = install.plan(["iohealth"], cfg, tmp_path, service=False)
     assert e["env"]["IOHEALTH_DB"] == "db.lan:3306/health:iosuite:pw"

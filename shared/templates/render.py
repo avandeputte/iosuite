@@ -25,7 +25,7 @@ ROOT = HERE.parent.parent
 SIMPLE = ["iostart", "iocalendar", "iocontact", "iohealth", "iotask", "iodns", "iobackup", "iorecipe"]
 EVERY = SIMPLE + ["ionote", "iopix"]
 # template -> (the file it makes, relative to the repository, and the apps that have one made from it); ioNote and
-# ioPix keep their own setup.sh and workflow (SQLite, a data folder, digiKam and the photo folders)
+# ioPix keep their own setup.sh and workflow (a data folder and text recognition; digiKam and the photo folders)
 KINDS = {
     "setup.sh": ("{app}/setup.sh", SIMPLE),
     "run.sh": ("{app}/run.sh", EVERY),

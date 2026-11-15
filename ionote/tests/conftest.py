@@ -1,9 +1,7 @@
-"""Test set-up: a scratch DATA_DIR and a scratch database, emptied before every test; the Shared ioSuite database on a
-test MariaDB of their own (iosuite_shared.testing: Docker, or IOSUITE_TEST_DB).
-
-SQLite by default. With IONOTE_TEST_DB=mysql the same tests run on MySQL/MariaDB, on the database named by
-IONOTE_TEST_DB_HOST / _PORT / _NAME / _USER / _PASSWORD (default 127.0.0.1:3306, notes_test, notes/notes);
-CI runs both."""
+"""Test set-up: a scratch DATA_DIR, and a test MariaDB of their own (iosuite_shared.testing: a Docker container, or
+the server named by IOSUITE_TEST_DB=host:port:user:password) with two scratch databases, ionote_test for the notes and
+ionote_test_auth for the shared accounts, never a live one. Every test begins with empty tables. Without a test server
+the suite is skipped."""
 import os
 import tempfile
 
@@ -15,18 +13,15 @@ os.environ.pop("ADMIN_USER", None)
 os.environ.pop("ADMIN_PASSWORD", None)
 os.environ["UPDATE_CHECK"] = "0"
 os.environ["LOG_FILE"] = ""  # no server log from the tests
-if os.environ.get("IONOTE_TEST_DB") == "mysql":
-    os.environ.update(DB_TYPE="mysql", DB_HOST=os.environ.get("IONOTE_TEST_DB_HOST", "127.0.0.1"),
-                      DB_PORT=os.environ.get("IONOTE_TEST_DB_PORT", "3306"), DB_NAME=os.environ.get("IONOTE_TEST_DB_NAME", "notes_test"),
-                      DB_USER=os.environ.get("IONOTE_TEST_DB_USER", "notes"), DB_PASSWORD=os.environ.get("IONOTE_TEST_DB_PASSWORD", "notes"))
-else:
-    os.environ["DB_TYPE"] = "sqlite"
 # the shared accounts (iosuite-shared): a fresh database on the test MariaDB (a Docker container, or
 # IOSUITE_TEST_DB=host:port:user:password), never the suite's live `iosuite`
 from iosuite_shared import testing as _authtest  # noqa: E402
 
 if _authtest.server() is None:
-    pytest.skip(f"{_authtest.server.reason}: the shared accounts need a MariaDB (Docker, or IOSUITE_TEST_DB=host:port:user:password)", allow_module_level=True)
+    pytest.skip(f"{_authtest.server.reason}: the tests need a MariaDB (Docker, or IOSUITE_TEST_DB=host:port:user:password)", allow_module_level=True)
+_s = _authtest.server()
+os.environ.update(DB_HOST=_s["host"], DB_PORT=str(_s["port"]), DB_USER=_s["user"], DB_PASSWORD=_s["password"], DB_NAME="ionote_test")
+_authtest.fresh_database("ionote_test")
 os.environ.update(_authtest.auth_env("ionote_test_auth"))  # IOSUITE_DB_*: the test database, never one named in the shell
 
 from app import db, notes  # noqa: E402

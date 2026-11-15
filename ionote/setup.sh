@@ -25,17 +25,17 @@
 #                                 answers as the defaults (each app's own setup.sh)
 #   --apps                        only that: show the apps that are here; tick or untick them, or pick one to
 #                                 reconfigure (no other question). Without --yes, every run ends with this list
-# ioNote's own: --sqlite (a SQLite file in the data folder instead, a quick try)   --data DIR   --features ocr|none
+# ioNote's own: --data DIR   --features ocr|none
 set -e
 cd "$(dirname "$0")"
 APP="$(pwd)"
 OS="$(uname -s)"
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-YES=0; MYSQL=""; SUITE=""; SQLITE=0; FEATURES=""; PORT=""; PUBURL=""; COOKIE=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""; ALSO=""; DBADMIN=""; REMOVE=""; REDO=""; APPSONLY=0; NOAPPS=0
+YES=0; MYSQL=""; SUITE=""; FEATURES=""; PORT=""; PUBURL=""; COOKIE=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""; ALSO=""; DBADMIN=""; REMOVE=""; REDO=""; APPSONLY=0; NOAPPS=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --yes) YES=1; shift;; --db) MYSQL="$2"; shift 2;; --suite-db) SUITE="$2"; shift 2;; --sqlite) SQLITE=1; shift;;
+    --yes) YES=1; shift;; --db) MYSQL="$2"; shift 2;; --suite-db) SUITE="$2"; shift 2;;
     --features) FEATURES="$2"; shift 2;; --port) PORT="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;; --cookie-domain) COOKIE="$2"; shift 2;;
     --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;; --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;;
     --data) DATA="$2"; shift 2;; --python) PY="$2"; shift 2;; --also) ALSO="$2"; shift 2;; --remove) REMOVE="$2"; shift 2;; --reconfigure) REDO="$2"; shift 2;; --apps) APPSONLY=1; shift;; --db-admin) DBADMIN="$2"; shift 2;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
@@ -108,17 +108,15 @@ pyok "$PY" || die "python3 (3.10 or newer) is needed (found ${PY:-none})"
 say "Database"
 [ -n "$DATA" ] || DATA="$(getenv DATA_DIR)"
 ask DATA "Folder for ioNote's own files (session secret, log)" "${DATA:-$APP/data}"
-if [ -z "$MYSQL" ] && [ "$SQLITE" = 0 ]; then
-  # what config.env names stays, unless asked to change it (a SQLite install stays one too, also with --yes)
-  if [ -n "$(getenv DB_TYPE)" ] && ! yesno "config.env already names a database ($(getenv DB_TYPE)); change it?" n; then
+if [ -z "$MYSQL" ]; then
+  # what config.env names stays, unless asked to change it
+  if [ -n "$(getenv DB_HOST)" ] && ! yesno "config.env already names a database ($(getenv DB_HOST)/$(getenv DB_NAME)); change it?" n; then
     MYSQL="keep"
-  elif yesno "Keep the notes in MariaDB/MySQL (no: a SQLite file in the data folder, for a quick try)?" y; then
+  else
     MH="$(getenv DB_HOST)"; MP="$(getenv DB_PORT)"; MD="$(getenv DB_NAME)"; MU="$(getenv DB_USER)"
     ask MH "MariaDB host" "${MH:-127.0.0.1}"; ask MP "port" "${MP:-3306}"; ask MD "database (created if the user may)" "${MD:-notes}"; ask MU "user" "${MU:-notes}"
     secret MW "password (empty: keep the current one)"; [ -n "$MW" ] || MW="$(getenv DB_PASSWORD)"
     MYSQL="$MH:$MP/$MD:$MU:$MW"
-  else
-    SQLITE=1
   fi
 fi
 say "Shared ioSuite database"
@@ -190,9 +188,7 @@ OLD=""; [ -f "$ENVF" ] && OLD="$(grep -vE '^(#|DATA_DIR=|PORT=|OCR=|PUBLIC_URL=|
     echo "$KEEP" | grep -vE '^DB_' | grep -v '^$' || true
     if [ -n "$MYSQL" ]; then
       hp=${MYSQL%%/*}; rest=${MYSQL#*/}; db=${rest%%:*}; rest=${rest#*:}; us=${rest%%:*}; pw=${rest#*:}
-      echo "DB_TYPE=mysql"; echo "DB_HOST=${hp%%:*}"; echo "DB_PORT=${hp##*:}"; echo "DB_NAME=$db"; echo "DB_USER=$us"; echo "DB_PASSWORD=$pw"
-    else
-      echo "DB_TYPE=sqlite"
+      echo "DB_HOST=${hp%%:*}"; echo "DB_PORT=${hp##*:}"; echo "DB_NAME=$db"; echo "DB_USER=$us"; echo "DB_PASSWORD=$pw"
     fi
   fi
   if [ "$SUITE" != keep ] && [ -n "$SUITE" ]; then
@@ -210,9 +206,8 @@ if [ -n "$DBADMIN" ]; then
   say "Creating the databases and users as ${DBADMIN%%:*}"
   DB_ADMIN_PASSWORD="${DBADMIN#*:}" "$VENV/bin"/iosuite-shared --config "$APP" provision --admin "${DBADMIN%%:*}" || failed "could not create the databases and users (see above): check the administrator's name and password"
 fi
-if [ "${DB_TYPE:-}" = mysql ]; then
-  echo "testing the database, creating it if needed"
-  "$VPY" - <<'PYEOF' || failed "could not use that MariaDB/MySQL database (see above); run setup.sh again"
+echo "testing the database, creating it if needed"
+"$VPY" - <<'PYEOF' || failed "could not use that MariaDB/MySQL database (see above); run setup.sh again"
 import os
 from app import db
 c = db.settings()
@@ -235,7 +230,6 @@ print(f"  OK: {r['version']} at {c['host']}:{c['port']}/{c['database']}; tables 
 if r.get("warning"):
     print("  note: " + r["warning"])
 PYEOF
-fi
 
 echo "testing the Shared ioSuite database, creating it if needed"
 "$VPY" - <<'PYEOF' || printf '\033[1;33mwarning:\033[0m could not use the Shared ioSuite database (see above); ionote needs it for sign-in. Run setup.sh again with --suite-db HOST:PORT/DB:USER:PASSWORD\n' >&2
