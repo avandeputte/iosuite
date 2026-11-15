@@ -26,6 +26,7 @@ def _fake_accuweather(calls):
 
 def test_weather_off_until_set_up(client):
     assert client.get("/api/weather").json() == {"enabled": False}
+    assert client.get("/api/weather/place").json() == {"name": "", "units": "metric"}
     s = client.get("/api/weather/settings").json()
     assert s["hasKey"] is False and s["enabled"] is False and s["units"] == "metric"
 
@@ -40,6 +41,9 @@ def test_weather_setup_and_cache(client, monkeypatch):
     assert found == [{"key": "349727", "name": "New York", "region": "New York", "country": "United States"}]
     s = client.post("/api/weather/settings", json={"locationKey": "349727", "locationName": "New York, United States"}).json()
     assert s["enabled"] and s["locationName"] == "New York, United States"
+    n = len(calls)
+    assert client.get("/api/weather/place").json() == {"name": "New York, United States", "units": "imperial"}
+    assert len(calls) == n, "the place for the other apps never asks AccuWeather"
     w = client.get("/api/weather").json()
     assert w["enabled"] and w["units"] == "imperial" and w["current"]["text"] == "Sunny" and w["current"]["temp"] == {"metric": 20.0, "imperial": 68.0}
     assert w["forecast"]["days"][0] == {"date": "2026-11-04", "min": 10.0, "max": 18.0, "icon": 2, "text": "Mostly sunny", "rain": 5}
