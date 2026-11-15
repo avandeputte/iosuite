@@ -1,5 +1,5 @@
 """What a person keeps in ioCalendar, counted or removed when their account is deleted (iosuite_shared.persondata):
-their private calendars with every event in them (their subscription links are in the Shared ioSuite database, and go with the account). Events they put on a shared calendar
+their private calendars with every event in them, outside calendars they subscribed to privately included (their subscription links are in the Shared ioSuite database, and go with the account). Events they put on a shared calendar
 (the Family calendar) stay: the family still needs them."""
 
 from app import db, model
