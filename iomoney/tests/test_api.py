@@ -344,8 +344,12 @@ def test_link_transfers_over_everything(client, monkeypatch):
         over = (tx(sav, -300, "Overdraft Transfer to Spending Account XXXXXX2748", 50),
                 tx(chk, 300, "Overdraft Transfer from Savings Account XXXXXX7081", 50))
         fid = tx(pnc, -300, "MONEYLINE FID BKG SVC LLC ACH DEBIT", 45, category="Transfer")
+        # two payments of the same amount from the checking account to the card, two days apart: either way is the same
+        two = [tx(pnc, -32.10, "ONLINE PMT AMERICAN EXPRESS", 10, category="Transfer"), tx(pnc, -32.10, "ACH PMT AMEX EPAYMENT", 10, category="Credit Card Payment"),
+               tx(visa, 32.10, "ELECTRONIC PAYMENT RECEIVED-THANK", 10, category="Transfer"), tx(visa, 32.10, "AUTOPAY PAYMENT - THANK YOU", 12, category="Credit Card Payment")]
     r = client.post("/api/transfers/link").json()
-    assert r["linked"] == 5
+    assert r["linked"] == 7 and not any(p["out"]["amount"] == -32.10 for p in r["possible"])
+    assert all(client.get(f"/api/transactions/{t['id']}/transfer").json()["other"] for t in two)
     for o, i in pays + [cat, over]:
         assert client.get(f"/api/transactions/{i['id']}/transfer").json()["other"]["id"] == o["id"]
     assert client.get(f"/api/transactions/{fid['id']}/transfer").json()["other"] is None

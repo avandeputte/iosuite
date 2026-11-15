@@ -11,7 +11,7 @@ Two transactions are the halves of one transfer when:
   account: its name, its bank ("Ally Bank" in the checking account, the other half in the Ally account) or its last
   digits ("ONLINE PAYMENT TO *2530", "XXXXXX7081").
 Each transaction goes with at most one other: the best pairs first, nearer days first, so that payments of the same
-amount every month pair up with the nearest; when two are equally good, neither is taken (a person links it by hand).
+amount every month pair up with the nearest; when two are equally good and would link different accounts, neither is taken (a person links it by hand); between the same two accounts either is right.
 A transfer whose text names the other account teaches a rule (source 'learned'), so the next one is found more surely,
 also a few days further apart. Two transactions unlinked by hand are never linked again by themselves.
 """
@@ -170,9 +170,12 @@ def link(where: str = "1 = 1", args=(), learn: bool = True, unsure: list = None)
     for score, how, o, i, named in sorted(pairs.values(), key=lambda p: -p[0]):
         if o["id"] in used or i["id"] in used:
             continue
+        # a rival as good, still free, makes it a guess, unless it is between the same two accounts: then either way
+        # is the same (two payments of the same amount from the checking account to the card, a day apart)
         rivals = [p for x in (o["id"], i["id"]) for p in of[x]
                   if p[0] == score and (p[2]["id"], p[3]["id"]) != (o["id"], i["id"])
-                  and p[2]["id"] not in used and p[3]["id"] not in used]
+                  and p[2]["id"] not in used and p[3]["id"] not in used
+                  and (p[2]["account_id"], p[3]["account_id"]) != (o["account_id"], i["account_id"])]
         if rivals:
             if unsure is not None:
                 unsure.append((o, i))
