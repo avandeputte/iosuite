@@ -28,8 +28,9 @@ quotes, and what the house and the cars are worth after their loans.
 - **Transactions** to search and correct, one row each (date, payee, notes, category, amount): a category, a payee or a
   note changed here stays through later syncs.
 - **Transfers** between your own accounts (to savings, a card's payment, a loan's payment) are linked: the two halves
-  have the same amount, are a few days apart, and the payee or category says so. Each transfer found teaches a rule,
-  so the next is found even later; link or unlink one by hand, and add or change transfer rules on the Rules page.
+  have the same amount, are a few days apart, and the payee, the bank's text (the other account's name, bank or last
+  digits) or the category says so; each pairs with the nearest of its kind. A transfer that names the other account
+  teaches a rule, so the next is found even later; link or unlink one by hand, and add or change transfer rules on the Rules page.
   **Link transfers** in Settings › Money goes through every transaction (card payments, bank transfers, loan
   payments), then lists what still looks like a transfer, with why it was not linked, to link in one click.
 - **Reconciled**: tick each transaction as checked against the bank's statement, filter on it, or tick every one shown.

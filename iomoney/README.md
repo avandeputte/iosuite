@@ -42,11 +42,14 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
 - **Transfers**: money that leaves one of the household's accounts and arrives in another (to savings, a card's payment,
   a loan's payment) is one transfer: its two halves are linked, shown as "To Savings" / "From Checking", and left out
   of the spending and the cash flow. Two transactions are linked when they are the same amount out and in, in two
-  accounts, at most seven days apart, and something says it is a transfer: the payee names the other account, the
-  category is a transfer or a card's payment, or the payee reads like one ("Payment - thank you", "autopay", "online
-  transfer", "ACH", "loan", "mortgage"); money from a bank account into a card or a loan counts for more. When two
+  accounts, at most seven days apart, and something says it is a transfer: the payee or the bank's text names the
+  other account (its name, its bank, or its last digits as in "PAYMENT TO *2530"), the category of either half is a
+  transfer or a card's payment, or the text reads like one ("Payment - thank you", "autopay", "online transfer", "ACH",
+  "loan", "mortgage"); money from a bank account into a card or a loan counts for more. Each transaction goes with one
+  other at most, the best and nearest pairs first, so the same payment every month pairs with its own; when two
   candidates are equally good, neither is taken. A transfer rule (in this account, a payee like this is a transfer
-  with that account, up to N days apart) links them by itself; each transfer found teaches one (Learned, ten days).
+  with that account, up to N days apart) weighs most; a transfer whose text names the other account teaches one
+  (Learned, ten days, from the bank's text without its dates and numbers).
   A transaction's dialog links one by hand among the candidates, or unlinks it (never linked again by itself); the
   Rules page lists, adds and changes the transfer rules. **Link transfers** (the maintenance in Settings › Money, and
   on the Rules page) goes through every transaction, links what it can, and then lists what still looks like a

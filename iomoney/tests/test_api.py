@@ -317,6 +317,37 @@ def test_transfers_between_own_accounts_are_linked(client, as_user):
     assert client.delete(f"/api/transfer-rules/{tr.json()['id']}").status_code == 403
 
 
+def test_link_transfers_over_everything(client, monkeypatch):
+    """The maintenance pairs what came in unlinked (as a bank's history does): card payments every month of the same
+    amount, the other account's last digits in the bank's text, each with the nearest of its kind."""
+    from app import transfers
+    pnc = add(client, name="PNC Checking", institution="PNC", mask="4199", balance=5000)
+    visa = add(client, name="PNC Visa", kind="credit", institution="PNC", mask="2530", balance=0)
+    sav = add(client, name="Ally Savings", institution="Ally", mask="7081", balance=0)
+    chk = add(client, name="Ally Checking", institution="Ally", mask="2748", balance=0)
+    today = dt.date.today()
+    d = lambda n: (today - dt.timedelta(days=n)).isoformat()  # noqa: E731
+    tx = lambda a, amt, desc, n, **f: client.post(f"/api/accounts/{a['id']}/transactions", json={"amount": amt, "merchant": desc, "day": d(n), **f}).json()  # noqa: E731
+    with monkeypatch.context() as m:
+        m.setattr(transfers, "link", lambda *a, **k: 0)  # as it comes from the bank: nothing linked yet
+        pays = [(tx(pnc, -40, "AUTOPAY CHASE CREDIT CRD ACH DEBIT", n + 1, category="Credit Card Payment"),
+                 tx(visa, 40, "AUTOMATIC PAYMENT - THANK", n, category="Credit Card Payment")) for n in (60, 30, 2)]
+        cat = (tx(pnc, -1830.67, "ONLINE PAYMENT TO *2530", 20, category="Loan Repayments"),
+               tx(visa, 1830.67, "THANK YOU FOR YOUR PMT XXXX2530", 20, category="Paychecks"))
+        over = (tx(sav, -300, "Overdraft Transfer to Spending Account XXXXXX2748", 50),
+                tx(chk, 300, "Overdraft Transfer from Savings Account XXXXXX7081", 50))
+        fid = tx(pnc, -300, "MONEYLINE FID BKG SVC LLC ACH DEBIT", 45, category="Transfer")
+    r = client.post("/api/transfers/link").json()
+    assert r["linked"] == 5
+    for o, i in pays + [cat, over]:
+        assert client.get(f"/api/transactions/{i['id']}/transfer").json()["other"]["id"] == o["id"]
+    assert client.get(f"/api/transactions/{fid['id']}/transfer").json()["other"] is None
+    # learned only from what names the other account: the bank's text without what changes each time
+    learned = {(x["account"], x["pattern"]) for x in client.get("/api/transfer-rules").json()["items"]}
+    assert ("PNC Checking", "online payment to") in learned and ("Ally Savings", "overdraft transfer to spending account") in learned
+    assert not any(a == "PNC Checking" and "fid" in p for a, p in learned)
+
+
 def test_reconciled(client, as_user):
     chk = add(client, name="Checking", balance=100)
     t1 = client.post(f"/api/accounts/{chk['id']}/transactions", json={"amount": -10, "merchant": "Cafe"}).json()

@@ -6,12 +6,14 @@ Two transactions are the halves of one transfer when:
 - they are in two different accounts, one out and one in, of exactly the same amount;
 - they are a few days apart at most (a transfer can take days to arrive);
 - something says it is a transfer: a transfer rule of the household (mny_transfer_rules: in this account, a payee
-  like this one is a transfer with that account), the category (Monarch's Transfers group, a credit card payment), or
-  the payee naming the other account (a payee "Ally Bank" in the checking account, the other half in the Ally
-  account).
-The best candidate wins, nearer days first; when two are equally good, neither is taken (a person links it by hand).
-A transfer found without a rule teaches one (source 'learned'), so the next one is found surely, also a few days
-further apart. Two transactions unlinked by hand are never linked again by themselves.
+  like this one is a transfer with that account), the category of either half (Monarch's Transfers group, a credit
+  card payment), the payee or the bank's text saying so ("Payment - thank you", "autopay", "ACH"), or naming the other
+  account: its name, its bank ("Ally Bank" in the checking account, the other half in the Ally account) or its last
+  digits ("ONLINE PAYMENT TO *2530", "XXXXXX7081").
+Each transaction goes with at most one other: the best pairs first, nearer days first, so that payments of the same
+amount every month pair up with the nearest; when two are equally good, neither is taken (a person links it by hand).
+A transfer whose text names the other account teaches a rule (source 'learned'), so the next one is found more surely,
+also a few days further apart. Two transactions unlinked by hand are never linked again by themselves.
 """
 import datetime as dt
 import re
@@ -74,10 +76,19 @@ def _pays(o: dict, i: dict, accts: dict) -> bool:
 
 
 def _names(t: dict, other: dict) -> bool:
-    """The payee or the bank's text of t names the other account (its name or its institution)."""
+    """The payee or the bank's text of t names the other account: its name, its institution or its last digits."""
     mine = _words(t.get("merchant"), t.get("description"))
     theirs = _words(other.get("name"), other.get("institution"))
-    return bool(mine & theirs)
+    return bool(mine & theirs) or _masked(t, other)
+
+
+def _masked(t: dict, other: dict) -> bool:
+    """The text of t has the other account's last digits (at least four), as banks write them: "*2530", "XXXX2530",
+    "ending in 2530", "608921068"."""
+    m = re.sub(r"\D", "", other.get("mask") or "")
+    if len(m) < 4:
+        return False
+    return any(re.search(rf"{m}(?!\d)", x or "") for x in (t.get("merchant"), t.get("description")))
 
 
 def _pattern_hits(pattern: str, t: dict) -> bool:
@@ -86,11 +97,12 @@ def _pattern_hits(pattern: str, t: dict) -> bool:
 
 
 def _pattern_of(t: dict) -> str | None:
-    """What a learned rule looks for: the payee as it is (or the bank's text), in lower case, without long numbers."""
-    s = (t.get("merchant") or t.get("description") or "").lower()
-    s = re.sub(r"[#*]?\d{4,}\S*", " ", s)
-    s = re.sub(r"\s+", " ", s).strip(" -*#")
-    return s[:255] or None
+    """What a learned rule looks for: the bank's text (or the payee), in lower case, without what changes each time
+    (dates, numbers, masked account numbers); None when too little is left to go by."""
+    s = (t.get("description") or t.get("merchant") or "").lower()
+    s = re.sub(r"\S*\d\S*", " ", s)
+    s = re.sub(r"\s+", " ", s).strip(" -*#/.:")
+    return s[:255] if len(s) >= 5 else None
 
 
 def _rows(where: str = "1 = 1", args=()) -> list[dict]:
@@ -101,8 +113,9 @@ def _rows(where: str = "1 = 1", args=()) -> list[dict]:
                 f"AND {where}", tuple(args))
 
 
-def _score(o: dict, i: dict, accts: dict, rules: list, nots: set) -> tuple[int, str] | None:
-    """How surely o (money out) and i (money in) are one transfer, and what said so; None: they are not."""
+def _score(o: dict, i: dict, accts: dict, rules: list, nots: set) -> tuple[int, str, bool] | None:
+    """How surely o (money out) and i (money in) are one transfer, what said so (a rule or the rest), and whether one
+    names the other's account; None: they are not."""
     if o["account_id"] == i["account_id"] or (o["id"], i["id"]) in nots:
         return None
     gap = abs((o["day"] - i["day"]).days)
@@ -110,15 +123,15 @@ def _score(o: dict, i: dict, accts: dict, rules: list, nots: set) -> tuple[int, 
                 and _pattern_hits(r["pattern"], a) for r in rules for a, b in ((o, i), (i, o)))
     if gap > (MAX_DAYS if ruled else DAYS):
         return None
-    if ruled:
-        return 100 - gap, "rule"
     named = _names(o, accts[i["account_id"]]) or _names(i, accts[o["account_id"]])
     transferish = _is_transferish(o) or _is_transferish(i)
     hinted = _hinted(o) or _hinted(i)
     pays = _pays(o, i, accts)
-    if not (named or transferish or hinted):  # money into a card or a loan alone is not enough: a refund is too
+    if not (ruled or named or transferish or hinted):  # money into a card or a loan alone is not enough: a refund is too
         return None
-    return 50 + (20 if named else 0) + (10 if transferish else 0) + (5 if hinted else 0) + (10 if pays else 0) - 3 * gap, "auto"
+    # a rule weighs most, yet a nearer pair that names the other account can still win over it
+    score = 50 + (30 if ruled else 0) + (20 if named else 0) + (10 if transferish else 0) + (5 if hinted else 0) + (10 if pays else 0) - 3 * gap
+    return score, "rule" if ruled else "auto", named
 
 
 def link(where: str = "1 = 1", args=(), learn: bool = True, unsure: list = None) -> int:
@@ -129,42 +142,45 @@ def link(where: str = "1 = 1", args=(), learn: bool = True, unsure: list = None)
         return 0
     pool = {t["id"]: t for t in _rows()}
     pool.update(news)
-    accts = {a["id"]: a for a in db.q("SELECT id, name, institution, kind FROM mny_accounts")}
+    accts = {a["id"]: a for a in db.q("SELECT id, name, institution, kind, mask FROM mny_accounts")}
     rules = db.q("SELECT * FROM mny_transfer_rules")
     nots = {(r["out_id"], r["in_id"]) for r in db.q("SELECT out_id, in_id FROM mny_transfer_nots")}
     by_amount: dict = {}
     for t in pool.values():
         by_amount.setdefault(abs(Decimal(t["amount"])), []).append(t)
-    pairs = []
+    pairs: dict = {}  # (out id, in id): (score, how, out, in), each pair once (both halves may be new)
     for t in news.values():
         amt = Decimal(t["amount"])
         for c in by_amount.get(abs(amt), []):
             if Decimal(c["amount"]) != -amt:
                 continue
             o, i = (t, c) if amt < 0 else (c, t)
+            if (o["id"], i["id"]) in pairs:
+                continue
             s = _score(o, i, accts, rules, nots)
             if s:
-                pairs.append((s[0], s[1], o, i))
-    # the best first; a transaction with two equally good partners is left for a person
-    best: dict = {}
-    for score, _how, o, i in pairs:
-        for x in (o["id"], i["id"]):
-            best.setdefault(x, []).append(score)
-    seen, used, n = set(), set(), 0
-    for score, how, o, i in sorted(pairs, key=lambda p: -p[0]):
-        if (o["id"], i["id"]) in seen:
-            continue
-        seen.add((o["id"], i["id"]))
+                pairs[(o["id"], i["id"])] = (s[0], s[1], o, i, s[2])
+    of: dict = {}  # transaction id: its pairs
+    for p in pairs.values():
+        for x in (p[2]["id"], p[3]["id"]):
+            of.setdefault(x, []).append(p)
+    # the best first, each transaction in one pair at most; one with another partner as good, itself still free, is
+    # left for a person
+    used, n = set(), 0
+    for score, how, o, i, named in sorted(pairs.values(), key=lambda p: -p[0]):
         if o["id"] in used or i["id"] in used:
             continue
-        if sorted(best[o["id"]], reverse=True)[1:2] == [score] or sorted(best[i["id"]], reverse=True)[1:2] == [score]:
+        rivals = [p for x in (o["id"], i["id"]) for p in of[x]
+                  if p[0] == score and (p[2]["id"], p[3]["id"]) != (o["id"], i["id"])
+                  and p[2]["id"] not in used and p[3]["id"] not in used]
+        if rivals:
             if unsure is not None:
                 unsure.append((o, i))
             continue  # as likely as another: not a guess to make
         db.ex("INSERT IGNORE INTO mny_transfers (out_id, in_id, how) VALUES (%s, %s, %s)", (o["id"], i["id"], how))
         used.update((o["id"], i["id"]))
         n += 1
-        if learn and how == "auto":
+        if learn and how == "auto" and named:  # only what surely is one teaches a rule
             for a, b in ((o, i), (i, o)):
                 p = _pattern_of(a)
                 if p:
@@ -263,7 +279,7 @@ def possible(u: dict, tied: set = frozenset(), limit: int = 200) -> list[dict]:
     """The debits and credits of the same amount in two accounts, at most LOOK_DAYS apart, neither linked yet nor
     unlinked by a person: what a person may want to link, with why it was not linked by itself."""
     rows = [t for t in _rows() if model.can_read(u, t)]
-    accts = {a["id"]: a for a in db.q("SELECT id, name, institution, kind FROM mny_accounts")}
+    accts = {a["id"]: a for a in db.q("SELECT id, name, institution, kind, mask FROM mny_accounts")}
     rules = db.q("SELECT * FROM mny_transfer_rules")
     nots = {(r["out_id"], r["in_id"]) for r in db.q("SELECT out_id, in_id FROM mny_transfer_nots")}
     ins: dict = {}
