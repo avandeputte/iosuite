@@ -33,6 +33,7 @@ export function h(tag, attrs, ...kids) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
     if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (k === 'style' && typeof v === 'object') for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) el.style.setProperty(sk, sv); else el.style[sk] = sv; }
     else if (k === 'checked') el.checked = !!v;
     else if (k === 'value') el.value = v;
     else el.setAttribute(k, v === true ? '' : v);
@@ -42,16 +43,42 @@ export function h(tag, attrs, ...kids) {
   return el;
 }
 
-export async function api(path, opts = {}) {
-  const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
-  if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; o.method = o.method || 'POST'; delete o.json; }
-  const r = await fetch(new URL(path, API), o);
-  if (!r.ok) {
-    let msg = r.statusText;
-    try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : (j.error || JSON.stringify(j.detail)); } catch { /* not JSON */ }
-    throw new Error(msg || `Error ${r.status}`);
-  }
-  return r.json();
+/* fetch relative to `base`: { json } is sent as a JSON body (POST unless a method is given), an error answer throws its
+   detail, a JSON answer comes back parsed and anything else as text. The panels make theirs with
+   client(new URL('./', import.meta.url)); an app's page with client(document.baseURI, { signIn }), where signIn shows
+   its sign-in screen when a request other than api/status or api/auth/… is answered 401. */
+export function client(base, { signIn } = {}) {
+  return async (path, opts = {}) => {
+    const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
+    if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; o.method = o.method || 'POST'; delete o.json; }
+    const r = await fetch(new URL(path, base), o);
+    if (r.status === 401 && signIn && !String(path).startsWith('api/auth') && path !== 'api/status') { signIn(); throw new Error('Sign in first'); }
+    if (!r.ok) {
+      let msg = r.statusText;
+      try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : (j.error || JSON.stringify(j.detail)); } catch { /* not JSON */ }
+      throw new Error(msg || `Error ${r.status}`);
+    }
+    return (r.headers.get('content-type') || '').includes('json') ? r.json() : r.text();
+  };
+}
+export const api = client(API);
+
+export const safeUrl = (u) => /^(https?:\/\/|mailto:)/i.test(u || '');  // a link that is a link (never javascript:)
+
+/* The "Set up" choice of an Apple profile form: this app only, or every app that syncs (iosuite-shared's suite profile),
+   offered when the account may use two or more of them (null otherwise). Picking one points the form at the profile
+   it downloads and hides the fields marked data-own, which only this app's own profile has. */
+export function profileScope(apps, own, attrs = {}) {
+  if (!apps || apps.length < 2) return null;
+  const names = apps.map((a) => a.name);
+  const pick = (e) => {
+    const f = e.target.form, all = e.target.value === 'suite';
+    f.action = all ? 'api/apple-profile/suite' : 'api/apple-profile';
+    f.querySelectorAll('[data-own]').forEach((x) => { x.hidden = all; });
+  };
+  return h('select', { ...attrs, name: 'scope', onchange: pick },
+    h('option', { value: 'app' }, `${own} only`),
+    h('option', { value: 'suite' }, `All apps: ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`));
 }
 
 // ------------------------------------------------------------------ styles (once per page)

@@ -1,9 +1,9 @@
 import { LOCAL_TZ, S, addDays, api, calOf, confirmDialog, describeReminder, describeRule, fail, h, icon, loadCals, memberBadge, parseDay, toast, whenText, writable, ymd } from './core.js';
 import { go, route } from './main.js';
 import { askScope, drawView } from './views.js';
+import { safeUrl } from '../../api/auth/ui.js';  // a link that is a link (never javascript:)
 
 // ------------------------------------------------------------------ one event
-export const safeUrl = (u) => /^(https?:\/\/|mailto:)/i.test(u || '');  // a link that is a link (never javascript:)
 export const ridQ = (rid) => (rid ? `?recurrenceId=${encodeURIComponent(rid)}` : '');
 /** The event as shown for one occurrence (an occurrence that was not changed has the series' times moved to its date). */
 export function forOccurrence(j, rid) {

@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-STAMPED = ("static/app.js", "static/app.css", "static/js/theme.js")
+STAMPED = ("static/app.js", "static/app.css", "static/js/theme.js", "api/auth/base.css")
 
 
 class Static(StaticFiles):

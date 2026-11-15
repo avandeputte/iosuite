@@ -104,6 +104,12 @@ def auth_router(self) -> APIRouter:
         return FileResponse(Path(__file__).with_name("static") / "account-panel.js", media_type="text/javascript",
                             headers={"Cache-Control": "no-cache"})
 
+    @r.get("/api/auth/base.css", dependencies=[access.public])
+    def api_base_css():
+        """The look the single-page io apps share (static/base.css), linked before each one's own static/app.css."""
+        return FileResponse(Path(__file__).with_name("static") / "base.css", media_type="text/css",
+                            headers={"Cache-Control": "no-cache"})
+
     @r.post("/api/auth/settings", dependencies=[access.signed_in])
     async def api_my_settings(request: Request):
         u = account(request)

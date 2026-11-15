@@ -1,4 +1,7 @@
 import { drawNav, showSignIn } from './shell.js';
+import { client, h } from '../../api/auth/ui.js';  // the suite's shared helpers (iosuite-shared static/account-panel.js)
+export { h };
+export const api = client(document.baseURI, { signIn: () => showSignIn() });
 
 // The helpers every page uses (api, h, icon, dates, avatars) and the app's state.
 
@@ -50,35 +53,6 @@ export const ICONS = {
   select: 'M3 5h2V3c-1.1 0-2 .9-2 2zm0 8h2v-2H3v2zm4 8h2v-2H7v2zM3 9h2V7H3v2zm10-6h-2v2h2V3zm6 0v2h2c0-1.1-.9-2-2-2zM5 21v-2H3c0 1.1.9 2 2 2zm-2-4h2v-2H3v2zM9 3H7v2h2V3zm2 18h2v-2h-2v2zm8-8h2v-2h-2v2zm0 8c1.1 0 2-.9 2-2h-2v2zm0-12h2V7h-2v2zm0 8h2v-2h-2v2zm-4 4h2v-2h-2v2zm0-16h2V3h-2v2zM7 17h10V7H7v10zm2-8h6v6H9V9z',
 };
 export const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
-
-export function h(tag, attrs, ...kids) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v == null || v === false) continue;
-    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (k === 'style' && typeof v === 'object') for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) el.style.setProperty(sk, sv); else el.style[sk] = sv; }
-    else if (k === 'value') el.value = v;
-    else if (k === 'checked') el.checked = !!v;
-    else el.setAttribute(k, v === true ? '' : v);
-  }
-  const add = (k) => { if (k == null || k === false) return; if (Array.isArray(k)) k.forEach(add); else el.append(k instanceof Node ? k : String(k)); };
-  kids.forEach(add);
-  return el;
-}
-
-export async function api(path, opts = {}) {
-  const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
-  if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
-  const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('api/auth') && path !== 'api/status') { showSignIn(); throw new Error('Sign in first'); }
-  if (!r.ok) {
-    let msg = r.statusText;
-    try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
-    throw new Error(msg || `Error ${r.status}`);
-  }
-  const ct = r.headers.get('content-type') || '';
-  return ct.includes('json') ? r.json() : r.text();
-}
 
 export let toastTimer;
 export function toast(msg) {

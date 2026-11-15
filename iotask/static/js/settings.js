@@ -2,6 +2,7 @@ import { $, S, api, canOwn, canShared, confirmDialog, copyRow, defaultList, drag
 import { SMART, applyTheme, colorPicker, drawNav, drawUser, newList, orderLists } from './shell.js';
 import { saveTemplate, smartAdd } from './lists.js';
 import { onRoute } from './main.js';
+import { profileScope as scopeSelect } from '../../api/auth/ui.js';
 
 // ------------------------------------------------------------------ settings
 export async function showSettings(page, r) {
@@ -63,18 +64,7 @@ export async function downloadProfile(e) {
 
 /** The "Set up" choice of the profile box: this app only, or every app that syncs (iosuite-shared's suite profile),
  * offered when the account may use two or more of them. Fields marked data-own belong to this app's own profile. */
-export function profileScope(apps, own) {
-  if (!apps || apps.length < 2) return null;
-  const names = apps.map((a) => a.name);
-  const pick = (e) => {
-    const f = e.target.form, all = e.target.value === 'suite';
-    f.action = all ? 'api/apple-profile/suite' : 'api/apple-profile';
-    f.querySelectorAll('[data-own]').forEach((x) => { x.hidden = all; });
-  };
-  return fld('Set up', h('select', { class: 't', name: 'scope', onchange: pick },
-    h('option', { value: 'app' }, `${own} only`),
-    h('option', { value: 'suite' }, `All apps: ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`)));
-}
+export const profileScope = (apps, own) => { const s = scopeSelect(apps, own, { class: 't' }); return s && fld('Set up', s); };
 
 /** Settings › Apps and devices: how to connect each kind of app (the app passwords themselves are on Settings › Account). */
 export async function setDevices(el) {

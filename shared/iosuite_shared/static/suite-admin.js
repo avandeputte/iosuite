@@ -8,11 +8,13 @@
    Served by iosuite-shared at <app>/api/suite-admin/ui.js (Auth.admin_router()); it talks to the API next to it, so an
    app served under a sub-path works too. One ES module, no build step, its own styles (scoped under .iosa), using the
    app's colours when it has them (--fg, --fg2, --bg, --line, --accent, --brand, --danger; ioHealth's --text, --muted,
-   --card, --link).
+   --card, --link). h() and the fetch helper come from the account panels' module next to it (api/auth/ui.js).
 
      const ui = await import(new URL('api/suite-admin/ui.js', document.baseURI).href);
      ui.mount(el, { tab: 'security', sub: 'people', toast, onSub: (s) => history.replaceState(null, '', `#/settings/security/${s}`) });
 */
+import { client, h } from '../auth/ui.js';   // the element builder and fetch helper every panel shares
+
 const API = new URL('./', import.meta.url);   // .../api/suite-admin/
 
 const ICONS = {
@@ -25,33 +27,7 @@ const ICONS = {
 };
 const icon = (n) => { const s = document.createElement('span'); s.className = 'sa-ic'; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
 
-function h(tag, attrs, ...kids) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v == null || v === false) continue;
-    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (k === 'style' && typeof v === 'object') for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) el.style.setProperty(sk, sv); else el.style[sk] = sv; }
-    else if (k === 'value') el.value = v;
-    else if (k === 'checked') el.checked = !!v;
-    else el.setAttribute(k, v === true ? '' : v);
-  }
-  const add = (k) => { if (k == null || k === false) return; if (Array.isArray(k)) k.forEach(add); else el.append(k instanceof Node ? k : String(k)); };
-  kids.forEach(add);
-  return el;
-}
-
-async function api(path, opts = {}) {
-  const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
-  if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
-  const r = await fetch(new URL(path, API), o);
-  if (!r.ok) {
-    let msg = r.statusText;
-    try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : (j.error || JSON.stringify(j.detail)); } catch { /* not JSON */ }
-    throw new Error(msg || `Error ${r.status}`);
-  }
-  const ct = r.headers.get('content-type') || '';
-  return ct.includes('json') ? r.json() : r.text();
-}
+const api = client(API);
 
 // ------------------------------------------------------------------ styles (once per page)
 const CSS = `

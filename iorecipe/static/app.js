@@ -4,6 +4,8 @@
    a print view; the form to add or change one; import (a web page, pasted text, a photo, a file) and export; and
    settings (account, display, and for admins server, and for suite admins security and global settings), laid out as
    in the other ioThing apps. */
+import { client, h, safeUrl } from '../api/auth/ui.js';  // the suite's shared helpers (iosuite-shared static/account-panel.js)
+const api = client(document.baseURI, { signIn: () => showSignIn() });
 
 // ------------------------------------------------------------------ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -56,35 +58,6 @@ const ICONS = {
 };
 const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
 
-function h(tag, attrs, ...kids) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (v == null || v === false) continue;
-    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (k === 'style' && typeof v === 'object') for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) el.style.setProperty(sk, sv); else el.style[sk] = sv; }
-    else if (k === 'value') el.value = v;
-    else if (k === 'checked') el.checked = !!v;
-    else el.setAttribute(k, v === true ? '' : v);
-  }
-  const add = (k) => { if (k == null || k === false) return; if (Array.isArray(k)) k.forEach(add); else el.append(k instanceof Node ? k : String(k)); };
-  kids.forEach(add);
-  return el;
-}
-
-async function api(path, opts = {}) {
-  const o = { credentials: 'same-origin', ...opts, headers: { ...(opts.headers || {}) } };
-  if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers['Content-Type'] = 'application/json'; delete o.json; }
-  const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('api/auth') && path !== 'api/status') { showSignIn(); throw new Error('Sign in first'); }
-  if (!r.ok) {
-    let msg = r.statusText;
-    try { const j = await r.json(); msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
-    throw new Error(msg || `Error ${r.status}`);
-  }
-  const ct = r.headers.get('content-type') || '';
-  return ct.includes('json') ? r.json() : r.text();
-}
-
 let toastTimer;
 /** A note at the foot of the page. */
 function toast(msg) {
@@ -136,7 +109,6 @@ function popMenu(btn, items) {
 
 const hue = (s) => { let x = 0; for (const c of s || '') x = (x * 31 + c.charCodeAt(0)) % 360; return x; };
 const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); };
-const safeUrl = (u) => /^(https?:\/\/|mailto:)/i.test(u || '');  // a link that is a link (never javascript:)
 const store = { get: (k) => { try { return localStorage.getItem(`iorecipe.${k}`); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(`iorecipe.${k}`, v); } catch { /* private mode */ } } };
 
 // ------------------------------------------------------------------ state
@@ -234,7 +206,6 @@ function applyTheme(choice) {
   const t = choice || store.get('theme') || 'system';
   if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
 }
-
 
 /* The sidebar, as in the other io apps: the name on top, the recipes (all, the family's, your own, your favourites),
    the cookbooks, the tags, adding and import, Settings at the foot. It docks beside the page on a wide screen unless its button put it away (remembered);
