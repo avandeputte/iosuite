@@ -50,12 +50,20 @@ export function streetView(lat, lon, title) {
     { buttons: ['Close'] });
   back.querySelector('.modal').classList.add('svmodal');
 }
+/** Take a Leaflet map away. A zoom still animating when it goes (fitBounds, then the page changes) ends 250 ms later
+    on a map with no panes, and Leaflet 1.9.4 then throws "Cannot read properties of undefined (reading '_leaflet_pos')":
+    the animation is marked finished first, so its end has nothing left to do. */
+export function removeMap(map) {
+  if (!map) return;
+  map._animatingZoom = false;
+  try { map.remove(); } catch { /* already gone */ }
+}
 export const mapLink = (lat, lon) => S.MAPS.link.replaceAll('{lat}', lat).replaceAll('{lon}', lon);
 
 export async function showMap(fp) {
   const token = ++M.token;
   M.data = null;
-  M.map?.remove(); M.map = null;
+  removeMap(M.map); M.map = null;
   const el = h('div', { id: 'map' });
   const bar = h('div', { class: 'mapbar' });
   main.replaceChildren(el, bar);

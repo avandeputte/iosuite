@@ -49,7 +49,9 @@ def _forget(lib, ids, files=()):
 
 def test_unique_hash_is_digikams(lib):
     """Against the source library the fixture is cut from (read only): files digiKam hashed and nobody changed since."""
-    from conftest import SRC_DB, SRC_ROOT
+    from conftest import SRC_DB, SRC_ROOT, SYNTHETIC
+    if SYNTHETIC:
+        pytest.skip("needs files digiKam itself hashed: the library made from scratch has its hashes from the same formula")
     con = sqlite3.connect(f"file:{SRC_DB}?mode=ro", uri=True)
     try:
         version = int((con.execute("SELECT value FROM Settings WHERE keyword = 'uniqueHashVersion'").fetchone() or ["1"])[0])
@@ -165,11 +167,14 @@ def test_an_empty_or_missing_root_is_left_alone(lib, monkeypatch, tmp_path):
         roots = dkdb.root_paths(con)
     finally:
         con.close()
+    con = sqlite3.connect(lib["db"])
+    present = con.execute("SELECT count(*) FROM Images WHERE status = 1").fetchone()[0]
+    con.close()
     monkeypatch.setattr(dkdb, "root_paths", lambda con: {k: str(empty) for k in roots})
     s = scanner.scan()
     assert s["removed"] == 0 and any("unmounted" in x or "left alone" in x for x in s["skipped"]), s
     con = sqlite3.connect(lib["db"])
-    assert con.execute("SELECT count(*) FROM Images WHERE status = 1").fetchone()[0] > 100, "nothing was marked removed"
+    assert present and con.execute("SELECT count(*) FROM Images WHERE status = 1").fetchone()[0] == present, "nothing was marked removed"
     con.close()
 
 

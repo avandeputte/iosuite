@@ -2,6 +2,7 @@
 file scanner, with tags, a person and a face, a rating and a caption saved in iopix's own library and the sidecars.
 Runs in a process of its own (nodigikam_run.py), since the app reads its environment once; needs no test library."""
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -19,7 +20,9 @@ def run():
         pytest.skip("needs exiftool")
     tmp = tempfile.mkdtemp(prefix="iopix-nodk-")
     try:
-        p = subprocess.run([sys.executable, str(HERE / "nodigikam_run.py"), tmp], capture_output=True, text=True, timeout=300)
+        import mariadb  # a database of its own: the session's already holds the test library, and this run starts with none
+        env = dict(os.environ, **mariadb.env_for(mariadb.fresh_database(mariadb.NODK_DB)))
+        p = subprocess.run([sys.executable, str(HERE / "nodigikam_run.py"), tmp], capture_output=True, text=True, timeout=300, env=env)
         line = next((l for l in p.stdout.splitlines() if l.startswith("RESULT ")), None)
         assert line, f"no result (exit {p.returncode}):\n{p.stdout[-3000:]}\n{p.stderr[-3000:]}"
         return json.loads(line[7:])

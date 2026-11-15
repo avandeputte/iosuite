@@ -6,7 +6,7 @@ import { clearSelection, showDamaged, showHistory, showImport, showQuality, show
 import { MORE_VIEWS, currentNav, showAlbums, showClothing, showDateSuggest, showDetected, showEvents, showExplore, showFolders, showJerseys, showPeople, showPlaceSuggest, showPlaces, showRotation } from './pages.js';
 import { showConsistency, showDuplicates, showFaces, showTags } from './admin.js';
 import { showSettings, showTools } from './settings.js';
-import { M, showMap } from './map.js';
+import { M, removeMap, showMap } from './map.js';
 import { renderFilters, toggleFilters } from './filters.js';
 import { LB, syncLightbox } from './lightbox.js';
 import { pollStatus } from './main.js';
@@ -236,7 +236,7 @@ export function onRoute() {
     else { if (quiet) G.restore = main.scrollTop; else clearSelection(true); main.scrollTop = 0; }
     S.keepView = false;
     removeScrubber();
-    if (M.map && S.route.view !== 'map') { M.map.remove(); M.map = null; }  // Leaflet keeps window listeners until the map is removed
+    if (M.map && S.route.view !== 'map') { removeMap(M.map); M.map = null; }  // Leaflet keeps window listeners until the map is removed
     crumbs(null);  // each view sets its own trail
     document.body.classList.remove('cbulk-open', 'managing');  // page-wide states of the consistency and tags pages; they set them again when drawn
     // the filter pane belongs to the photo and map views: it steps aside elsewhere and comes back with them

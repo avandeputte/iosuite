@@ -82,6 +82,11 @@ def _create_and_upload(client, lib, root, base, disk):
     # upload a JPEG from the library and a file digiKam would ignore
     src = next(p for p in (lib["root"]).rglob("*") if p.suffix.lower() in (".jpg", ".jpeg") and "zz-upload" not in str(p))
     data = src.read_bytes()
+    con = dkdb.connect()
+    rel = "/" + str(src.parent.relative_to(lib["root"])).strip(".").strip("/")
+    src_rating = con.execute("SELECT ii.rating FROM Images i JOIN Albums a ON a.id = i.album JOIN ImageInformation ii ON ii.imageid = i.id "
+                             "WHERE a.relativePath = ? AND i.name = ?", (rel, src.name)).fetchone()[0]
+    con.close()
     r = client.post(f"/api/folders/{fid}/upload", files=[("files", ("New Photo.JPG", data, "image/jpeg")), ("files", ("notes.txt", b"hi", "text/plain")),
                                                         ("files", ("New Photo.JPG", data, "image/jpeg"))])
     assert r.status_code == 200, r.text
@@ -95,7 +100,7 @@ def _create_and_upload(client, lib, root, base, disk):
     info = con.execute("SELECT rating, creationDate, orientation, width, height, format, colorDepth, colorModel FROM ImageInformation WHERE imageid = ?", (iid,)).fetchone()
     con.close()
     assert img[:4] == (fid, "New Photo.JPG", 1, 1) and img[4] and img[5] == len(data) and img[6], "scanned at once as digiKam would: time, size and digiKam's hash"
-    assert info[0] == -1 and info[1] and info[1][4] == "-" and info[3] > 0 and info[4] > 0 and info[5] == "JPG" and info[6:] == (8, 5)  # YCbCr for a JPEG, as digiKam records it
+    assert info[0] == src_rating and info[1] and info[1][4] == "-" and info[3] > 0 and info[4] > 0 and info[5] == "JPG" and info[6:] == (8, 5)  # the file it is a copy of lends its rating (CoreDB::copyImageAttributes); YCbCr for a JPEG, as digiKam records it
     # the viewer shows the folder and the photos as soon as the index catches up
     assert _wait_meta_album(client, base + "/zz-upload-test")
     end = time.time() + 8
