@@ -477,7 +477,7 @@ Every database in the suite follows the same rules, so the apps read alike and c
 
 | What | Rule |
 |---|---|
-| Tables | `<prefix>_<plural noun>`, snake_case. Prefixes: `ios_` (this library), `prt_` (ioSuite start page), `nts_` (ioNote), `pix_` (ioPix), `cal_` (ioCalendar), `con_` (ioContact), `hlt_` (ioHealth), `dns_` (ioDNS) |
+| Tables | `<prefix>_<plural noun>`, snake_case. Prefixes: `ios_` (this library), `prt_` (ioStart), `nts_` (ioNote), `pix_` (ioPix), `cal_` (ioCalendar), `con_` (ioContact), `hlt_` (ioHealth), `dns_` (ioDNS), `tsk_` (ioTask), `bkp_` (ioBackup), `rcp_` (ioRecipe), `thg_` (ioThings), `mny_` (ioMoney) |
 | Child tables | `<prefix>_<parent singular>_<children>`: `con_contact_emails`, `pix_album_photos` |
 | Keys | `id` (a natural key the devices sync by keeps its name: `uuid`); references `<table singular>_id` |
 | Accounts | `user_id` (the row belongs to an account), `owner_id` (NULL: shared with everyone), `created_by` / `decided_by` (who did it) |

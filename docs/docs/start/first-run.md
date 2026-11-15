@@ -26,9 +26,9 @@ The sign-in screen is the same in every app: a tile per account (a click and a p
 
 As a suite admin, open **Settings › Security › People** in any app:
 
-- add an account for each person (name, display name, email, password), or a **passwordless viewer** for a child or a
-  kitchen tablet: one click to sign in, on the home network only, and a viewer at most everywhere;
-- set each person's role per app under **Roles** (viewer, editor, admin, or none), or leave the app's default;
+- add an account for each person (name, display name, email, password), or a **passwordless** account for a child or a
+  kitchen tablet: one click to sign in, on the home network only, and a member at most everywhere;
+- set each person's role per app under **Roles** (viewer, member, editor, admin, or none), or leave the app's default;
 - decide under **Settings › Global settings › Apps** whether an app is open to everyone with an account (its default
   role) or by invitation only (default role `none`), and whether it requires a sign-in at all.
 

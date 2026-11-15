@@ -9,7 +9,8 @@ Cloudflare. Add a name once, see where the servers disagree, pick who is right, 
 
 !!! note "An admin tool"
     ioDNS is a utility for the person who runs the servers, not an app for the family. Only suite admins can open it;
-    they find it on the start page and in the app switcher. Nobody else sees it, and it takes no roles.
+    they find it in the start page's gear menu, under
+    Admin tools, and in the app switcher. Nobody else sees it, and it takes no roles.
 
 ## What it does
 

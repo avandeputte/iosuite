@@ -117,7 +117,7 @@ what the app will show on the start page later (today's events, the newest photo
     viewer's sync app can read; changing takes an editor or admin. Behind Cloudflare Access, `/dav/*` needs the same
     bypass as the other apps' CalDAV / CardDAV paths. A bookmark is in one folder (the same address in two folders is
     two bookmarks); bookmarklets and other non-web addresses sync but never show on the start page.
-- **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for a passwordless viewer),
+- **The suite's accounts**: the same sign-in as every io app (the account tiles, one click for an account without a password),
   Settings › Account (display name, email, password) and Settings › Display (the theme, kept with the account), both
   iosuite-shared's panels, the same in every io app; every setting saves as soon as you change it. Accounts and roles
   are managed under Settings › Security (below). Sign-in at a reverse proxy (Cloudflare Access…) works as in the other apps.

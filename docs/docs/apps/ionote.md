@@ -42,5 +42,5 @@ about 60 MB); the Mac and iPhone read the text on the device.
 | Port | 8610 |
 | Source | [ionote](https://github.com/avandeputte/iosuite/tree/main/ionote) (server), [ionote-apps](https://github.com/avandeputte/iosuite-apps/tree/main/ionote) (Mac, iPhone, iPad) |
 
-The Mac and iPhone apps are built from [ionote-apps](https://github.com/avandeputte/iosuite-apps/tree/main/ionote) with Xcode. See
+The Mac and iPhone apps are built from [iosuite-apps/ionote](https://github.com/avandeputte/iosuite-apps/tree/main/ionote) with Xcode. See
 [Phones, Macs and other apps](devices.md).

@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ioThing suite — self-hosted photos, notes, calendar, contacts and health</title>
-<meta name="description" content="Small self-hosted apps for the family: ioPix for photos, ioNote, ioCalendar, ioTask, ioRecipe, ioMoney, ioContact, ioHealth and the ioStart start page. Install just the one you need, or all of them; they share one sign-in.">
+<title>ioThing suite — self-hosted photos, notes, calendar, tasks, recipes, finances and more</title>
+<meta name="description" content="Small self-hosted apps for the family: ioPix for photos, ioNote, ioCalendar, ioTask, ioRecipe, ioThings, ioMoney, ioContact, ioHealth and the ioStart start page. Install just the one you need, or all of them; they share one sign-in.">
 <link rel="canonical" href="https://iosuite.iothing.net/">
 <link rel="icon" type="image/svg+xml" href="img/icon.svg">
 <meta property="og:type" content="website">
 <meta property="og:title" content="ioThing suite">
-<meta property="og:description" content="Photos, notes, calendar, contacts and health on your own server. Take one app, or all of them.">
+<meta property="og:description" content="Photos, notes, calendar, tasks, recipes, an inventory, finances, contacts and health on your own server. Take one app, or all of them.">
 <meta property="og:url" content="https://iosuite.iothing.net/">
 <meta property="og:image" content="https://iosuite.iothing.net/img/og.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -369,7 +369,7 @@ footer p{margin:16px 0 0;max-width:52em}
       <div>
         <span class="eyebrow">self-hosted · free &amp; open source</span>
         <h1>Take the app you need.<br>Leave the rest.</h1>
-        <p class="lede">Small self-hosted apps for the family: photos, notes, a calendar, tasks, contacts and health data, on your own server. <strong>Each one installs and runs on its own</strong>: if all you want is a photo app, install ioPix and you're done. Add another whenever you like, and it signs in with the same accounts.</p>
+        <p class="lede">Small self-hosted apps for the family: photos, notes, a calendar, tasks, recipes, an inventory of what you own, the household's finances, contacts and health data, on your own server. <strong>Each one installs and runs on its own</strong>: if all you want is a photo app, install ioPix and you're done. Add another whenever you like, and it signs in with the same accounts.</p>
         <div class="meta">GPL-3.0 · Proxmox VE · Docker (amd64 / arm64) · any Linux or Mac · MariaDB / MySQL</div>
         <div class="cta">
           <a class="btn btn-primary" href="#install">
@@ -404,7 +404,7 @@ footer p{margin:16px 0 0;max-width:52em}
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">the apps</span>
-        <h2>Seven apps. Each one complete on its own.</h2>
+        <h2>Ten apps. Each one complete on its own.</h2>
         <p>Every app is a small web server with its own web app, its own database and its own installer, built the same way: FastAPI, a single-page app, light and dark, a real phone layout, installable on a home screen.</p>
       </div>
       <div class="agrid">
@@ -545,7 +545,7 @@ footer p{margin:16px 0 0;max-width:52em}
         <div class="opt">
           <span class="fk">or all at once</span>
           <h3>The whole suite in one go</h3>
-          <p>Every installer ends with "Also install…?". Tick the others and they go in the same machine or container, <strong>each with its own database and port</strong>, without asking the shared questions twice. Or run the whole-suite Docker stack.</p>
+          <p>Every installer ends with the list of the suite's apps. Tick the others and they go in the same machine or container, <strong>each with its own database and port</strong>, without asking the shared questions twice. Or run the whole-suite Docker stack.</p>
         </div>
       </div>
       <div class="together">
@@ -654,9 +654,9 @@ footer p{margin:16px 0 0;max-width:52em}
 
       <div class="istep">
         <h3><span class="chip">then</span> Open <code>http://&lt;host&gt;:&lt;port&gt;</code> and sign in</h3>
-        <div class="ports"><span>ioPix <b>8600</b></span><span>ioNote <b>8610</b></span><span>ioCalendar <b>8620</b></span><span>ioStart <b>8630</b></span><span>ioContact <b>8640</b></span><span>ioHealth <b>8650</b></span><span>ioTask <b>8670</b></span><span>ioRecipe <b>8690</b></span><span>ioMoney <b>8710</b></span></div>
+        <div class="ports"><span>ioPix <b>8600</b></span><span>ioNote <b>8610</b></span><span>ioCalendar <b>8620</b></span><span>ioStart <b>8630</b></span><span>ioContact <b>8640</b></span><span>ioHealth <b>8650</b></span><span>ioTask <b>8670</b></span><span>ioRecipe <b>8690</b></span><span>ioThings <b>8700</b></span><span>ioMoney <b>8710</b></span></div>
         <p>Every app has its own default port, so all of them fit on one host. The installer creates the admin you answered; with several apps it is the same admin everywhere, because the accounts live in one <a href="/docs/reference/databases/">Shared ioSuite database</a>.</p>
-        <p>Then put the apps behind your reverse proxy for HTTPS (<a href="/docs/run/reverse-proxy/">Caddy, nginx, HAProxy</a> or a <a href="/docs/run/cloudflare/">Cloudflare Tunnel</a>), and every app updates itself from Settings › Server.</p>
+        <p>Then put the apps behind your reverse proxy for HTTPS (<a href="/docs/run/reverse-proxy/">Caddy, nginx, HAProxy</a> or a <a href="/docs/run/cloudflare/">Cloudflare Tunnel</a>), and one <strong>Update</strong> under Settings › Global settings › Updates brings every app to the suite's newest version.</p>
       </div>
     </div>
   </section>
@@ -680,11 +680,11 @@ footer p{margin:16px 0 0;max-width:52em}
         </a>
         <a class="dcard" href="/docs/start/several-apps/">
           <h3>Several apps on one host <span>→</span></h3>
-          <p>"Also install…", one container with several apps, the whole-suite Docker stack.</p>
+          <p>The one-line installer, one container with several apps, the whole-suite Docker stack.</p>
         </a>
         <a class="dcard" href="/docs/run/accounts/">
           <h3>Accounts and roles <span>→</span></h3>
-          <p>One account for every app, a role per app, suite admins, app passwords, passwordless viewers.</p>
+          <p>One account for every app, a role per app, suite admins, app passwords, one-click accounts without a password.</p>
         </a>
         <a class="dcard" href="/docs/run/cloudflare/">
           <h3>Cloudflare Tunnel and Access <span>→</span></h3>
@@ -692,7 +692,7 @@ footer p{margin:16px 0 0;max-width:52em}
         </a>
         <a class="dcard" href="/docs/run/assistants/">
           <h3>AI assistants (MCP) <span>→</span></h3>
-          <p>ioPix, ioNote, ioCalendar, ioTask, ioRecipe and ioContact are MCP servers: connect Claude or another assistant with an app password.</p>
+          <p>ioPix, ioNote, ioCalendar, ioTask, ioRecipe, ioThings, ioMoney and ioContact are MCP servers, and ioStart passes them all on through one: connect Claude or another assistant with an app password.</p>
         </a>
       </div>
     </div>
@@ -714,6 +714,7 @@ footer p{margin:16px 0 0;max-width:52em}
         <a href="https://github.com/avandeputte/iosuite/tree/main/iohealth" rel="noopener">ioHealth</a>
         <a href="https://github.com/avandeputte/iosuite/tree/main/iodns" rel="noopener">ioDNS</a>
         <a href="https://github.com/avandeputte/iosuite/tree/main/iobackup" rel="noopener">ioBackup</a>
+        <a href="https://github.com/avandeputte/iosuite/tree/main/iostart" rel="noopener">ioStart</a>
         <a href="https://github.com/avandeputte/iosuite" rel="noopener">ioSuite</a>
         <a href="https://github.com/avandeputte/iosuite/tree/main/docs" rel="noopener">This site</a>
       </div>
@@ -861,7 +862,7 @@ footer p{margin:16px 0 0;max-width:52em}
         "./setup.sh" + (al.length ? " --also " + al.join(",") : "")
       ]);
       msg = sel.length === 1
-        ? "<strong>One app.</strong> <code>setup.sh</code> asks for the databases, the port and an admin, and installs a service (systemd, or launchd on a Mac). Its last question offers the other apps: say no."
+        ? "<strong>One app.</strong> <code>setup.sh</code> asks for the databases, the port and an admin, and installs a service (systemd, or launchd on a Mac). It ends with the list of the other apps: press Enter."
         : "<code>--also</code> puts " + names(al) + " beside " + APPS[b].name + " (<code>/opt/&lt;app&gt;/app</code> as root), with the same database server, accounts and admin, each on its own port.";
     }
     cmds.innerHTML = html;

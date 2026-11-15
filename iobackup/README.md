@@ -8,7 +8,7 @@ Backs up the MariaDB server the suite's apps keep their data on (and any other M
 on a schedule, to a folder or Google Drive, keeps the newest *N* backups of each job, and **restores exactly what you
 pick**: whole databases, single tables or views, stored routines, events, users and roles, onto the same server or
 another, under the same name or a new one. An admin tool of the suite, for suite admins only: the gear menu of the
-ioSuite start page lists it for them, nobody else sees it. FastAPI and a single-page vanilla JS app, built the same
+ioStart start page lists it for them, nobody else sees it. FastAPI and a single-page vanilla JS app, built the same
 way as the other io apps, signed in with the suite's shared accounts ([`iosuite-shared`](https://github.com/avandeputte/iosuite/tree/main/shared)),
 with its own settings in MariaDB / MySQL. It grew out of [mariadb-backup](https://github.com/avandeputte/mariadb-backup),
 whose backup files it reads and writes unchanged.
