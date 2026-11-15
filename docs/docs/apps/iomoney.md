@@ -26,8 +26,8 @@ quotes, and what the house and the cars are worth after their loans.
   sidebar. Rename any account (one from Monarch too) with the pencil by its name.
 - **The net worth**, now and over a month, three, a year or five, by kind of account.
 - **Transactions** to search and correct, one row each (date, payee, notes, category, amount): a category, a payee or a
-  note changed here stays through later syncs. Hidden ones (Monarch's "Hide from reports") are left out, unless
-  the list is set to show them.
+  note changed here stays through later syncs. What is hidden in Monarch ("Hide from reports") is not brought in;
+  what is hidden here is left out of the list unless it is set to show them.
 - **Transfers** between your own accounts (to savings, a card's payment, a loan's payment) are linked: the two halves
   have the same amount, are a few days apart, and the payee, the bank's text (the other account's name, bank or last
   digits) or the category says so; each pairs with the nearest of its kind. A transfer that names the other account

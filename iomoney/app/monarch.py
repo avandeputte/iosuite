@@ -15,7 +15,8 @@ What a sync does (sync(); every SYNC_HOURS hours from the chores in app/main.py,
   Name, hidden and "in the net worth" stay as changed here; Monarch decides the rest.
 - transactions: those since the last sync (two weeks back, for late changes), or the past INITIAL_DAYS the first time.
   A transaction whose category, notes or hidden was changed here keeps those. One that disappeared from Monarch inside
-  the window (a pending one that posted under another id, one deleted there) goes here too.
+  the window (a pending one that posted under another id, one deleted there) goes here too, and so does one hidden in
+  Monarch ("Hide from reports": a duplicate, or one a person or a Monarch rule left out): it is not brought in at all.
 - an account Monarch reports that is not here, after the first sync, is held (mny_monarch_new) with its transactions
   until an admin says whether it is new or an account here that was deleted and made again in Monarch (when its bank
   link broke). An existing one takes the new id, and the next sync matches the transactions Monarch sends under it
@@ -213,8 +214,12 @@ async def _history(mm, ext: str, aid: int, is_asset: bool) -> int:
     return len(rows)
 
 
-def _put_tx(t: dict, aid: int, groups: dict) -> None:
-    """Insert or refresh one Monarch transaction in account aid (what was changed here by hand stays)."""
+def _put_tx(t: dict, aid: int, groups: dict) -> bool:
+    """Insert or refresh one Monarch transaction in account aid (what was changed here by hand stays); one hidden in
+    Monarch is not kept here (removed when it was): False."""
+    if t.get("hideFromReports"):
+        db.ex("DELETE FROM mny_transactions WHERE source = 'monarch' AND external_id = %s", (str(t["id"]),))
+        return False
     cat = (t.get("category") or {})
     merchant = (t.get("merchant") or {}).get("name")
     tags = [x.get("name") for x in (t.get("tags") or []) if x.get("name")]
@@ -232,8 +237,9 @@ def _put_tx(t: dict, aid: int, groups: dict) -> None:
           "hidden = IF(edited, hidden, VALUES(hidden)), words = IF(edited, words, VALUES(words))",
           (aid, str(t["id"]), day, amt, (merchant or "")[:255] or None, (t.get("plaidName") or "")[:255] or None,
            (cat.get("name") or "")[:128] or None, (grp or "")[:128] or None, t.get("notes") or None,
-           json.dumps(tags) if tags else None, 1 if t.get("pending") else 0, 1 if t.get("hideFromReports") else 0,
+           json.dumps(tags) if tags else None, 1 if t.get("pending") else 0, 0,
            1 if t.get("isRecurring") else 0, w))
+    return True
 
 
 async def _pages(mm, start: dt.date, end: dt.date, **kw):
@@ -256,8 +262,7 @@ async def _transactions(mm, ids: dict, since: dt.date, today: dt.date, groups: d
             if not aid:
                 continue  # an account held for a person to say what it is, or one Monarch no longer lists
             seen.add(str(t["id"]))
-            _put_tx(t, aid, groups)
-            n += 1
+            n += _put_tx(t, aid, groups)
         _at("Transactions", n)
     # gone from Monarch inside the window: a pending one that posted under another id, one deleted there. Only in the
     # accounts Monarch still lists: an account deleted there (to be made again) keeps its transactions until they
