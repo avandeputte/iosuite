@@ -7,7 +7,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 2  # recorded in cal_schema_version; the tables are made as SCHEMA says (pre-release: no upgrade steps)
+SCHEMA_VERSION = 3  # recorded in cal_schema_version; the tables are made as SCHEMA says (pre-release: no upgrade steps)
 PREFIX = "cal"
 
 # Every table is cal_<name> (the suite's naming convention: the apps can share one database) and InnoDB/utf8mb4. An
@@ -77,6 +77,20 @@ SCHEMA = [
         name VARCHAR(255) NULL, email VARCHAR(255) NULL, contact_id INT NULL, role VARCHAR(16) NULL,
         KEY idx_cal_event_people_event (event_id), KEY idx_cal_event_people_email (email), KEY idx_cal_event_people_contact (contact_id),
         FOREIGN KEY (event_id) REFERENCES cal_events(id) ON DELETE CASCADE)""",
+    # an outside calendar subscribed to by its web address (a calendar of kind 'subscribed', app/subscribe.py): where it
+    # is fetched from, how often, and how the last fetch went (UTC); etag / last_modified ask the server "changed since?"
+    """CREATE TABLE IF NOT EXISTS cal_subscriptions (
+        calendar_id INT PRIMARY KEY,
+        url VARCHAR(2048) NOT NULL,
+        refresh_hours SMALLINT NOT NULL DEFAULT 6,
+        etag VARCHAR(255) NULL,
+        last_modified VARCHAR(64) NULL,
+        checked_at DATETIME NULL,
+        synced_at DATETIME NULL,
+        error VARCHAR(512) NULL,
+        events INT NULL,
+        created_by INT NULL,
+        FOREIGN KEY (calendar_id) REFERENCES cal_calendars(id) ON DELETE CASCADE)""",
 ]
 
 def connect(database: str | None = None):

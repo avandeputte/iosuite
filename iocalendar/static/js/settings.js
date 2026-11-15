@@ -1,4 +1,4 @@
-import { S, addDays, api, canOwn, canShared, confirmDialog, copyRow, describeReminder, fail, fill, h, icon, isAuto, loadCals, saveSettings, toast, weekStart, ymd } from './core.js';
+import { REFRESH_HOURS, S, addDays, api, canOwn, canShared, confirmDialog, copyRow, describeReminder, fail, fill, h, icon, isAuto, loadCals, saveSettings, toast, weekStart, ymd } from './core.js';
 import { applyTheme, colorPicker, drawNav, drawUser, newCalendar } from './shell.js';
 import { TIMED_REMINDERS, zones } from './edit.js';
 import { onRoute } from './main.js';
@@ -116,17 +116,45 @@ export async function setCalendars(el) {
     const col = colorPicker(c.color, (v) => save({ color: v }));
     const tz = h('select', { class: 't', onchange: (e) => save({ timezone: e.target.value || null }) }, h('option', { value: '' }, `Server default (${S.status.timezone})`), tzs.map((z) => h('option', { value: z, selected: z === c.timezone ? true : null }, z.replace(/_/g, ' '))));
     const desc = h('input', { class: 't', value: c.description || '', placeholder: 'What it is for', onchange: (e) => save({ description: e.target.value }) });
-    const canEdit = c.writable || (auto && S.user.role === 'admin');
+    const sub = c.kind === 'subscribed' ? c.subscription : null;
+    const manage = !!(sub && sub.manage);
+    const canEdit = c.writable || (auto && S.user.role === 'admin') || manage;
     return h('div', { class: 'box', style: { '--c': c.color } },
       h('h2', null, h('span', { class: 'chip-ev allday', style: { '--c': c.color, display: 'inline-flex', width: '14px', height: '14px', padding: 0 } }), c.name,
-        h('span', { class: 'muted small', style: { fontWeight: 400 } }, c.kind === 'birthdays' ? 'from ioContact, read-only' : c.kind === 'holidays' ? 'public holidays, read-only' : c.shared ? 'shared with everyone' : 'only you')),
+        h('span', { class: 'muted small', style: { fontWeight: 400 } }, c.kind === 'birthdays' ? 'from ioContact, read-only' : c.kind === 'holidays' ? 'public holidays, read-only'
+          : sub ? `outside calendar, read-only, ${c.shared ? 'shared with everyone' : 'only you'}` : c.shared ? 'shared with everyone' : 'only you')),
+      sub ? subscriptionBox(c, sub, manage) : null,
       canEdit ? [h('div', { class: 'grid' }, fld('Name', name), fld('Description', desc), auto ? null : fld('Time zone for floating times', tz)), h('div', { style: { margin: '10px 0' } }, col),
         h('p', null,
-        !auto && (!c.shared || S.user.role === 'admin') ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
+        (!auto || manage) && (!c.shared || S.user.role === 'admin') ? h('button', { class: 'pillbtn noic danger', onclick: async () => {
           if (!await confirmDialog('Delete calendar', `Delete ${c.name} and its ${c.count || 0} events? Apps that sync it lose it too.`, 'Delete', true)) return;
           try { await api(`api/calendars/${c.id}`, { method: 'DELETE' }); await loadCals(); onRoute(); } catch (e) { fail(e); }
         } }, 'Delete') : null)] : h('p', { class: 'muted' }, auto ? (c.kind === 'holidays' ? 'Filled from Settings › Holidays and birthdays.' : 'Filled from ioContact (Settings › Holidays and birthdays).') : `${c.count || 0} events. Editors and admins change shared calendars.`));
   }));
+}
+
+/** An outside calendar's address, how often it is fetched and how the last fetch went; the address only for those who manage it. */
+function subscriptionBox(c, sub, manage) {
+  const every = (n) => (REFRESH_HOURS.find(([x]) => x === n) || [n, `Every ${n} hours`])[1].toLowerCase();
+  const status = sub.error ? h('p', { class: 'small', style: { color: 'var(--danger)' } }, `The last fetch failed: ${sub.error}`
+    + (sub.synced ? ` (events as of ${new Date(sub.synced * 1000).toLocaleString()})` : ''))
+    : h('p', { class: 'muted small' }, sub.synced ? `${sub.events ?? c.count ?? 0} events, last fetched ${new Date(sub.synced * 1000).toLocaleString()}.` : 'Not fetched yet.');
+  if (!manage) return [h('p', { class: 'muted' }, `From ${sub.host}, fetched ${every(sub.refreshHours)}. ${c.shared ? 'Editors and admins change it.' : ''}`), status];
+  const patch = async (body) => {
+    try {
+      const r = await api(`api/subscriptions/${c.id}`, { method: 'PATCH', json: body });
+      toast(r.sync && !r.sync.ok ? r.sync.error : 'Saved'); await loadCals(); onRoute();
+    } catch (e) { fail(e); onRoute(); }
+  };
+  const url = h('input', { class: 't', type: 'url', value: sub.url || '', spellcheck: 'false', autocomplete: 'off', onchange: (e) => { toast('Reading the calendar…'); patch({ url: e.target.value }); } });
+  const sel = h('select', { class: 't', onchange: (e) => patch({ refreshHours: Number(e.target.value) }) },
+    REFRESH_HOURS.map(([n, l]) => h('option', { value: n, selected: n === sub.refreshHours ? true : null }, l)));
+  return [h('div', { class: 'grid' }, fld('Web address', url), fld('Fetch it again', sel)), status,
+    h('p', null, h('button', { class: 'pillbtn', onclick: async (e) => {
+      e.currentTarget.disabled = true;
+      try { const r = await api(`api/subscriptions/${c.id}/refresh`, { method: 'POST' }); toast(r.ok ? `Up to date: ${r.events} events` : r.error); await loadCals(); } catch (err) { fail(err); }
+      onRoute();
+    } }, icon('repeat', 's'), 'Fetch now'))];
 }
 
 /** Settings › Security and Global settings (suite admins): the people, their role in every app, app

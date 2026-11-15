@@ -162,8 +162,10 @@ export const calOf = (id) => S.cals.find((c) => c.id === id) || {};
 export const colorOf = (id) => calOf(id).color || 'var(--brand)';
 export const writable = () => S.cals.filter((c) => c.writable);
 export const shownCals = () => S.cals.filter((c) => !S.hidden.has(c.id));
-/** Filled by the server (Birthdays from ioContact, public Holidays): nobody changes them here. */
-export const AUTO_KINDS = ['birthdays', 'holidays'];
+/** Filled by the server (Birthdays from ioContact, public Holidays, outside calendars subscribed by address): nobody changes their events here. */
+export const AUTO_KINDS = ['birthdays', 'holidays', 'subscribed'];
+/** How often an outside calendar may be fetched again, in hours, and how each choice reads. */
+export const REFRESH_HOURS = [[1, 'Every hour'], [3, 'Every 3 hours'], [6, 'Every 6 hours'], [12, 'Twice a day'], [24, 'Once a day'], [168, 'Once a week']];
 export const isAuto = (c) => AUTO_KINDS.includes(c.kind);
 export const memberOf = (id) => S.members.find((m) => m.id === id);
 /** Each family member's colour, initials and face are the suite's (Settings › Security › Family), the same in every io app. */
@@ -171,7 +173,7 @@ export const memberColor = (m) => m.color || '#5f6b7a';
 /** A member's badge: their initials on their colour; `face`: their face (ioPix, else their ioContact card) when they have one. */
 export const memberBadge = (m, face = false) => h('span', { class: `mem${face && m.hasFace ? ' face' : ''}`, title: m.displayName, style: { '--mc': memberColor(m) } }, m.initials || initials(m.displayName),
   face && m.hasFace ? h('img', { src: `api/auth/family/${m.id}/face`, alt: '', loading: 'lazy', onerror: (e) => { e.currentTarget.parentNode.classList.remove('face'); e.currentTarget.remove(); } }) : null);
-/** With family members picked in the sidebar: only the events tagged with one of them (holidays and birthdays stay). */
+/** With family members picked in the sidebar: only the events tagged with one of them (holidays, birthdays and outside calendars stay). */
 export const passesWho = (o) => !S.who.size || isAuto(calOf(o.calendarId)) || (o.members || []).some((id) => S.who.has(id));
 
 // tasks from ioTask, when it is part of the suite: each on the day it is due, ticked off from here
