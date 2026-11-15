@@ -1,7 +1,7 @@
 """Linked items: an event linked to its meeting notes, a task to a recipe, a note to a contact, across the apps.
 
 A link joins two items of the suite, each named by its kind and its id in its app (KINDS: event, task, note, contact,
-recipe, photo). It is one row of ios_related in the Shared ioSuite database and works both ways: the task shows the
+recipe, photo, item: a thing in ioHome). It is one row of ios_related in the Shared ioSuite database and works both ways: the task shows the
 recipe and the recipe shows the task. Nothing about the items is kept with it; what a link shows (the title, the date,
 the small picture) is asked of the item's own app every time, with the viewer's own sign-in, so a link shows only to
 someone who may see both of its items, and always as the item is now. A note is its owner's alone: an event linked to
@@ -48,6 +48,7 @@ KINDS = {
     "contact": {"app": "iocontact", "label": "Contact", "plural": "Contacts"},
     "recipe": {"app": "iorecipe", "label": "Recipe", "plural": "Recipes"},
     "photo": {"app": "iopix", "label": "Photo", "plural": "Photos"},
+    "item": {"app": "iohome", "label": "Thing", "plural": "Things in the house"},
 }
 MAX_LINKS = 200  # links per item
 TIMEOUT = 5      # seconds, per request to an app
@@ -185,7 +186,7 @@ def _item(kind: str, item_id, title: str, text: str = "", when: str = None, all_
     app = KINDS[kind]["app"]
     base = links.url(app) or ""
     href = {"event": "#/event/{}", "task": "#/task/{}", "note": "#/note/{}", "contact": "#/c/{}", "recipe": "#/recipe/{}",
-            "photo": "#/photos?p={}"}[kind].format(urllib.parse.quote(str(item_id)))
+            "photo": "#/photos?p={}", "item": "#/item/{}"}[kind].format(urllib.parse.quote(str(item_id)))
     return {"kind": kind, "id": str(item_id), "app": app, "title": (title or "").strip()[:120] or "(no title)",
             "text": (text or "").strip()[:140], "when": when, "allDay": bool(all_day), "done": bool(done),
             "image": image, "url": f"{base}/{href}" if base else None}
@@ -227,6 +228,12 @@ def _photo(p: dict) -> dict:
     return _item("photo", p.get("id"), title, album if album and album != title else "", _iso_epoch(p.get("ts")), image="")
 
 
+def _thing(x: dict) -> dict:
+    m = re.search(r"/files/(\d+)$", str(x.get("photo") or ""))
+    where = (x.get("location") or {}).get("path") if isinstance(x.get("location"), dict) else None
+    return _item("item", x.get("id"), x.get("name"), where or x.get("manufacturer") or "", image=m.group(1) if m else None)
+
+
 def _soon_first(items: list[dict]) -> list[dict]:
     """Events: those still to come soonest first, then the ones that are over, the latest first."""
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None).isoformat(timespec="minutes")
@@ -258,6 +265,8 @@ def find(request: Request, kind: str, q: str, n: int = 6) -> list[dict]:
         return [_contact(x) for x in ask(request, app, "/api/contacts", {"q": q, "limit": n}).get("items", [])[:n]]
     if kind == "recipe":
         return [_recipe(x) for x in ask(request, app, "/api/recipes", {"q": q, "limit": n}).get("items", [])[:n]]
+    if kind == "item":
+        return [_thing(x) for x in ask(request, app, "/api/items", {"q": q, "limit": n}).get("items", [])[:n]]
     if kind == "photo":
         got = ask(request, app, "/api/photos", {"q": q, "type": "photo"})
         return [_photo({"id": pid, "ts": ts}) for pid, ts in list(zip(got.get("id") or [], got.get("ts") or []))[:max(n, 12)]]
@@ -284,6 +293,8 @@ def get(request: Request, kind: str, item_id: str) -> dict:
         return _recipe(ask(request, app, f"/api/recipes/{q}"))
     if kind == "photo":
         return _photo(ask(request, app, f"/api/photo/{q}"))
+    if kind == "item":
+        return _thing(ask(request, app, f"/api/items/{q}"))
     raise Unavailable(404, "No such kind of item")
 
 
@@ -292,7 +303,8 @@ def image(request: Request, kind: str, item_id: str, p: str = "") -> tuple[bytes
     app, q = KINDS[kind]["app"], urllib.parse.quote(item_id)
     path, params = {"note": (f"/api/notes/{q}/thumb", None), "contact": (f"/api/contacts/{q}/photo", None),
                     "photo": (f"/thumb/{q}", {"fit": "square"}),
-                    "recipe": (f"/api/recipes/{q}/photos/{p}", {"size": "small"}) if _NUM.fullmatch(p or "") else (None, None)}.get(kind, (None, None))
+                    "recipe": (f"/api/recipes/{q}/photos/{p}", {"size": "small"}) if _NUM.fullmatch(p or "") else (None, None),
+                    "item": (f"/api/items/{q}/files/{p}", {"size": "small"}) if _NUM.fullmatch(p or "") else (None, None)}.get(kind, (None, None))
     if not path:
         raise Unavailable(404, "No picture")
     return ask(request, app, path, params, image=True, timeout=15)

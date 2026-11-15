@@ -32,7 +32,7 @@ from app import apps
 TIMEOUT = 4  # seconds, per request to an app
 _pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="widgets")
 UA = "ioStart page"
-WIDGETS = ("iopix", "iocalendar", "iotask", "iohealth", "iocontact", "iorecipe", "ionote")
+WIDGETS = ("iopix", "iocalendar", "iotask", "iohealth", "iocontact", "iorecipe", "ionote", "iohome")
 
 
 class Unavailable(Exception):
@@ -357,6 +357,26 @@ def iorecipe_search(request: Request, q: str, n: int = 5) -> dict:
     return {"items": out, "more": len(rows) > n}
 
 
+def iohome_search(request: Request, q: str, n: int = 5) -> dict:
+    """{items: [{id, name, photo, where}], more}: the things in the house (ioHome) with every word of q in their name,
+    maker, model or serial number, notes, place, labels or own fields (the search box), by name. photo: the id of its
+    first picture, if any; where: the place it is in."""
+    got = fetch(request, "iohome", "/api/items", {"q": q[:80], "limit": n + 1})
+    rows = got.get("items", [])
+    out = []
+    for r in rows[:n]:
+        m = re.search(r"/files/(\d+)$", str(r.get("photo") or ""))
+        loc = r.get("location") if isinstance(r.get("location"), dict) else {}
+        out.append({"id": r.get("id"), "name": r.get("name") or "(no name)", "photo": int(m.group(1)) if m else None,
+                    "where": loc.get("path") or ""})
+    return {"items": out, "more": len(rows) > n}
+
+
+def iohome_photo(request: Request, item_id: int, file_id: int) -> tuple[bytes, str]:
+    """A thing's small picture (the card's), from ioHome."""
+    return fetch(request, "iohome", f"/api/items/{int(item_id)}/files/{int(file_id)}", {"size": "small"}, raw=True)
+
+
 def _lines(text) -> list[str]:
     return [ln.strip().lstrip("#>*- ").strip() for ln in str(text or "").splitlines() if ln.strip().lstrip("#>*- ").strip()]
 
@@ -494,10 +514,11 @@ def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q:
         tz = ""
     if key == "iopix":
         return iopix(request, tz, min(max(int(n or 0), 1), 24) if n else 4, kind if kind in ("onthisday", "rediscover") else "")
-    if q.strip() and key in ("iocalendar", "iotask", "iorecipe", "ionote"):
+    if q.strip() and key in ("iocalendar", "iotask", "iorecipe", "ionote", "iohome"):
         return {"iocalendar": lambda: iocalendar_search(request, q.strip(), tz), "iotask": lambda: iotask_search(request, q.strip(), tz),
-                "iorecipe": lambda: iorecipe_search(request, q.strip()), "ionote": lambda: ionote_search(request, q.strip())}[key]()
-    if key in ("iorecipe", "ionote"):
+                "iorecipe": lambda: iorecipe_search(request, q.strip()), "ionote": lambda: ionote_search(request, q.strip()),
+                "iohome": lambda: iohome_search(request, q.strip())}[key]()
+    if key in ("iorecipe", "ionote", "iohome"):
         raise Unavailable(404, f"{apps.name_of(key)} shows only in the search box")
     if key == "iocalendar" and kind == "week":
         return iocalendar_week(request, tz)

@@ -59,6 +59,22 @@ def test_plan_shares_the_answers(tmp_path):
     assert pix["args"][pix["args"].index("--data") + 1] == str(tmp_path / "opt" / "iopix" / "data")
 
 
+def test_iohome_is_one_of_the_apps(tmp_path):
+    """ioHome installs like the others: its own "home" database on the same server, its port, the suite's sign-in."""
+    app = tmp_path / "opt" / "iostart" / "app"
+    app.mkdir(parents=True)
+    (app / "config.env").write_text(CFG)
+    cfg = install.read_env_file(app / "config.env")
+    assert "iohome" in install.parse_apps("all")
+    [e] = install.plan(["iohome"], cfg, install.base_dir(app), admin="alex", service=True, from_app="iostart")
+    assert e["target"] == tmp_path / "opt" / "iohome" / "app"
+    assert e["env"]["IOHOME_DB"] == "db.lan:3307/home:suite:s3cret"
+    assert e["env"]["IOHOME_SUITE_DB"] == "db.lan:3307/iostart:iostart:sh4red"
+    assert e["env"]["IOHOME_ADMIN"].startswith("alex:")
+    from iosuite_shared import suite
+    assert suite.PORTS["iohome"] == 8700 and suite.FOLDERS["iohome"] == "home"
+
+
 def test_plan_without_an_app_database_lends_the_shared_one(tmp_path):
     cfg = install.read_env_file(tmp_path / "missing")  # no app database yet (ioPix before its set-up page): no DB_* at all
     cfg.update(IOSUITE_DB_HOST="db.lan", IOSUITE_DB_PASSWORD="pw")

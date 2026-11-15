@@ -1,7 +1,7 @@
 # ioStart
 
 *The start page of the ioThing suite: one place with every io app ([ioPix](https://github.com/avandeputte/iosuite/tree/main/iopix),
-[ioHealth](https://github.com/avandeputte/iosuite/tree/main/iohealth), [ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar), [ioTask](https://github.com/avandeputte/iosuite/tree/main/iotask), [ioRecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe),
+[ioHealth](https://github.com/avandeputte/iosuite/tree/main/iohealth), [ioCalendar](https://github.com/avandeputte/iosuite/tree/main/iocalendar), [ioTask](https://github.com/avandeputte/iosuite/tree/main/iotask), [ioRecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe), [ioHome](https://github.com/avandeputte/iosuite/tree/main/iohome),
 [ioContact](https://github.com/avandeputte/iosuite/tree/main/iocontact), [ioNote](https://github.com/avandeputte/iosuite/tree/main/ionote)).*
 
 A self-hosted home page for the family: a tile per app, signed in with the suite's shared accounts ([`iosuite-shared`](https://github.com/avandeputte/iosuite/tree/main/shared)), so
@@ -20,7 +20,7 @@ what the app will show on the start page later (today's events, the newest photo
   the same machine, else at its LAN address, else its public one, with the suite's Cloudflare Access service token
   (Settings › Global settings › Keys and tokens) when one is set.
 - **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, what the apps find
-  for you (ioContact's people, ioCalendar's coming events, ioTask's open tasks, ioRecipe's recipes, your ioNote notes; each asked
+  for you (ioContact's people, ioCalendar's coming events, ioTask's open tasks, ioRecipe's recipes, ioHome's things in the house, your ioNote notes; each asked
   with your own sign-in, so you see what you may see there), and a row per app that searches itself (each opens on
   its own results). Arrows
   pick a row, Enter opens it. When nothing of the suite matches, Enter searches the web (DuckDuckGo, or the engine
@@ -164,7 +164,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main
 
 It asks for the ioStart database (host, port, database, user, password), the Shared ioSuite database, the web port
 (8630), the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the
-admin account, and which other apps of the suite go in the same container (ioCalendar, ioTask, ioRecipe, ioContact, ioNote, ioHealth:
+admin account, and which other apps of the suite go in the same container (ioCalendar, ioTask, ioRecipe, ioHome, ioContact, ioNote, ioHealth:
 they reuse those answers, each app with its own database on the same server, the same accounts and admin, each on its
 usual port); then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with
 those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again),
@@ -182,7 +182,7 @@ docker compose up -d     # edit the CHANGE ME spots in docker-compose.yml first
 The image (`ghcr.io/avandeputte/iosuite/iostart`) holds no data: everything is in the database.
 
 The whole suite in one stack, MariaDB included: [`docker-compose.yml`](../docker-compose.yml) at the root of the repository
-starts a MariaDB with a database per app, ioStart, ioCalendar, ioTask, ioRecipe, ioContact, ioNote, ioHealth and ioPix (without
+starts a MariaDB with a database per app, ioStart, ioCalendar, ioTask, ioRecipe, ioHome, ioContact, ioNote, ioHealth and ioPix (without
 digiKam), with one Shared ioSuite database and one admin. Edit the passwords, the photos path and the time zone at
 the top, then `docker compose up -d` there (or paste it as a stack in Dockge / Portainer).
 

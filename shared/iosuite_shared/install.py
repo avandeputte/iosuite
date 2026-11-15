@@ -84,6 +84,7 @@ APPS = {
     "iodns": dict(label="ioDNS", db="dns", port=8660, env="IODNS"),
     "iobackup": dict(label="ioBackup", db="backup", port=8680, env="IOBACKUP"),
     "iorecipe": dict(label="ioRecipe", db="recipe", port=8690, env="IORECIPE"),
+    "iohome": dict(label="ioHome", db="home", port=8700, env="IOHOME"),
     "iopix": dict(label="ioPix", db="iopix", port=8600, env="IOPIX", data=True,
                   extra=["--no-digikam", "--features", "none"], photos=True, launchd="com.iopix"),
 }
@@ -930,7 +931,7 @@ def choose(base, config_dir, ask=input, log=print, reach=None):
 
 def add_parser(sub):
     p = sub.add_parser("install", help="install other apps of the suite here, sharing the answers of the app in --config")
-    p.add_argument("apps", nargs="+", help="iostart, iopix, ionote, iocalendar, iocontact, iotask, iorecipe, iohealth, iodns, iobackup (comma-separated or several), or all")
+    p.add_argument("apps", nargs="+", help="iostart, iopix, ionote, iocalendar, iocontact, iotask, iorecipe, iohome, iohealth, iodns, iobackup (comma-separated or several), or all")
     _install_options(p)
     r = sub.add_parser("remove", help="remove apps of the suite from this machine; their databases and data stay unless --delete-data")
     r.add_argument("apps", nargs="+", help="the apps to remove (comma-separated or several)")

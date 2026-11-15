@@ -17,6 +17,7 @@ container or one database server:
 | ioHealth | 8650 | `health` | `/opt/iohealth/app` |
 | ioTask | 8670 | `tasks` | `/opt/iotask/app` |
 | ioRecipe | 8690 | `recipe` | `/opt/iorecipe/app` |
+| ioHome | 8700 | `home` | `/opt/iohome/app` |
 
 ## One line: install, add, remove, reconfigure
 

@@ -1,0 +1,104 @@
+# Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io on pushes to main
+# (pull requests only build). The image of a push to main is also tagged v<the suite's version>
+# (shared/iosuite_shared/__init__.py); the release itself is made once for the suite, by shared.yml.
+# Made from shared/templates/workflow.yml (shared/templates/render.py): only the "own:" blocks are this app's.
+name: ioHome
+
+on:
+  push:
+    branches: [main]
+    paths: ["iohome/**", "shared/**", ".github/workflows/iohome.yml"]
+  pull_request:
+    paths: ["iohome/**", "shared/**", ".github/workflows/iohome.yml"]
+  workflow_dispatch:
+
+# every step runs in the app's folder; the shared library sits beside it in shared/
+defaults:
+  run:
+    working-directory: iohome
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/avandeputte/iosuite/iohome
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # >>> own: setup
+      # <<< own: setup
+      - name: Syntax checks
+        run: |
+          python -m pip install -q -e ../shared
+          python -m pip install -q -e ".[test]" pyflakes
+          python3 ../shared/templates/render-update.py --check
+          python3 ../shared/templates/render.py --check
+          python -m pyflakes app tests
+          for f in static/app.js static/js/*.js; do [ -e "$f" ] || continue; node --input-type=module --check < "$f" || exit 1; done  # ES modules, parsed as modules
+          for f in *.sh; do sh -n "$f"; done
+          bash -n proxmox/ct/iohome.sh proxmox/install/iohome-install.sh
+          # >>> own: checks
+          # <<< own: checks
+      - name: Tests
+        # scratch databases home_test and home_test_auth on the service (iosuite_shared.testing)
+        env:
+          IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
+        run: python -m pytest -q -p no:cacheprovider tests
+      # >>> own: tests
+      # <<< own: tests
+
+  image:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: echo "version=$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' ../shared/iosuite_shared/__init__.py)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=v${{ steps.version.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: iohome/Dockerfile
+          # >>> own: platforms
+          platforms: linux/amd64,linux/arm64
+          # <<< own: platforms
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: COMMIT=${{ github.sha }}
+          # >>> own: build
+          # <<< own: build

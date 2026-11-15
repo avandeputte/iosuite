@@ -68,7 +68,7 @@ class SuiteServer(MCPServer):
 
 INSTRUCTIONS = (
     "The ioThing suite in one place: the start page (ioStart) and every app of the suite (ioCalendar, ioTask, "
-    "ioRecipe, ioNote, ioContact, ioPix...). Each app's tools are named after the app: iocalendar_..., iotask_..., "
+    "ioRecipe, ioHome, ioNote, ioContact, ioPix...). Each app's tools are named after the app: iocalendar_..., iotask_..., "
     "iorecipe_... and act as you in that app, with your role there, so a job can span apps (read a recipe, then add "
     "its ingredients to a shopping list). suite_apps lists the apps you can use here, how to use each one (its own "
     "instructions) and why an app offers no tools (its MCP server is switched off there, or you have no access). "

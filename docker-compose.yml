@@ -1,5 +1,5 @@
 # The whole ioSuite in one Docker stack: MariaDB with a database per app, the Shared ioSuite database (accounts, one
-# sign-in for every app) and ioStart (the start page), ioCalendar, ioTask, ioRecipe, ioContact, ioNote, ioHealth and ioPix.
+# sign-in for every app) and ioStart (the start page), ioCalendar, ioTask, ioRecipe, ioHome, ioContact, ioNote, ioHealth and ioPix.
 #
 #   docker compose up -d        # or paste this file as a stack in Dockge / Portainer
 #
@@ -106,6 +106,17 @@ services:
       # PUBLIC_URL: https://recipes.example.com
       # INTERNAL_URL: http://192.168.1.151:8690   # this host's LAN address and the port, for the suite's list of apps
 
+  iohome:
+    <<: *app
+    image: ghcr.io/avandeputte/iosuite/iohome:latest
+    container_name: iohome
+    ports: ["8700:8700"]                 # web app, REST API, MCP (/mcp)
+    environment:
+      <<: *shared
+      DB_NAME: home
+      # PUBLIC_URL: https://home.example.com
+      # INTERNAL_URL: http://192.168.1.151:8700   # this host's LAN address and the port, for the suite's list of apps
+
   iocontact:
     <<: *app
     image: ghcr.io/avandeputte/iosuite/iocontact:latest
@@ -175,6 +186,7 @@ configs:
       CREATE DATABASE IF NOT EXISTS calendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS tasks CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS recipe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS home CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS contacts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS notes CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS health CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -183,6 +195,7 @@ configs:
       GRANT ALL PRIVILEGES ON calendar.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON tasks.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON recipe.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON home.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON contacts.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON notes.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON health.* TO 'suite'@'%';

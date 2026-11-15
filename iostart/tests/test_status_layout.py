@@ -183,6 +183,11 @@ def test_events_tasks_recipes_and_notes_for_the_search_box(client, monkeypatch):
             return {"total": 9, "notes": [{"id": "ab-1", "title": "", "body": "# Dentist\n\nDr. Molar, 02 555 01 23", "pinned": True, "updatedAt": 1.5},
                                           {"id": "ab-2", "title": "Insurance", "body": "- dentist: 80 %", "pinned": False, "updatedAt": 1.0},
                                           {"id": "ab-3", "title": "", "body": "", "ocrText": "", "hasImage": True, "pinned": False, "updatedAt": 0.5}]}
+        if path == "/api/items":
+            return {"items": [{"id": 2, "name": "Dentist chair", "photo": "api/items/2/files/9", "location": {"id": 1, "name": "Attic", "path": "House / Attic"}}]}
+        if path == "/api/items/2/files/9":
+            assert raw and params == {"size": "small"}
+            return b"jpg", "image/jpeg"
         if path == "/api/recipes/3/photos/12":
             assert raw and params == {"size": "small"}
             return b"jpeg", "image/jpeg"
@@ -208,3 +213,7 @@ def test_events_tasks_recipes_and_notes_for_the_search_box(client, monkeypatch):
                            {"id": "ab-3", "title": "Image", "text": "", "pinned": False, "updated": 0.5}], "more": True}
     assert ("ionote", "/api/notes", {"q": "dentist", "limit": 5}) in asked
     assert client.get("/api/widgets/ionote").status_code == 404
+    d = client.get("/api/widgets/iohome?q=dentist").json()
+    assert d == {"items": [{"id": 2, "name": "Dentist chair", "photo": 9, "where": "House / Attic"}], "more": False}
+    assert client.get("/api/widgets/iohome/photo/2/9").content == b"jpg"
+    assert client.get("/api/widgets/iohome").status_code == 404
