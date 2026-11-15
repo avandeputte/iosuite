@@ -27,6 +27,7 @@ import re
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -37,6 +38,12 @@ SUITE_REPO = "avandeputte/iosuite"  # the one repository: a folder per app, this
 VERSION_FILE = "shared/iosuite_shared/__init__.py"  # where the suite's version is, in the repository
 VERSION_RE = re.compile(r'^__version__\s*=\s*"([^"]+)"', re.M)
 _version_tuple = suiteupdates.version_tuple
+
+
+def head_from_refs(data: bytes, ref: str) -> str | None:
+    """The commit a branch (or a tag) is at, in GitHub's answer to git's first question (info/refs)."""
+    m = re.search(r"([0-9a-f]{40}) refs/(?:heads|tags)/" + re.escape(ref) + r"(?=[\x00\n])", data.decode("utf-8", "replace"))
+    return m.group(1) if m else None
 
 
 def auto_check_enabled() -> bool:
@@ -119,15 +126,34 @@ class Updater:
         m = VERSION_RE.search(text)
         return m.group(1) if m else None
 
+    def _branch_head(self) -> dict:
+        """The branch's commit: {sha} from GitHub's git address (as git asks it), which has no hourly limit, or, when
+        that cannot be read, {sha, date, message} from api.github.com, which allows a server 60 unsigned calls an hour
+        (a suite of apps checking together soon uses them up)."""
+        try:
+            sha = head_from_refs(self._get_url(f"https://github.com/{self.repo}.git/info/refs?service=git-upload-pack", "*/*"), self.branch)
+            if sha:
+                return {"sha": sha}
+        except Exception:  # noqa: BLE001 - the API below says why, if it fails too
+            pass
+        try:
+            c = json.loads(self._get_url(f"https://api.github.com/repos/{self.repo}/commits/{self.branch}"))
+        except urllib.error.HTTPError as e:
+            if e.code in (403, 429):
+                raise RuntimeError("GitHub's hourly limit for this server is used up; it resets within the hour") from e
+            raise
+        return {"sha": c["sha"], "date": c["commit"]["committer"]["date"][:10], "message": c["commit"]["message"].splitlines()[0][:120]}
+
     def check(self) -> dict:
         """Ask GitHub: {installed, version, remote, remoteDate, remoteMessage, remoteVersion,
         status: current | update | error, checked}; the app's row (iosuite_shared.suiteupdates) gets the answer."""
         mine = self.local_commit()
         out = {"installed": mine[:7], "version": self.version, "checked": int(time.time())}
         try:
-            c = json.loads(self._get_url(f"https://api.github.com/repos/{self.repo}/commits/{self.branch}"))
-            out.update(remote=c["sha"][:7], remoteDate=c["commit"]["committer"]["date"][:10],
-                       remoteMessage=c["commit"]["message"].splitlines()[0][:120])
+            c = self._branch_head()
+            out.update(remote=c["sha"][:7])
+            if c.get("date"):
+                out.update(remoteDate=c["date"], remoteMessage=c["message"])
             if mine != "unknown" and c["sha"].startswith(mine):
                 out["status"] = "current"
             else:

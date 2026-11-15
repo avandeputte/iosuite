@@ -65,13 +65,39 @@ fetch() { "$PYF" -c 'import sys, urllib.request
 req = urllib.request.Request(sys.argv[1], headers={"User-Agent": sys.argv[3] + "-update", "Accept": "application/vnd.github+json"})
 with urllib.request.urlopen(req, timeout=60) as r, open(sys.argv[2], "wb") as f:
     f.write(r.read())' "$1" "$2" "$NAME"; }
-remote_commit() { "$PYF" -c 'import sys, json, urllib.request
-req = urllib.request.Request(sys.argv[1], headers={"User-Agent": sys.argv[2] + "-update", "Accept": "application/vnd.github+json"})
-with urllib.request.urlopen(req, timeout=30) as r:
-    print(json.load(r)["sha"])' "https://api.github.com/repos/$REPO/commits/${1:-$BRANCH}" "$NAME" 2>/dev/null; }
+# the commit a branch (or tag) is at: from GitHub's git address, as git itself asks it, which has no hourly limit;
+# api.github.com allows a server 60 unsigned calls an hour, which a suite of apps updating together runs out of.
+# Prints the commit id, or "error: <why>"
+remote_commit() { "$PYF" - "$REPO" "${1:-$BRANCH}" "$NAME" <<'PYEOF'
+import json, re, sys, urllib.error, urllib.request
+repo, ref, name = sys.argv[1:4]
+if re.fullmatch(r"[0-9a-f]{40}", ref):
+    print(ref); sys.exit()
+why = []
+def get(url, accept):
+    req = urllib.request.Request(url, headers={"User-Agent": name + "-update", "Accept": accept})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return r.read()
+try:
+    refs = get(f"https://github.com/{repo}.git/info/refs?service=git-upload-pack", "*/*").decode("utf-8", "replace")
+    m = re.search(r"([0-9a-f]{40}) refs/(?:heads|tags)/" + re.escape(ref) + r"(?=[\x00\n])", refs)
+    if m:
+        print(m.group(1)); sys.exit()
+    why.append(f"github.com has no branch or tag {ref}")
+except Exception as e:  # noqa: BLE001
+    why.append(f"github.com: {e}")
+try:  # a short commit id, or github.com could not be reached
+    print(json.loads(get(f"https://api.github.com/repos/{repo}/commits/{ref}", "application/vnd.github+json"))["sha"]); sys.exit()
+except urllib.error.HTTPError as e:
+    why.append(f"api.github.com: HTTP {e.code} " + ("(its hourly limit is used up; it resets within the hour)" if e.code in (403, 429) else e.reason))
+except Exception as e:  # noqa: BLE001
+    why.append(f"api.github.com: {e}")
+print("error: " + "; ".join(why))
+PYEOF
+}
 if [ "$CHECK" = 1 ]; then
   L="$(local_commit)"; R="$(remote_commit "$REF")" || R=""  # a failed lookup must reach die, not set -e
-  [ -n "$R" ] || die "could not reach GitHub (api.github.com) from here, or no such commit: $REF"
+  case "$R" in ""|error*) die "could not look up $REF on GitHub: ${R#error: }";; esac
   if [ "$L" = "$R" ]; then echo "up to date ($(echo "$L" | cut -c1-7))"; else echo "update available: $(echo "$R" | cut -c1-7) (installed $(echo "$L" | cut -c1-7))"; fi
   exit 0
 fi
@@ -102,7 +128,8 @@ if [ -n "$GITROOT" ]; then
   git -C "$GITROOT" show "FETCH_HEAD:shared/pyproject.toml" > "$TMP/shared.toml" 2>/dev/null || die "the fetched commit has no shared/pyproject.toml"
 else
   # the archive is fetched by commit id, so the code and the recorded COMMIT always match
-  R="$(remote_commit "$REF")" || R=""; [ -n "$R" ] || die "could not reach GitHub (or no such commit: $REF)"
+  R="$(remote_commit "$REF")" || R=""
+  case "$R" in ""|error*) die "could not look up $REF on GitHub: ${R#error: }";; esac
   if [ "$FORCE" = 0 ] && [ "$R" = "$(local_commit)" ]; then
     say "Already up to date ($(echo "$R" | cut -c1-7)); nothing to do"; note "ok: already up to date ($(echo "$R" | cut -c1-7))"; exit 0
   fi
