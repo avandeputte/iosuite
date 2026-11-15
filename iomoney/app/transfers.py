@@ -109,7 +109,7 @@ def _rows(where: str = "1 = 1", args=()) -> list[dict]:
     return db.q("SELECT t.id, t.account_id, t.day, t.amount, t.merchant, t.description, t.category, t.category_group, "
                 "a.name AS account_name, a.institution, a.owner_id FROM mny_transactions t "
                 "JOIN mny_accounts a ON a.id = t.account_id "
-                "WHERE t.amount <> 0 AND NOT EXISTS (SELECT 1 FROM mny_transfers x WHERE x.out_id = t.id OR x.in_id = t.id) "
+                "WHERE t.amount <> 0 AND t.hidden = 0 AND NOT EXISTS (SELECT 1 FROM mny_transfers x WHERE x.out_id = t.id OR x.in_id = t.id) "
                 f"AND {where}", tuple(args))
 
 
@@ -227,7 +227,7 @@ def candidates(u: dict, t: dict, days: int = 14) -> list[dict]:
     another account, nearest days first."""
     where, args = model._visible(u)
     rows = db.q(f"SELECT t.*, a.owner_id, a.name AS account_name, a.currency FROM mny_transactions t "
-                f"JOIN mny_accounts a ON a.id = t.account_id WHERE {where} AND t.amount = %s AND t.account_id <> %s "
+                f"JOIN mny_accounts a ON a.id = t.account_id WHERE {where} AND t.hidden = 0 AND t.amount = %s AND t.account_id <> %s "
                 f"AND t.day BETWEEN %s AND %s AND NOT EXISTS (SELECT 1 FROM mny_transfers x WHERE x.out_id = t.id OR x.in_id = t.id)",
                 (*args, -Decimal(t["amount"]), t["account_id"], t["day"] - dt.timedelta(days=days), t["day"] + dt.timedelta(days=days)))
     rows.sort(key=lambda r: abs((r["day"] - t["day"]).days))

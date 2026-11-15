@@ -716,6 +716,7 @@ async function showTransactions(page, r) {
   const params = new URLSearchParams({ limit, offset });
   for (const k of ['q', 'account', 'category', 'month', 'flow']) if (q[k]) params.set(k, q[k]);
   if (q.rec) params.set('reconciled', q.rec);
+  if (q.hid) params.set('hidden', 'true');
   const [d, cats] = await Promise.all([api(`api/transactions?${params}`), categories()]);
   const go = (changes) => { const n = { ...q, ...changes }; delete n.offset; for (const k of Object.keys(n)) if (!n[k]) delete n[k]; location.hash = `#/transactions?${new URLSearchParams(n)}`; };
   const search = h('input', { class: 't', type: 'search', placeholder: 'Payee, category, notes…', value: q.q || '' });
@@ -729,7 +730,8 @@ async function showTransactions(page, r) {
     sel('account', [['', 'Every account'], ...S.accounts.filter(followsTx).map((a) => [a.id, a.name])], 'Account'),
     sel('category', [['', 'Every category'], ['-', 'Uncategorized'], ...cats.map((c) => [c.category, c.category])], 'Category'),
     sel('month', months, 'Month'), sel('flow', [['', 'In and out'], ['out', 'Money out'], ['in', 'Money in']], 'Direction'),
-    sel('rec', [['', 'Reconciled or not'], ['no', 'Not reconciled'], ['yes', 'Reconciled']], 'Reconciled')));
+    sel('rec', [['', 'Reconciled or not'], ['no', 'Not reconciled'], ['yes', 'Reconciled']], 'Reconciled'),
+    sel('hid', [['', 'Without the hidden'], ['1', 'With the hidden (dimmed)']], 'Hidden transactions')));
   const markable = d.items.filter((t) => t.writable && !t.reconciled);
   const markAll = async () => {
     if (!await confirmDialog('Mark them reconciled', `Mark the ${markable.length} transaction${markable.length === 1 ? '' : 's'} shown here as reconciled?`, 'Mark')) return;
