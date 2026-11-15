@@ -5,5 +5,6 @@
    reminders), search, import/export, settings (account, display, apps and devices, calendars, holidays and
    birthdays, and for admins family, storage and backups, server, and for suite admins security and global
    settings), laid out as in the other ioThing apps. Events can be tagged with the family members they are for, and
-   the sidebar filters the calendar by member. */
+   the sidebar filters the calendar by member. weather.js puts the next days' forecast on the day headers and the
+   weather at an event's place on the event. */
 import './js/main.js';

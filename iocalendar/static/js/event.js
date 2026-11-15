@@ -1,6 +1,7 @@
 import { LOCAL_TZ, S, addDays, api, calOf, confirmDialog, describeReminder, describeRule, fail, h, icon, loadCals, memberBadge, parseDay, toast, whenText, writable, ymd } from './core.js';
 import { go, route } from './main.js';
 import { askScope, drawView } from './views.js';
+import { eventWeather } from './weather.js';
 import { safeUrl } from '../../api/auth/ui.js';  // a link that is a link (never javascript:)
 
 // ------------------------------------------------------------------ one event
@@ -31,7 +32,7 @@ export function eventCard(j, inDialog) {
     line('clock', whenText(j), j.timezone && j.timezone !== LOCAL_TZ && !j.allDay ? h('div', { class: 'muted small' }, `Time zone ${j.timezone.replace(/_/g, ' ')}`) : null),
     j.rrule ? line('repeat', describeRule(j.rrule, j.allDay ? parseDay(j.start) : new Date(j.start))) : null,
     (j.members || []).length ? line('person', h('div', { class: 'chiprow' }, j.members.map((m) => h('span', { class: 'chip mchip' }, memberBadge(m), `For ${m.displayName}`)))) : null,
-    j.location ? line('place', h('a', { class: 'lnk', href: mapsLink(j.location), target: '_blank', rel: 'noopener' }, j.location)) : null,
+    j.location ? line('place', h('a', { class: 'lnk', href: mapsLink(j.location), target: '_blank', rel: 'noopener' }, j.location), eventWeather(j)) : null,
     people.length ? line('people', h('div', { class: 'chiprow' }, people.map((p) => {
       const label = p.name || p.email;
       const href = p.contactUrl || (p.email ? `mailto:${p.email}` : null);

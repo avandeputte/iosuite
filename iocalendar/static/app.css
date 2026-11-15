@@ -339,3 +339,16 @@ button.chip.toggle.on .mem { opacity: 1; }
 .tev.task .nm { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
 .arow.task .tk { margin: 2px -3px 0; align-self: flex-start; }
 #nav a.cal.away { opacity: .6; }
+
+/* the weather (static/js/weather.js): the forecast on the next days' headers, the weather at an event's place */
+.wx { display: inline-flex; width: 16px; height: 16px; flex: none; color: var(--name-io); }
+.wx svg { width: 100%; height: 100%; fill: currentColor; }
+.wxd { display: inline-flex; align-items: center; gap: 3px; font-size: var(--fs-xs); color: var(--fg2); white-space: nowrap; cursor: default; }
+.wxd .lo { opacity: .7; }
+.mday { position: relative; }
+.mday > .wxd { position: absolute; top: 7px; right: 6px; }
+.thead-day .wxd { display: flex; justify-content: center; margin-top: 2px; }
+.aday .when .wxd { margin-top: 6px; }
+.evwx:not(:empty) { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.evwx .wx { width: 18px; height: 18px; }
+@media (max-width: 560px) { .mday > .wxd .hi { display: none; } .mday > .wxd { right: 3px; } }
