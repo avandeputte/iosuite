@@ -7,6 +7,8 @@ description: ioRecipe, the family's recipes in the ioThing suite.
 The family's recipe book: a web app to keep recipes with their ingredients, steps and photos, to bring one in from
 the web, from pasted text, from a photo or from a file, and to cook, shop and print from it.
 
+![ioRecipe's recipe cards, with favourites, ratings, a cookbook and tags](../img/iorecipe.jpg)
+
 ## What it does
 
 - **Recipes** with a description, what they make, preparation and cooking time, ingredients, steps, notes and tags.

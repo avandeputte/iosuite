@@ -7,6 +7,8 @@ description: ioMoney, the household's finances in the ioThing suite.
 The household's money in one place: the accounts and transactions copied in from Monarch Money, a portfolio with its
 quotes, and what the house and the cars are worth after their loans.
 
+![ioMoney's overview: net worth over the year, and every account by group](../img/iomoney.jpg)
+
 ## What it does
 
 - **Monarch Money**: every account Monarch has (bank accounts, credit cards, investments, loans, the house it values

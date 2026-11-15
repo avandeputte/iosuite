@@ -15,12 +15,12 @@ HTTPS (or `localhost`).
 | App | Device | What it does | Source |
 | --- | --- | --- | --- |
 | **ioPix** | iPhone, iPad, Mac, Apple TV | the ioPix web app in a native shell; Send to ioPix from the share sheet, the camera roll or a Mac menu bar uploader | [iosuite-apps/iopix](https://github.com/avandeputte/iosuite-apps/tree/main/iopix) |
-| **ionote** | Mac, iPhone, iPad | the clipboard Inbox and screenshots on the Mac, notes everywhere, synced with the ioNote server and usable offline | [iosuite-apps/ionote](https://github.com/avandeputte/iosuite-apps/tree/main/ionote) |
+| **ioNote** | Mac, iPhone, iPad | the clipboard Inbox and screenshots on the Mac, notes everywhere, synced with the ioNote server and usable offline | [iosuite-apps/ionote](https://github.com/avandeputte/iosuite-apps/tree/main/ionote) |
 | **ioHealthSync** | iPhone | copies Apple Health data to the ioHealth server: everything or the types you pick, incremental, in the background | [iosuite-apps/iohealth](https://github.com/avandeputte/iosuite-apps/tree/main/iohealth) |
 | **ioStart** | iPhone, iPad | the start page's bookmarks: browse, search and edit them, and bookmark a page from any browser's share sheet | [iosuite-apps/iostart](https://github.com/avandeputte/iosuite-apps/tree/main/iostart) |
 
 They are built from source with Xcode and XcodeGen (`brew install xcodegen`, then `xcodegen generate`) from the
-[iosuite-apps](https://github.com/avandeputte/iosuite-apps) repository; each app's README has the steps. They sign in with your suite account. Behind Cloudflare Access, ionote takes a
+[iosuite-apps](https://github.com/avandeputte/iosuite-apps) repository; each app's README has the steps. They sign in with your suite account. Behind Cloudflare Access, ioNote takes a
 Cloudflare Access service token; ioHealthSync's uploads (`/v1/`) need a bypass rule or a service token (see
 [Cloudflare](../run/cloudflare.md)).
 

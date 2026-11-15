@@ -197,6 +197,14 @@ header{
 .tool .links{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.86rem;font-weight:500}
 
 .apps{background:var(--card);border-block:1px solid var(--line)}
+.agroup{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin:38px 0 14px}
+.section-head + .agroup{margin-top:0}
+.agroup h3{margin:0;font-size:1.08rem}
+.agroup p{margin:0;color:var(--muted);font-size:.9rem}
+.agrid.agrid-one{grid-template-columns:1fr}
+.app-wide ul{columns:2;column-gap:40px}
+.app-wide li{break-inside:avoid}
+@media (max-width:760px){ .app-wide ul{columns:1} }
 .agrid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
 @media (max-width:980px){ .agrid{grid-template-columns:repeat(2,1fr)} }
 @media (max-width:620px){ .agrid{grid-template-columns:1fr} }
@@ -279,7 +287,7 @@ dialog.lightbox button{
 dialog.lightbox button:hover{border-color:var(--gold)}
 
 /* ---------- install picker ---------- */
-.pick{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:22px}
+.pick{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px}
 @media (max-width:900px){ .pick{grid-template-columns:repeat(3,1fr)} }
 @media (max-width:420px){ .pick{grid-template-columns:repeat(2,1fr)} }
 .pick label{
@@ -407,27 +415,8 @@ footer p{margin:16px 0 0;max-width:52em}
         <h2>Ten apps. Each one complete on its own.</h2>
         <p>Every app is a small web server with its own web app, its own database and its own installer, built the same way: FastAPI, a single-page app, light and dark, a real phone layout, installable on a home screen.</p>
       </div>
+      <div class="agroup"><h3>The family's days</h3><p>What is on, what is to do, and what is for dinner.</p></div>
       <div class="agrid">
-        <article class="app" style="--c:#3b4a8c">
-          <div class="app-top"><img src="img/iopix.svg" alt="" width="44" height="44"><h3>ioPix<span class="tag">Photos</span></h3></div>
-          <ul>
-            <li>Browse, search, map and edit a photo library from any browser</li>
-            <li>Search by what is in the photos, faces and places, with AI that runs on your own server</li>
-            <li>A web companion for digiKam, or a library of its own without it</li>
-          </ul>
-          <p class="alone"><b>On its own:</b> a complete photo app. Point it at a folder of photos.</p>
-          <div class="links"><a href="/docs/apps/iopix/">Docs</a><a href="https://iopix.net" rel="noopener">iopix.net</a><a href="https://github.com/avandeputte/iosuite/tree/main/iopix" rel="noopener">GitHub</a><span class="port">:8600</span></div>
-        </article>
-        <article class="app" style="--c:#1c5a5e">
-          <div class="app-top"><img src="img/ionote.svg" alt="" width="44" height="44"><h3>ioNote<span class="tag">Notes, clipboard snippets and screenshots</span></h3></div>
-          <ul>
-            <li>Notes with folders, tags, pins and full-text search, text in pictures included</li>
-            <li>Mac and iPhone apps: save anything from the clipboard, synced and offline</li>
-            <li>Notes are private to each account</li>
-          </ul>
-          <p class="alone"><b>On its own:</b> your notes, searchable everywhere.</p>
-          <div class="links"><a href="/docs/apps/ionote/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/ionote" rel="noopener">GitHub</a><span class="port">:8610</span></div>
-        </article>
         <article class="app" style="--c:#963522">
           <div class="app-top"><img src="img/iocalendar.svg" alt="" width="44" height="44"><h3>ioCalendar<span class="tag">The family calendar</span></h3></div>
           <ul>
@@ -458,24 +447,28 @@ footer p{margin:16px 0 0;max-width:52em}
           <p class="alone"><b>On its own:</b> the family's recipe book, on every screen in the kitchen.</p>
           <div class="links"><a href="/docs/apps/iorecipe/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iorecipe" rel="noopener">GitHub</a><span class="port">:8690</span></div>
         </article>
-        <article class="app" style="--c:#2a6f97">
-          <div class="app-top"><img src="img/iothings.svg" alt="" width="44" height="44"><h3>ioThings<span class="tag">Everything you own</span></h3></div>
+      </div>
+      <div class="agroup"><h3>What you keep</h3><p>Photos, notes and the people you know, on every device.</p></div>
+      <div class="agrid">
+        <article class="app" style="--c:#3b4a8c">
+          <div class="app-top"><img src="img/iopix.svg" alt="" width="44" height="44"><h3>ioPix<span class="tag">Photos</span></h3></div>
           <ul>
-            <li>Places, labels, photos, manuals, receipts and warranties</li>
-            <li>Upkeep with a maintenance log, as repeating tasks in ioTask</li>
-            <li>Brings a Homebox inventory over, and exports it back</li>
+            <li>Browse, search, map and edit a photo library from any browser</li>
+            <li>Search by what is in the photos, faces and places, with AI that runs on your own server</li>
+            <li>A web companion for digiKam, or a library of its own without it</li>
           </ul>
-          <p class="alone"><b>On its own:</b> where everything is, what it cost, and when the boiler needs its service.</p>
-          <div class="links"><a href="/docs/apps/iothings/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iothings" rel="noopener">GitHub</a><span class="port">:8700</span></div>
-        <article class="app" style="--c:#94650a">
-          <div class="app-top"><img src="img/iomoney.svg" alt="" width="44" height="44"><h3>ioMoney<span class="tag">The household's finances</span></h3></div>
+          <p class="alone"><b>On its own:</b> a complete photo app. Point it at a folder of photos.</p>
+          <div class="links"><a href="/docs/apps/iopix/">Docs</a><a href="https://iopix.net" rel="noopener">iopix.net</a><a href="https://github.com/avandeputte/iosuite/tree/main/iopix" rel="noopener">GitHub</a><span class="port">:8600</span></div>
+        </article>
+        <article class="app" style="--c:#1c5a5e">
+          <div class="app-top"><img src="img/ionote.svg" alt="" width="44" height="44"><h3>ioNote<span class="tag">Notes, clipboard snippets and screenshots</span></h3></div>
           <ul>
-            <li>Accounts, balances and transactions from Monarch Money</li>
-            <li>A portfolio with quotes from Yahoo Finance, in any currency</li>
-            <li>The house and the cars, with their loans and the equity left</li>
+            <li>Notes with folders, tags, pins and full-text search, text in pictures included</li>
+            <li>Mac and iPhone apps: save anything from the clipboard, synced and offline</li>
+            <li>Notes are private to each account</li>
           </ul>
-          <p class="alone"><b>On its own:</b> the net worth, the spending and the portfolio, on your own server.</p>
-          <div class="links"><a href="/docs/apps/iomoney/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iomoney" rel="noopener">GitHub</a><span class="port">:8710</span></div>
+          <p class="alone"><b>On its own:</b> your notes, searchable everywhere.</p>
+          <div class="links"><a href="/docs/apps/ionote/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/ionote" rel="noopener">GitHub</a><span class="port">:8610</span></div>
         </article>
         <article class="app" style="--c:#4f2f7d">
           <div class="app-top"><img src="img/iocontact.svg" alt="" width="44" height="44"><h3>ioContact<span class="tag">Contacts for the family</span></h3></div>
@@ -487,6 +480,29 @@ footer p{margin:16px 0 0;max-width:52em}
           <p class="alone"><b>On its own:</b> one family address book on every device.</p>
           <div class="links"><a href="/docs/apps/iocontact/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iocontact" rel="noopener">GitHub</a><span class="port">:8640</span></div>
         </article>
+      </div>
+      <div class="agroup"><h3>The household</h3><p>What you own, what it is worth, and how everyone is doing.</p></div>
+      <div class="agrid">
+        <article class="app" style="--c:#2a6f97">
+          <div class="app-top"><img src="img/iothings.svg" alt="" width="44" height="44"><h3>ioThings<span class="tag">Everything you own</span></h3></div>
+          <ul>
+            <li>Places, labels, photos, manuals, receipts and warranties</li>
+            <li>Upkeep with a maintenance log, as repeating tasks in ioTask</li>
+            <li>Brings a Homebox inventory over, and exports it back</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> where everything is, what it cost, and when the boiler needs its service.</p>
+          <div class="links"><a href="/docs/apps/iothings/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iothings" rel="noopener">GitHub</a><span class="port">:8700</span></div>
+        </article>
+        <article class="app" style="--c:#94650a">
+          <div class="app-top"><img src="img/iomoney.svg" alt="" width="44" height="44"><h3>ioMoney<span class="tag">The household's finances</span></h3></div>
+          <ul>
+            <li>Accounts, balances and transactions from Monarch Money</li>
+            <li>A portfolio with quotes from Yahoo Finance, in any currency</li>
+            <li>The house and the cars, with their loans and the equity left</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> the net worth, the spending and the portfolio, on your own server.</p>
+          <div class="links"><a href="/docs/apps/iomoney/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iomoney" rel="noopener">GitHub</a><span class="port">:8710</span></div>
+        </article>
         <article class="app" style="--c:#e8445a">
           <div class="app-top"><img src="img/iohealth.svg" alt="" width="44" height="44"><h3>ioHealth<span class="tag">Apple Health, on your own server</span></h3></div>
           <ul>
@@ -497,12 +513,16 @@ footer p{margin:16px 0 0;max-width:52em}
           <p class="alone"><b>On its own:</b> a fitness web app that needs no cloud service.</p>
           <div class="links"><a href="/docs/apps/iohealth/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iohealth" rel="noopener">GitHub</a><span class="port">:8650</span></div>
         </article>
-        <article class="app" style="--c:#2f3a5a">
+      </div>
+      <div class="agroup"><h3>And a start page that ties them together</h3><p>Optional, for when you run two or more.</p></div>
+      <div class="agrid agrid-one">
+        <article class="app app-wide" style="--c:#2f3a5a">
           <div class="app-top"><img src="img/iostart.svg" alt="" width="44" height="44"><h3>ioStart<span class="tag">The start page</span></h3></div>
           <ul>
             <li>A tile per installed app, with today's events, photos and steps on it</li>
             <li>Search, quick add to the calendar, weather, Home Assistant, bookmarks that sync with your browsers (<a href="https://chromewebstore.google.com/detail/iosuite-bookmarks/nldealkpbjiholobfadimblcmdlphkoe" rel="noopener">Chrome extension</a>)</li>
             <li>A wall display for a tablet in the kitchen</li>
+            <li>One MCP server for the whole suite: an AI assistant reaches every app through it</li>
           </ul>
           <p class="alone"><b>Optional:</b> worth it once you run two or more apps. It finds them by itself.</p>
           <div class="links"><a href="/docs/apps/iostart/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iostart" rel="noopener">GitHub</a><span class="port">:8630</span></div>
@@ -566,6 +586,10 @@ footer p{margin:16px 0 0;max-width:52em}
         <p>Every screenshot is the actual app, holding made-up data: the Parker family and their friends are invented.</p>
       </div>
       <div class="ggrid" id="gallery">
+        <button class="shot" data-full="img/iostart.jpg" data-cap="ioStart — the start page: a tile per app with today on it, birthdays, the week ahead and bookmarks">
+          <img src="img/iostart.jpg" loading="lazy" alt="ioStart start page" width="1600" height="1000">
+          <figcaption><img src="img/iostart.svg" alt="">ioStart — the start page</figcaption>
+        </button>
         <button class="shot" data-full="img/iopix-explore.jpg" data-cap="ioPix — Explore: library totals, photos from this day in past years and a shuffle of older ones">
           <img src="img/iopix-explore.jpg" loading="lazy" alt="ioPix Explore page" width="1600" height="1000">
           <figcaption><img src="img/iopix.svg" alt="">ioPix — this day in past years</figcaption>
@@ -574,21 +598,33 @@ footer p{margin:16px 0 0;max-width:52em}
           <img src="img/iopix-viewer.jpg" loading="lazy" alt="ioPix photo viewer" width="1600" height="1000">
           <figcaption><img src="img/iopix.svg" alt="">ioPix — the viewer, faces and tags</figcaption>
         </button>
-        <button class="shot" data-full="img/iopix-map.jpg" data-cap="ioPix — every geotagged photo on a map">
-          <img src="img/iopix-map.jpg" loading="lazy" alt="ioPix map" width="1600" height="1000">
-          <figcaption><img src="img/iopix.svg" alt="">ioPix — every photo on the map</figcaption>
-        </button>
         <button class="shot" data-full="img/ionote.jpg" data-cap="ioNote — folders and tags in the sidebar, the notes, and one open for editing">
           <img src="img/ionote.jpg" loading="lazy" alt="ioNote with a note open" width="1600" height="1000">
           <figcaption><img src="img/ionote.svg" alt="">ioNote — folders, tags, full-text search</figcaption>
+        </button>
+        <button class="shot" data-full="img/iocontact.jpg" data-cap="ioContact — the family address book, one contact open">
+          <img src="img/iocontact.jpg" loading="lazy" alt="ioContact with a contact open" width="1600" height="1000">
+          <figcaption><img src="img/iocontact.svg" alt="">ioContact — the family address book</figcaption>
         </button>
         <button class="shot" data-full="img/iocalendar-week.jpg" data-cap="ioCalendar — the family's week, each event tagged with who it is for">
           <img src="img/iocalendar-week.jpg" loading="lazy" alt="ioCalendar week view" width="1600" height="1000">
           <figcaption><img src="img/iocalendar.svg" alt="">ioCalendar — the family's week</figcaption>
         </button>
-        <button class="shot" data-full="img/iocontact.jpg" data-cap="ioContact — the family address book, one contact open">
-          <img src="img/iocontact.jpg" loading="lazy" alt="ioContact with a contact open" width="1600" height="1000">
-          <figcaption><img src="img/iocontact.svg" alt="">ioContact — the family address book</figcaption>
+        <button class="shot" data-full="img/iotask.jpg" data-cap="ioTask — the family's shared list: who does what, by when, with subtasks">
+          <img src="img/iotask.jpg" loading="lazy" alt="ioTask family list" width="1600" height="1000">
+          <figcaption><img src="img/iotask.svg" alt="">ioTask — the family's lists</figcaption>
+        </button>
+        <button class="shot" data-full="img/iorecipe.jpg" data-cap="ioRecipe — the family's recipes with favourites, ratings, cookbooks and tags">
+          <img src="img/iorecipe.jpg" loading="lazy" alt="ioRecipe recipe cards" width="1600" height="1000">
+          <figcaption><img src="img/iorecipe.svg" alt="">ioRecipe — every family recipe</figcaption>
+        </button>
+        <button class="shot" data-full="img/iothings.jpg" data-cap="ioThings — everything the household owns, by place and label, with upkeep and warranties">
+          <img src="img/iothings.jpg" loading="lazy" alt="ioThings item cards" width="1600" height="1000">
+          <figcaption><img src="img/iothings.svg" alt="">ioThings — what you own, and where</figcaption>
+        </button>
+        <button class="shot" data-full="img/iomoney.jpg" data-cap="ioMoney — net worth over time, with every account, investment, loan and asset">
+          <img src="img/iomoney.jpg" loading="lazy" alt="ioMoney overview" width="1600" height="1000">
+          <figcaption><img src="img/iomoney.svg" alt="">ioMoney — net worth over time</figcaption>
         </button>
         <button class="shot" data-full="img/iohealth.jpg" data-cap="ioHealth — the dashboard: activity rings, last night's sleep, the trend of every metric">
           <img src="img/iohealth.jpg" loading="lazy" alt="ioHealth dashboard" width="1600" height="1000">
@@ -598,12 +634,8 @@ footer p{margin:16px 0 0;max-width:52em}
           <img src="img/iohealth-sleep.jpg" loading="lazy" alt="ioHealth sleep page" width="1600" height="1000">
           <figcaption><img src="img/iohealth.svg" alt="">ioHealth — sleep, night by night</figcaption>
         </button>
-        <button class="shot" data-full="img/iostart.jpg" data-cap="ioStart — the start page: a tile per app with today on it, birthdays, the week ahead and bookmarks">
-          <img src="img/iostart.jpg" loading="lazy" alt="ioStart start page" width="1600" height="1000">
-          <figcaption><img src="img/iostart.svg" alt="">ioStart — the start page</figcaption>
-        </button>
       </div>
-      <p class="credit">Photos in the ioPix screenshots: Wikimedia Commons, StockSnap, Unsplash and the project owner's own, under the licenses <a href="https://github.com/avandeputte/iosuite/blob/main/iopix/docs/screenshots/CREDITS.md" rel="noopener">listed here</a>. The names are invented.</p>
+      <p class="credit">Photos in the ioPix screenshots: Wikimedia Commons, StockSnap, Unsplash and the project owner's own, under the licenses <a href="https://github.com/avandeputte/iosuite/blob/main/iopix/docs/screenshots/CREDITS.md" rel="noopener">listed here</a>. Photos in the ioRecipe and ioThings screenshots: Wikimedia Commons, under the licenses <a href="https://github.com/avandeputte/iosuite/blob/main/docs/CREDITS.md" rel="noopener">listed here</a>. The names are invented.</p>
     </div>
   </section>
 
@@ -638,7 +670,8 @@ footer p{margin:16px 0 0;max-width:52em}
       </div>
 
       <div class="tabs" role="tablist" aria-label="Where to install">
-        <button role="tab" aria-selected="true" data-way="proxmox">Proxmox VE (LXC)</button>
+        <button role="tab" aria-selected="true" data-way="oneline">One line, any Linux server</button>
+        <button role="tab" aria-selected="false" data-way="proxmox">Proxmox VE (LXC)</button>
         <button role="tab" aria-selected="false" data-way="docker">Docker</button>
         <button role="tab" aria-selected="false" data-way="linux">Any Linux or Mac</button>
       </div>
@@ -646,8 +679,8 @@ footer p{margin:16px 0 0;max-width:52em}
       <div id="cmds">
         <!-- filled in by the script below; this is what shows without JavaScript -->
         <div class="term">
-          <div class="term-head"><span>proxmox ve host, as root — ioPix</span><button class="copy" data-copy>copy</button></div>
-          <pre><code><span class="p">$ </span>bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iopix/proxmox/ct/iopix.sh)"</code></pre>
+          <div class="term-head"><span>any linux server — the suite's installer</span><button class="copy" data-copy>copy</button></div>
+          <pre><code><span class="p">$ </span>curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/install.sh | bash</code></pre>
         </div>
       </div>
       <p class="pick-note" id="pick-note" aria-live="polite"></p>
@@ -776,7 +809,9 @@ footer p{margin:16px 0 0;max-width:52em}
   var STEPS = [
     {apps:["iopix"], name:"Just the photos"},
     {apps:["iocalendar","iotask","iocontact"], name:"The family's calendar, tasks and contacts"},
+    {apps:["iorecipe","iotask"], name:"Recipes, and the shopping list"},
     {apps:["ionote"], name:"Just the notes"},
+    {apps:["iothings","iomoney"], name:"What you own, and what it's worth"},
     {apps:["iopix","iocalendar","iocontact","iostart"], name:"Photos, calendar, contacts, a start page"},
     {apps:["iohealth"], name:"Just the health data"},
     {apps:ORDER, name:"The whole suite"}
@@ -800,7 +835,7 @@ footer p{margin:16px 0 0;max-width:52em}
   var pick = document.getElementById("pick");
   var cmds = document.getElementById("cmds");
   var note = document.getElementById("pick-note");
-  var way = "proxmox";
+  var way = "oneline";
 
   function term(head, lines){
     return '<div class="term"><div class="term-head"><span>' + esc(head) +
@@ -824,7 +859,19 @@ footer p{margin:16px 0 0;max-width:52em}
       note.innerHTML = "Pick at least one app.";
       return;
     }
-    if(way === "proxmox"){
+    if(way === "oneline"){
+      // install.sh sets up one app first (ioStart unless --first), then adds the others; run again to add or remove
+      var first = sel.indexOf("iostart") >= 0 ? "iostart" : sel[0];
+      var rest = sel.filter(function(a){ return a !== first; });
+      var args = [];
+      if(first !== "iostart") args.push("--first " + first);
+      if(rest.length) args.push("--add " + rest.join(","));
+      html += term("any linux server — " + names(sel), [
+        "curl -fsSL " + RAW + "install.sh | bash" + (args.length ? " -s -- " + args.join(" ") : "")
+      ]);
+      msg = "<strong>The suite's installer.</strong> It asks each app's questions (the database, the port, an admin), with the answers of the apps already there as the defaults, and installs a service per app. " +
+        "<strong>Run the same line again at any time</strong> to tick more apps, untick one to remove it, or change an app's settings.";
+    } else if(way === "proxmox"){
       // ioPix's installer can take the others into its container (it mounts the photo library); theirs can't take ioPix
       var base = sel.indexOf("iopix") >= 0 ? "iopix" : (sel.indexOf("iostart") >= 0 ? "iostart" : sel[0]);
       var also = sel.filter(function(a){ return a !== base; });
