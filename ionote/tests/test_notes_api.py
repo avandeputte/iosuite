@@ -256,8 +256,6 @@ def test_a_clock_that_runs_ahead_does_not_win_for_ever(client):
 
 def test_connections_are_reused(client):
     from app import db
-    if db.settings()["type"] != "mysql":
-        return  # SQLite opens its file each time
     client.put(f"/api/notes/{NID}", json={"title": "x"})
     with db.connect() as con:
         raw = con.raw
@@ -266,6 +264,6 @@ def test_connections_are_reused(client):
         assert con.raw is raw  # the same connection, handed back and borrowed again
         # and it reads what was written since: handing back ended its snapshot
         with db.tx() as w:
-            w.execute("UPDATE nts_notes SET title = 'y' WHERE uuid = ?", (NID,))
+            w.execute("UPDATE nts_notes SET title = 'y' WHERE uuid = %s", (NID,))
     with db.connect() as con:
-        assert con.execute("SELECT title FROM nts_notes WHERE uuid = ?", (NID,)).fetchone()[0] == "y"
+        assert con.execute("SELECT title FROM nts_notes WHERE uuid = %s", (NID,)).fetchone()[0] == "y"

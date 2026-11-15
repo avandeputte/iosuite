@@ -3,7 +3,6 @@ saves never lose what was typed to a slow clock, baseRev, changes to many notes 
 words in a search, and values too long for their columns."""
 import time
 
-import pytest
 
 from app import db, notes
 from helpers import NID, NID2, png
@@ -51,7 +50,6 @@ def test_changes_to_many_notes_keep_each_notes_edit_time(client, admin):
     assert client.get(f"/api/notes/{NID2}").json()["updatedAt"] == 1000
 
 
-@pytest.mark.skipif(not db.connect().mysql, reason="MariaDB's full-text index (IONOTE_TEST_DB=mysql)")
 def test_a_search_with_a_common_word_still_finds_the_note(client, admin):
     client.put(f"/api/notes/{NID}", json={"title": "Notes for mom", "body": "What to cook about the garden party"})
     for q in ("notes for mom", "what to cook", "about the garden", "the"):
@@ -73,7 +71,7 @@ def test_one_item_the_database_refuses_does_not_stop_a_push(client, admin, monke
 
     def picky(uid, data, user, force=False):
         if data.get("title") == "bad":
-            raise db.Error[0]("Data too long for column")
+            raise db.Error("Data too long for column")
         return real(uid, data, user, force)
     monkeypatch.setattr(notes, "save_note", picky)
     r = client.post("/api/sync/push", json={"notes": [{"id": NID, "title": "bad", "updatedAt": 10}, {"id": NID2, "title": "good", "updatedAt": 10}]})

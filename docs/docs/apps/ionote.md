@@ -23,7 +23,7 @@ included, and gives you a web app; the **ionote apps for Mac, iPhone and iPad** 
 
 ## On its own
 
-ioNote is a complete notes app. It needs its database (MariaDB or MySQL, or a SQLite file for a quick try) and the
+ioNote is a complete notes app. It needs its database (MariaDB or MySQL) and the
 Shared ioSuite database for its accounts. Text recognition for pictures added in the web app is optional (RapidOCR,
 about 60 MB); the Mac and iPhone read the text on the device.
 

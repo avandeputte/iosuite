@@ -23,8 +23,8 @@ the Proxmox VE host, as root, run the line for the app you want:
 
 First the app's own questions, then the framework's (resources, network):
 
-1. **The app's database**: host, port, database, user and password (MariaDB or MySQL). ioNote can use a SQLite file in
-   the container instead; ioPix can install MariaDB in the container.
+1. **The app's database**: host, port, database, user and password (MariaDB or MySQL). ioPix can install MariaDB in the
+   container.
 2. **The Shared ioSuite database**: the same five answers; database and user `iosuite` by default. Give every app the
    same one.
 3. **A MariaDB / MySQL administrator** (optional): with one, the databases and users are created for you.

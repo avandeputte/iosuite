@@ -79,7 +79,7 @@ IONOTE_DB=db.example.lan:3306/notes:notes:secret IONOTE_SUITE_DB=db.example.lan:
 ```
 
 (the passwords in the environment stay off the command line). Without the service, `./run.sh` starts it in the
-foreground. `--sqlite` keeps everything in a SQLite file in the data folder instead, for a quick try.
+foreground.
 
 The database user needs to create tables in its database (`GRANT ALL ON notes.* TO 'notes'@'app-host'`). Pictures are
 stored in the database: MariaDB's `max_allowed_packet` (16 MB by default) must be larger than the largest picture
@@ -96,13 +96,13 @@ community-scripts. On the Proxmox host, as root:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/ionote/proxmox/ct/ionote.sh)"
 ```
 
-It asks about the app first: whether the notes live in MariaDB/MySQL (host, port, database, user, password; the
-defaults are 127.0.0.1, 3306, `notes`, `notes`) or in a SQLite file in the container, where the Shared ioSuite
+It asks about the app first: where the notes live in MariaDB/MySQL (host, port, database, user, password; the
+defaults are 127.0.0.1, 3306, `notes`, `notes`), where the Shared ioSuite
 database is (host, port, database, user, password; database and user `iosuite` by default), whether pictures added in
 the web app get their text read (RapidOCR), and the admin account; then the framework's own questions (resources,
 network). It creates an unprivileged Debian 13 container (2 CPU, 2 GB, 8 GB disk by default) and runs the app's own
 `setup.sh` inside with those answers: packages, settings, tables, admin, and the `ionote` service on port 8610.
-For unattended runs set `IONOTE_DB` (`sqlite` or `host:port/db:user:pass`), `IONOTE_SUITE_DB`
+For unattended runs set `IONOTE_DB` (`host:port/db:user:pass`), `IONOTE_SUITE_DB`
 (`host:port/db:user:pass`), `IONOTE_FEATURES` (`ocr` or `none`)
 `IONOTE_ADMIN` (`name:password`, or empty for none yet), `IONOTE_PUBLIC_URL` and `IONOTE_COOKIE_DOMAIN` in the environment. The passwords reach `setup.sh`
 inside the container through its environment (a root-only file pushed in and removed again), not on a command line.
@@ -126,11 +126,10 @@ name and the same names), or in the environment, which wins. `config.env.example
 
 | Variable | Default | |
 | --- | --- | --- |
-| `DB_TYPE` | `sqlite` | `mysql` for MariaDB/MySQL (setup.sh writes it) |
-| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | | the database |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | `127.0.0.1` / `3306` / `notes` / `notes` / | the MariaDB/MySQL database (setup.sh writes them) |
 | `HOST` / `PORT` | `0.0.0.0` / `8610` | where the server listens (every app of the suite has its own port) |
 | `TLS_CERT_FILE` / `TLS_KEY_FILE` | | HTTPS served directly instead of behind a reverse proxy |
-| `DATA_DIR` | `./data` | what the app writes on its own: the log, the update result (and the SQLite file) |
+| `DATA_DIR` | `./data` | what the app writes on its own: the log and the update result |
 | `LOG_FILE` | `DATA_DIR/ionote.log` | the server log (empty: none) |
 | `PUBLIC_URL` | | the address ionote is reached at, for links in MCP answers and the suite's list of apps |
 | `COOKIE_DOMAIN` | | the domain the sign-in is shared on (e.g. `example.com`); a LAN address outside it gets a cookie of its own |
@@ -284,10 +283,9 @@ and export › Import): records keep their ids, and a newer copy on the server w
 
 ## Tests
 
-`pip install -e '.[test]' && pytest tests` (SQLite for the notes), and `IONOTE_TEST_DB=mysql pytest tests` with a
-MariaDB database `notes_test` for the user `notes`/`notes` on 127.0.0.1 (`IONOTE_TEST_DB_HOST` and friends change that).
-The Shared ioSuite database always goes to a test MariaDB of its own: a Docker container the suite starts
-(`iosuite-test-mariadb`), or `IOSUITE_TEST_DB=host:port:user:password`; never a live `iosuite` database.
+`pip install -e '.[test]' && pytest tests`. The notes (`ionote_test`) and the Shared ioSuite database
+(`ionote_test_auth`) go to a test MariaDB of their own: a Docker container the suite starts (`iosuite-test-mariadb`),
+or `IOSUITE_TEST_DB=host:port:user:password`; never a live database.
 CI runs both.
 
 ## Layout
@@ -297,7 +295,7 @@ app/
   main.py          the FastAPI app: the suite's middleware (who is asking, require sign-in, cross-site writes), whose notes, status, /mcp, static files
   access.py        who may call a route: the markers every /api route carries
   config.py        the settings: the suite's standard names (iosuite_shared.config) and ioNote's own
-  db.py            the database (MariaDB/MySQL or SQLite), its tables, the rev counter
+  db.py            the database (MariaDB/MySQL, through iosuite_shared.db), its tables, the rev counter
   notes.py         notes, folders, tag colours, templates, search, related notes, the trash, sync and conflicts
   images.py        pictures as BLOBs with a thumbnail
   attachments.py   files attached to notes (PDFs and the like), with the text read from them
@@ -308,7 +306,7 @@ app/
   mcp/             the MCP server: read, write and operator tools
 proxmox/           Proxmox VE LXC scripts in the community-scripts layout
 static/            the web app (index.html, app.css, js/*.js modules, service worker, icons)
-tests/             pytest; IONOTE_TEST_DB=mysql runs them on MariaDB
+tests/             pytest, on a test MariaDB
 ```
 
 ## License
