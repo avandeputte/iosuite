@@ -24,8 +24,8 @@ services:
       TZ: America/New_York
       DB_HOST: db.example.lan                       # CHANGE ME: your MariaDB host or IP
       DB_PORT: "3306"
-      DB_NAME: notes
-      DB_USER: notes
+      DB_NAME: ionote
+      DB_USER: ionote
       DB_PASSWORD: change-me                        # CHANGE ME
       # the Shared ioSuite database (MariaDB): accounts, sessions and suite-wide settings, shared with the other
       # ioThing apps

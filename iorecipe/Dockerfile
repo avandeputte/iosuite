@@ -27,7 +27,7 @@ RUN --mount=type=bind,from=llama,source=/wheels,target=/wheels \
 ARG COMMIT=unknown
 RUN echo "$COMMIT" > COMMIT
 # the database settings come from the environment (docker-compose.yml): no password is baked into the image
-ENV DB_HOST=db DB_PORT=3306 DB_NAME=recipe DB_USER=recipe PORT=8690 PYTHONUNBUFFERED=1
+ENV DB_HOST=db DB_PORT=3306 DB_NAME=iorecipe DB_USER=iorecipe PORT=8690 PYTHONUNBUFFERED=1
 EXPOSE 8690
 USER iorecipe
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8690/api/status', timeout=4)" || exit 1

@@ -84,12 +84,16 @@ takes the lists as flags:
     Or tick them in the installer's checklist. ioPix's installer offers all the others; theirs leave out ioPix, whose
     installer is the one that mounts the photo library.
 
-The questions every app shares are asked once: the database server (each app gets its own database on it, so the
-database user needs rights on those names too, or give a database administrator), the Shared ioSuite database, the
-sign-in domain and the admin. Each companion is fetched from GitHub into `/opt/<app>/app`, installed by its own
-`setup.sh`, and gets its own service on its usual port. Afterwards each app updates itself as always.
+Each app you add asks its own setup questions, one by one, with the answers of the apps already here as the
+defaults, so Enter confirms each: the database server, user and password of the others with a database of its own
+named after the app (`iothings` for ioThings), the Shared ioSuite database, the port, a public address made like the
+others' (`https://calendar.example.com` gives `https://things.example.com`), the sign-in domain, and its own questions.
+The database user needs rights on the new database too, or give a database administrator. With `--yes` (or without
+anybody at the keyboard, as the Proxmox installers run it) every app takes those defaults without asking. Each
+companion is fetched from GitHub into `/opt/<app>/app`, installed by its own `setup.sh`, and gets its own service.
+Afterwards each app updates itself as always.
 
-ioPix installed this way starts without digiKam and without AI features; run its `setup.sh` again to add them.
+ioPix added with `--yes` starts without digiKam and without AI features; run its `setup.sh` again to add them.
 
 ## An app on another machine
 

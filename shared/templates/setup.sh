@@ -14,9 +14,10 @@
 #   --db-admin USER[:PASSWORD]    a MariaDB / MySQL administrator (root...): the databases and users above are created
 #                                 for you, with the passwords you answered (@@UP@@_DB_ADMIN does the same; empty: they
 #                                 exist). Without :PASSWORD, the password is read from DB_ADMIN_PASSWORD
-#   --also APP,APP | all          add other apps of the suite to this server, beside this one, with the same database
-#                                 server (each app its own database), Shared ioSuite database, sign-in domain and
-#                                 admin: those questions are asked once (@@UP@@_ALSO does the same)
+#   --also APP,APP | all          add other apps of the suite to this server, beside this one: each asks its own
+#                                 questions, these answers as the defaults (its own database, named after it, on
+#                                 the same server; the same Shared ioSuite database, sign-in domain and admin); with
+#                                 --yes it takes them without asking (@@UP@@_ALSO does the same)
 #   --remove APP,APP              take apps of the suite off this server: the service and the program files go, the
 #                                 app's database and data stay (@@UP@@_REMOVE does the same)
 #   --reconfigure APP,APP         ask the setup questions of other apps that are already here again, the current
@@ -218,6 +219,7 @@ if [ -n "$ALSO$REMOVE$REDO" ] || { [ "$YES" = 0 ] && [ "$NOAPPS" = 0 ] && [ -t 0
   [ -z "$ALSO" ] || set -- "$@" --add "$ALSO"
   [ -z "$REMOVE" ] || set -- "$@" --remove "$REMOVE"
   [ -z "$REDO" ] || set -- "$@" --reconfigure "$REDO"
+  [ "$YES" = 0 ] || set -- "$@" --yes  # each app added takes these answers, without its own questions
   [ -z "$DBADMIN" ] || { set -- "$@" --db-admin "${DBADMIN%%:*}"; DB_ADMIN_PASSWORD="${DBADMIN#*:}"; export DB_ADMIN_PASSWORD; }
   [ -z "$ADMIN" ] || { set -- "$@" --admin "${ADMIN%%:*}"; ADMIN_PASSWORD="${ADMIN#*:}"; export ADMIN_PASSWORD; }
   "$APP/.venv/bin/iosuite-shared" --config "$APP" apps --from @@NAME@@ "$@" || die "not every app could be added or removed; see the lines above (./setup.sh --apps shows what is here)"

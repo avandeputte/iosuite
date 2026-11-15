@@ -48,8 +48,8 @@ ask_app_settings() {
     local h p d u w
     h=$(whiptail --backtitle "$bt" --inputbox "The notes' MariaDB/MySQL database: host or IP\n\nIt holds the notes, their pictures (as BLOBs), folders, tags and settings." 12 76 "127.0.0.1" 3>&1 1>&2 2>&3) || exit 1
     p=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
-    d=$(whiptail --backtitle "$bt" --inputbox "Database (created if the user may)" 9 60 "notes" 3>&1 1>&2 2>&3) || exit 1
-    u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "notes" 3>&1 1>&2 2>&3) || exit 1
+    d=$(whiptail --backtitle "$bt" --inputbox "Database (created if the user may)" 9 60 "ionote" 3>&1 1>&2 2>&3) || exit 1
+    u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "ionote" 3>&1 1>&2 2>&3) || exit 1
     w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
     IONOTE_DB="$h:$p/$d:$u:$w"
   fi

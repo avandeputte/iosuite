@@ -11,7 +11,11 @@
 #
 #   --into DIR            where the apps live, each in DIR/<app>/app (IOSUITE_BASE; default /opt as root, else ~/iosuite)
 #   --first APP           the app set up first on a new server (default iostart)
-#   --add APP,APP | all   add apps                    --remove APP,APP   remove apps (database and data stay)
+#   --add APP,APP | all   add apps: each asks its own setup questions (database, port, public address, its own),
+#                         the answers of the apps already here as the defaults (its database: named after it, e.g.
+#                         iothings); Enter keeps a default
+#   --remove APP,APP      remove apps (database and data stay)
+#   --yes                 no questions: every app takes those defaults
 #   --reconfigure APP,APP ask an installed app's questions again
 #   --delete-data         with --remove: also drop the app's own database and delete its data folder (cannot be undone)
 #   --list                only show what is installed
@@ -29,7 +33,7 @@
 #   --db-admin USER[:PASSWORD]  a MariaDB administrator: the databases and users of the apps you add are created for
 #                         you (without :PASSWORD, from DB_ADMIN_PASSWORD in the environment)
 # On a new server every other option goes to the first app's setup.sh, so an install without questions is e.g.
-#   ... | IOSTART_DB=127.0.0.1:3306/suite:suite:PASSWORD IOSTART_ADMIN=alex:PASSWORD DB_ADMIN_PASSWORD=PASSWORD \
+#   ... | IOSTART_DB=127.0.0.1:3306/iostart:iostart:PASSWORD IOSTART_ADMIN=alex:PASSWORD DB_ADMIN_PASSWORD=PASSWORD \
 #         bash -s -- --yes --db-admin root --add all
 # (see that app's `setup.sh --help`): passwords in the environment stay out of the process list and the shell history.
 # The apps: iostart iocalendar iocontact ionote iohealth iotask iorecipe iothings iopix iodns iobackup
@@ -40,7 +44,7 @@ say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 main() {
-  local base="${IOSUITE_BASE:-}" first="iostart" add="" dbadmin="" svc="" reach=() rest=() manage=()
+  local base="${IOSUITE_BASE:-}" first="iostart" add="" dbadmin="" svc="" yes=0 reach=() rest=() manage=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --into) base="$2"; shift 2;;
@@ -49,9 +53,10 @@ main() {
       --remove|--reconfigure) manage+=("$1" "$2"); shift 2;;
       --delete-data|--list) manage+=("$1"); shift;;
       --db-admin) dbadmin="$2"; shift 2;;
+      --yes) yes=1; shift;;
       --service|--no-service) manage+=("$1"); svc="$1"; shift;;
       --reach|--address) manage+=("$1" "$2"); reach+=("$1" "$2"); shift 2;;
-      -h|--help) sed -n '2,32p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//' || true
+      -h|--help) sed -n '2,36p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//' || true
                  [ -n "${BASH_SOURCE[0]:-}" ] || echo "see the top of $REPO/blob/main/install.sh"; exit 0;;
       *) rest+=("$1"); shift;;
     esac
@@ -73,6 +78,7 @@ main() {
   if [ -n "$home" ]; then
     [ ${#rest[@]} -eq 0 ] || die "ioSuite is already on this server (in $base): ${rest[*]} is for a first install. To change an app's settings: --reconfigure APP"
     [ -z "$dbadmin" ] || manage+=(--db-admin "${dbadmin%%:*}")
+    [ "$yes" = 0 ] || manage+=(--yes)
     exec "$home/.venv/bin/iosuite-shared" --config "$home" apps --into "$base" ${manage[@]+"${manage[@]}"}
   fi
 
@@ -97,6 +103,7 @@ main() {
   [ -z "$add" ] || rest+=(--also "$add")
   [ -z "$dbadmin" ] || rest+=(--db-admin "${dbadmin%%:*}")  # the password goes in the environment, never in a command line
   [ -z "$svc" ] || rest+=("$svc")
+  [ "$yes" = 0 ] || rest+=(--yes)
   cd "$target"
   IOSUITE_REPO="$REPO" sh ./setup.sh ${rest[@]+"${rest[@]}"}
   # how every app is reached: once they are all here

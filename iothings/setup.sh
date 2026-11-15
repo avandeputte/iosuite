@@ -6,7 +6,7 @@
 #   ./setup.sh --yes ...       no questions: what config.env already holds, the flags below, and the defaults
 #
 # Flags (the same in every app of the suite):
-#        --db HOST:PORT/DATABASE:USER:PASSWORD        (MariaDB / MySQL; default 127.0.0.1:3306/things:things:things)
+#        --db HOST:PORT/DATABASE:USER:PASSWORD        (MariaDB / MySQL; default 127.0.0.1:3306/iothings:iothings:iothings)
 #        --suite-db HOST:PORT/DATABASE:USER:PASSWORD  (the Shared ioSuite database: accounts and suite-wide settings;
 #                                                      default: the same server, iosuite:iosuite)
 #        --admin NAME:PASSWORD | --no-admin   --port N (8700)   --public-url URL   --cookie-domain DOMAIN
@@ -14,9 +14,10 @@
 #   --db-admin USER[:PASSWORD]    a MariaDB / MySQL administrator (root...): the databases and users above are created
 #                                 for you, with the passwords you answered (IOTHINGS_DB_ADMIN does the same; empty: they
 #                                 exist). Without :PASSWORD, the password is read from DB_ADMIN_PASSWORD
-#   --also APP,APP | all          add other apps of the suite to this server, beside this one, with the same database
-#                                 server (each app its own database), Shared ioSuite database, sign-in domain and
-#                                 admin: those questions are asked once (IOTHINGS_ALSO does the same)
+#   --also APP,APP | all          add other apps of the suite to this server, beside this one: each asks its own
+#                                 questions, these answers as the defaults (its own database, named after it, on
+#                                 the same server; the same Shared ioSuite database, sign-in domain and admin); with
+#                                 --yes it takes them without asking (IOTHINGS_ALSO does the same)
 #   --remove APP,APP              take apps of the suite off this server: the service and the program files go, the
 #                                 app's database and data stay (IOTHINGS_REMOVE does the same)
 #   --reconfigure APP,APP         ask the setup questions of other apps that are already here again, the current
@@ -104,7 +105,7 @@ PY="${PY:-python3}"
 if [ -z "$DBS" ]; then
   say "The $WHAT database (MariaDB / MySQL)"
   H="$(getenv DB_HOST)"; P="$(getenv DB_PORT)"; D="$(getenv DB_NAME)"; U="$(getenv DB_USER)"
-  ask H "Host" "${H:-127.0.0.1}"; ask P "Port" "${P:-3306}"; ask D "Database" "${D:-things}"; ask U "User" "${U:-things}"
+  ask H "Host" "${H:-127.0.0.1}"; ask P "Port" "${P:-3306}"; ask D "Database" "${D:-iothings}"; ask U "User" "${U:-iothings}"
   asksecret W "Password (empty: keep the current one, or a new random one)"; [ -n "$W" ] || W="$(getenv DB_PASSWORD)"; [ -n "$W" ] || { W="$(newpw)"; NEWPW="$NEWPW $U"; }
   DBS="$H:$P/$D:$U:$W"
 fi
@@ -228,6 +229,7 @@ if [ -n "$ALSO$REMOVE$REDO" ] || { [ "$YES" = 0 ] && [ "$NOAPPS" = 0 ] && [ -t 0
   [ -z "$ALSO" ] || set -- "$@" --add "$ALSO"
   [ -z "$REMOVE" ] || set -- "$@" --remove "$REMOVE"
   [ -z "$REDO" ] || set -- "$@" --reconfigure "$REDO"
+  [ "$YES" = 0 ] || set -- "$@" --yes  # each app added takes these answers, without its own questions
   [ -z "$DBADMIN" ] || { set -- "$@" --db-admin "${DBADMIN%%:*}"; DB_ADMIN_PASSWORD="${DBADMIN#*:}"; export DB_ADMIN_PASSWORD; }
   [ -z "$ADMIN" ] || { set -- "$@" --admin "${ADMIN%%:*}"; ADMIN_PASSWORD="${ADMIN#*:}"; export ADMIN_PASSWORD; }
   "$APP/.venv/bin/iosuite-shared" --config "$APP" apps --from iothings "$@" || die "not every app could be added or removed; see the lines above (./setup.sh --apps shows what is here)"

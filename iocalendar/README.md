@@ -68,9 +68,10 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite/iocalendar
 
 Its last step is the list of the suite's apps on this machine: tick one to add it, untick one to remove it (its database and data stay), `r` and its number to ask its questions again; `./setup.sh --apps` shows only that list, and the [one-line installer](../README.md#install) does the same from anywhere. Adding (flag `--also iocalendar,ionote`, `--also all`; `--remove` and `--reconfigure` take lists too; `IOCALENDAR_ALSO` in the environment), puts
 other apps of the suite in this same machine, beside ioCalendar (`/opt/iocalendar/app` next to `/opt/iocalendar/app`),
-without asking the shared questions again: the same database server (each app gets its own database: `suite`,
-`calendar`, `contacts`, `notes`, `health`, `iopix`; the user needs rights on those names too), the same Shared ioSuite
-database, sign-in domain and admin (`iosuite-shared install`, from the shared library). Each app keeps its usual port
+each asking its own setup questions with the answers of the apps already here as the defaults (Enter keeps
+one; `--yes` takes them all): the same database server with a database of its own named after the app (`iostart`,
+`iocalendar`, `iothings`, ...; the user needs rights on those names too, or give a MariaDB administrator), the same Shared ioSuite
+database, sign-in domain and admin, a public address made like the others' (`iosuite-shared install`, from the shared library). Each app keeps its usual port
 and updates itself as always. The Proxmox installer offers the same as a checklist, for one container with several apps.
 
 The databases and users need not exist beforehand: give a MariaDB / MySQL administrator (the question after the
@@ -79,7 +80,7 @@ the app's database and user, the Shared ioSuite database and user and, with othe
 databases too, with the passwords you answered (`iosuite-shared provision`). Nothing is dropped, and the administrator's
 password is used once and not written anywhere.
 
-`setup.sh` offers 127.0.0.1, database `calendar`, user `calendar`, password `calendar` as the defaults; its flags
+`setup.sh` offers 127.0.0.1, database `iocalendar`, user `iocalendar`, password `iocalendar` as the defaults; its flags
 (`--db`, `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in
 every app of the suite. `python -m app.cli import CALENDAR-ID FILE.ics`, `sync-birthdays` and `check` work from a shell;
 accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iocalendar` (password from
@@ -91,7 +92,7 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 
 | Setting | Meaning |
 | --- | --- |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`calendar`) |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`iocalendar`) |
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`, on `DB_HOST` unless set): accounts, passwords, sessions, app passwords, roles and suite-wide settings, shared by every app of the suite |
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `contacts.example.com`, signed in at `calendar.example.com` too |
 | `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8620; every app of the suite has its own port) |

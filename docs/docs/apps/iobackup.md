@@ -43,7 +43,7 @@ python3 -m app.offline restore Nightly-20261103-020000.mdbk.tar --all -H db1 -u 
 ```
 
 Server settings (`my.cnf`), plugins and binary logs are not part of a backup. ioBackup's own settings live in its
-database (`backup`): include it in a job too.
+database (`iobackup`): include it in a job too.
 
 ## Before a restore
 

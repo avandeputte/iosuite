@@ -26,16 +26,16 @@ one. It can sit on the same server as the app databases.
 | --- | --- | --- |
 | Shared ioSuite database | `iosuite` | `ios_` |
 | ioPix | `iopix` | `pix_` |
-| ioNote | `notes` | `nts_` |
-| ioCalendar | `calendar` | `cal_` |
-| ioStart (start page) | `suite` | `prt_` |
-| ioContact | `contacts` | `con_` |
-| ioHealth | `health` | `hlt_` |
-| ioDNS | `dns` | `dns_` |
-| ioTask | `tasks` | `tsk_` |
-| ioBackup | `backup` | `bkp_` |
-| ioRecipe | `recipe` | `rcp_` |
-| ioThings | `things` | `thg_` |
+| ioNote | `ionote` | `nts_` |
+| ioCalendar | `iocalendar` | `cal_` |
+| ioStart (start page) | `iostart` | `prt_` |
+| ioContact | `iocontact` | `con_` |
+| ioHealth | `iohealth` | `hlt_` |
+| ioDNS | `iodns` | `dns_` |
+| ioTask | `iotask` | `tsk_` |
+| ioBackup | `iobackup` | `bkp_` |
+| ioRecipe | `iorecipe` | `rcp_` |
+| ioThings | `iothings` | `thg_` |
 
 Every table carries its app's prefix, so all of them could share one database if you wanted. The tables are created
 on the first start, and every app keeps a `<prefix>_schema_version` table and brings its tables up to date by itself

@@ -23,9 +23,9 @@ def test_plan_one_server():
     sql = [s for s, _ in jobs[("db.lan", "3307")]]
     assert "CREATE DATABASE IF NOT EXISTS `suite` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" in sql
     assert "CREATE DATABASE IF NOT EXISTS `iosuite` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" in sql
-    assert "CREATE DATABASE IF NOT EXISTS `calendar` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" in sql
+    assert "CREATE DATABASE IF NOT EXISTS `iocalendar` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" in sql
     stmts = jobs[("db.lan", "3307")]
-    assert ("GRANT ALL PRIVILEGES ON `calendar`.* TO `suite`@%s", ("192.168.1.30",)) in stmts
+    assert ("GRANT ALL PRIVILEGES ON `iocalendar`.* TO `suite`@%s", ("192.168.1.30",)) in stmts
     assert ("ALTER USER `suite`@%s IDENTIFIED BY %s", ("192.168.1.30", "s3cret")) in stmts  # the app's own user: a re-run sets it
     assert ("CREATE USER IF NOT EXISTS `iosuite`@%s IDENTIFIED BY %s", ("192.168.1.30", "sh4red")) in stmts
     assert not any(s.startswith("ALTER USER `iosuite`") for s, _ in stmts), "the other apps sign in as the Shared user: never re-passworded"
@@ -51,7 +51,7 @@ def test_plan_local_server_and_two_servers():
 def test_plan_without_an_app_database_uses_the_shared_one():
     cfg = dict(IOSUITE_DB_HOST="db.lan", IOSUITE_DB_PASSWORD="pw")
     [stmts] = provision.plan_sql(cfg, also=["ionote"], here=HERE).values()
-    assert ("GRANT ALL PRIVILEGES ON `notes`.* TO `iosuite`@%s", ("192.168.1.30",)) in stmts
+    assert ("GRANT ALL PRIVILEGES ON `ionote`.* TO `iosuite`@%s", ("192.168.1.30",)) in stmts
     assert not any("`suite`" in s for s, _ in stmts)
 
 
@@ -87,8 +87,8 @@ def test_run_executes_everything(monkeypatch):
     seen, lines = [], []
     n = provision.run("root", "rootpw", CFG, also=["iohealth"], connect=lambda h, p: FakeConn(seen), log=lines.append, here=HERE)
     assert n == 1 and seen[-1] == ("close", None) and seen[-2] == ("FLUSH PRIVILEGES", None)
-    assert any(s.startswith("CREATE DATABASE IF NOT EXISTS `health`") for s, _ in seen)
-    assert "database(s) health, iosuite, suite and user(s) iosuite, suite ready" in lines[0]
+    assert any(s.startswith("CREATE DATABASE IF NOT EXISTS `iohealth`") for s, _ in seen)
+    assert "database(s) iohealth, iosuite, suite and user(s) iosuite, suite ready" in lines[0]
 
 
 def test_run_reports_a_connection_failure():
@@ -127,7 +127,7 @@ def test_cli_provision(tmp_path, monkeypatch, capsys):
     (tmp_path / "config.env").write_text("".join(f"{k}={v}\n" for k, v in CFG.items()))
     assert cli.main(["--config", str(tmp_path), "provision", "--admin", "root", "--also", "ionote", "--dry-run"]) == 0
     out = capsys.readouterr().out
-    assert "db.lan:3307" in out and "`notes`" in out and "s3cret" not in out and "-- 192.168.1.30" in out and "-- %" not in out
+    assert "db.lan:3307" in out and "`ionote`" in out and "s3cret" not in out and "-- 192.168.1.30" in out and "-- %" not in out
     seen = {}
     monkeypatch.setenv("DB_ADMIN_PASSWORD", "rootpw")
     monkeypatch.setattr(provision, "run", lambda user, pw, cfg, also=(), **kw: seen.update(user=user, pw=pw, also=list(also)))

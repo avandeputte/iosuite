@@ -58,7 +58,7 @@ python3 -m app.offline restore Nightly-20261103-020000.mdbk.tar --db notes --sql
 
 The `mysql` system database is not dumped; users, roles and grants are exported logically instead, which is what moves
 cleanly between versions and servers. Server settings (`my.cnf`), plugins and binary logs are not part of a backup.
-ioBackup's own settings live in its database (`backup`): back that up too, with any job on the same server.
+ioBackup's own settings live in its database (`iobackup`): back that up too, with any job on the same server.
 
 ## Galera
 

@@ -15,8 +15,8 @@ services:
       TZ: America/New_York
       DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
       DB_PORT: "3306"
-      DB_NAME: suite
-      DB_USER: suite
+      DB_NAME: iostart
+      DB_USER: iostart
       DB_PASSWORD: change-me          # CHANGE ME
       # the accounts shared by the io apps (the same database ioPix, ioNote, ioContact, ioCalendar and ioHealth use)
       # IOSUITE_DB_HOST: db.example.lan   # default: DB_HOST

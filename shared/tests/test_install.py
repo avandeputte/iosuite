@@ -48,7 +48,7 @@ def test_plan_shares_the_answers(tmp_path):
     cal = entries[0]
     assert cal["target"] == tmp_path / "opt" / "iocalendar" / "app"
     # the same server, user and password; the app's own database name; the Shared ioSuite database as it is
-    assert cal["env"]["IOCALENDAR_DB"] == "db.lan:3307/calendar:suite:s3cret"
+    assert cal["env"]["IOCALENDAR_DB"] == "db.lan:3307/iocalendar:suite:s3cret"
     assert cal["env"]["IOCALENDAR_SUITE_DB"] == "db.lan:3307/iostart:iostart:sh4red"
     assert cal["env"]["IOCALENDAR_ADMIN"].startswith("alex:")
     assert cal["args"][:5] == ["--yes", "--cookie-domain", "example.com", "--public-url", ""]
@@ -60,7 +60,7 @@ def test_plan_shares_the_answers(tmp_path):
 
 
 def test_iothings_is_one_of_the_apps(tmp_path):
-    """ioThings installs like the others: its own "things" database on the same server, its port, the suite's sign-in."""
+    """ioThings installs like the others: its own "iothings" database on the same server, its port, the suite's sign-in."""
     app = tmp_path / "opt" / "iostart" / "app"
     app.mkdir(parents=True)
     (app / "config.env").write_text(CFG)
@@ -68,7 +68,7 @@ def test_iothings_is_one_of_the_apps(tmp_path):
     assert "iothings" in install.parse_apps("all")
     [e] = install.plan(["iothings"], cfg, install.base_dir(app), admin="alex", service=True, from_app="iostart")
     assert e["target"] == tmp_path / "opt" / "iothings" / "app"
-    assert e["env"]["IOTHINGS_DB"] == "db.lan:3307/things:suite:s3cret"
+    assert e["env"]["IOTHINGS_DB"] == "db.lan:3307/iothings:suite:s3cret"
     assert e["env"]["IOTHINGS_SUITE_DB"] == "db.lan:3307/iostart:iostart:sh4red"
     assert e["env"]["IOTHINGS_ADMIN"].startswith("alex:")
     from iosuite_shared import suite
@@ -79,7 +79,7 @@ def test_plan_without_an_app_database_lends_the_shared_one(tmp_path):
     cfg = install.read_env_file(tmp_path / "missing")  # no app database yet (ioPix before its set-up page): no DB_* at all
     cfg.update(IOSUITE_DB_HOST="db.lan", IOSUITE_DB_PASSWORD="pw")
     [e] = install.plan(["iohealth"], cfg, tmp_path, service=False)
-    assert e["env"]["IOHEALTH_DB"] == "db.lan:3306/health:iosuite:pw"
+    assert e["env"]["IOHEALTH_DB"] == "db.lan:3306/iohealth:iosuite:pw"
     assert e["env"]["IOHEALTH_SUITE_DB"] == "db.lan:3306/iosuite:iosuite:pw"
     assert "--no-service" in e["args"] and "--no-admin" in e["args"]
 
@@ -108,6 +108,78 @@ def test_install_runs_each_setup_and_skips_what_is_there(tmp_path, monkeypatch):
     assert any("already set up" in l for l in lines)
 
 
+def test_with_somebody_at_the_keyboard_each_app_asks_its_questions(tmp_path, monkeypatch):
+    """Adding an app asks its own setup questions: no --yes and no answers on its command line, but the answers of the
+    apps already here written where its setup.sh takes its defaults from (config.env.failed), its database named
+    after it. ioPix, whose setup.sh reads its defaults from config.env, gets them there."""
+    opt = tmp_path / "opt"
+    app = opt / "iostart" / "app"
+    app.mkdir(parents=True)
+    (app / "config.env").write_text(CFG + "TZ=Europe/Brussels\n")
+    cal = opt / "iocalendar" / "app"
+    cal.mkdir(parents=True)
+    (cal / "config.env").write_text("PORT=8620\nPUBLIC_URL=https://calendar.example.com\n")
+    ran = {}
+
+    def fetcher(name, target, log):
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "setup.sh").write_text("# its own defaults: config.env\n" if name == "iopix" else "mv config.env.failed config.env\n")
+
+    def runner(entry, log):
+        ran[entry["name"]] = entry
+        return 0
+
+    monkeypatch.setenv("DB_ADMIN_PASSWORD", "r00t")
+    failed = install.install(["iothings", "iopix"], app, service=True, db_admin="root", photos="/srv/photos", fetcher=fetcher, runner=runner,
+                             log=lambda *_: None, ask=True)
+    assert failed == []
+    e = ran["iothings"]
+    assert "--yes" not in e["args"] and e["args"] == ["--also", "none", "--service"]
+    assert e["env"] == {"IOTHINGS_DB_ADMIN": "root:r00t"}  # its setup.sh makes the database it is given, under the name answered
+    seed = install.read_env_file(opt / "iothings" / "app" / "config.env.failed")
+    assert not (opt / "iothings" / "app" / "config.env").exists()  # still a first install until its setup succeeds
+    assert seed["DB_NAME"] == "iothings" and seed["DB_HOST"] == "db.lan" and seed["DB_PORT"] == "3307"
+    assert seed["DB_USER"] == "suite" and seed["DB_PASSWORD"] == "s3cret"
+    assert (seed["IOSUITE_DB_HOST"], seed["IOSUITE_DB_NAME"], seed["IOSUITE_DB_USER"], seed["IOSUITE_DB_PASSWORD"]) == ("db.lan", "iostart", "iostart", "sh4red")
+    assert seed["PORT"] == "8700" and seed["COOKIE_DOMAIN"] == "example.com" and seed["TZ"] == "Europe/Brussels"
+    assert seed["PUBLIC_URL"] == "https://things.example.com"  # made like ioCalendar's
+    pix = install.read_env_file(opt / "iopix" / "app" / "config.env")
+    assert pix["DB_NAME"] == "iopix" and pix["DB_TYPE"] == "mysql" and pix["PHOTOS_ROOT"] == "/srv/photos" and pix["PUBLIC_URL"] == "https://pix.example.com"
+    assert "--no-digikam" not in ran["iopix"]["args"]  # its own questions, digiKam's too
+
+
+def test_without_anybody_at_the_keyboard_nothing_is_asked(tmp_path):
+    app = tmp_path / "opt" / "iostart" / "app"
+    app.mkdir(parents=True)
+    (app / "config.env").write_text(CFG)
+    [e] = install.plan(["iothings"], install.read_env_file(app / "config.env"), install.base_dir(app), service=True)
+    assert e["args"][0] == "--yes" and e["seed"] is None
+
+
+def test_public_url_like_the_others(tmp_path):
+    def here(app, url):
+        d = tmp_path / app / "app"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "config.env").write_text(f"PUBLIC_URL={url}\n")
+    assert install.public_url_like_others("iothings", tmp_path) == ""
+    here("iostart", "https://home.example.com")  # the start page's own address says nothing about the others'
+    assert install.public_url_like_others("iothings", tmp_path) == ""
+    here("iotask", "https://iotask.example.com/")
+    assert install.public_url_like_others("iothings", tmp_path) == "https://iothings.example.com"
+    here("iocalendar", "https://home.example.com/calendar")
+    assert install.public_url_like_others("iothings", tmp_path) == "https://home.example.com/things"
+
+
+def test_cli_yes_asks_nothing(tmp_path, monkeypatch):
+    calls = {}
+    monkeypatch.setattr(install, "install", lambda names, config_dir, **kw: calls.update(kw) or [])
+    monkeypatch.setattr(install.sys.stdin, "isatty", lambda: True)
+    assert cli.main(["--config", str(tmp_path), "install", "iothings", "--from", "iostart"]) == 0
+    assert calls["ask"] is True
+    assert cli.main(["--config", str(tmp_path), "install", "iothings", "--from", "iostart", "--yes"]) == 0
+    assert calls["ask"] is False
+
+
 def test_cli_has_install(tmp_path, monkeypatch):
     calls = {}
     monkeypatch.setattr(install, "install", lambda names, config_dir, **kw: calls.update(names=names, config_dir=config_dir, **kw) or [])
@@ -127,7 +199,7 @@ def test_local_mariadb_gets_the_databases(tmp_path, monkeypatch):
     cfg = dict(DB_HOST="127.0.0.1", DB_USER="iopix", DB_PASSWORD="x")
     entries = install.plan(["iocalendar", "ionote"], cfg, tmp_path)
     install.prepare_local_databases(entries, cfg, log=lambda *_: None)
-    assert seen["cmd"] == ["mariadb"] and "`calendar`" in seen["sql"] and "`notes`" in seen["sql"] and "'iopix'@'localhost'" in seen["sql"]
+    assert seen["cmd"] == ["mariadb"] and "`iocalendar`" in seen["sql"] and "`ionote`" in seen["sql"] and "'iopix'@'localhost'" in seen["sql"]
     seen.clear()
     install.prepare_local_databases(entries, dict(DB_HOST="db.lan", DB_USER="suite"), log=lambda *_: None)
     assert not seen  # a remote server is left to its administrator
@@ -148,7 +220,7 @@ def _server(tmp_path, apps=("iocalendar", "iotask"), data=("ionote",)):
         (d / "app" / "main.py").write_text("x")
         (d / "data").mkdir()
         (d / "data" / f"{n}.log").write_text("log")
-        cfg = CFG.replace("DB_NAME=suite", f"DB_NAME={install.APPS[n]['db']}")
+        cfg = CFG.replace("DB_NAME=suite", f"DB_NAME={n}")
         if n in data:
             (opt / n / "data").mkdir()
             (opt / n / "data" / "keep.me").write_text("x")
@@ -184,13 +256,13 @@ def test_remove_keeps_the_database_and_the_data(tmp_path, capsys):
     assert install.installed(opt, own) == ["iostart", "iotask"]
     assert (opt / "iotask" / "app" / "config.env").is_file() and (own / "config.env").is_file()  # nobody else is touched
     out = capsys.readouterr().out
-    assert "kept the database calendar" in out and "adding ioCalendar again later finds them" in out
+    assert "kept the database iocalendar" in out and "adding ioCalendar again later finds them" in out
 
 
 def test_remove_with_delete_data_drops_only_the_apps_own_database(tmp_path):
     opt, own = _server(tmp_path)
     failed, calls = _remove(["iocalendar", "ionote"], own, delete_data=True)
-    assert failed == [] and calls["drop"] == [("db.lan", "3307", "calendar"), ("db.lan", "3307", "notes")]
+    assert failed == [] and calls["drop"] == [("db.lan", "3307", "iocalendar"), ("db.lan", "3307", "ionote")]
     assert not (opt / "iocalendar").exists() and not (opt / "ionote").exists()
     assert (opt / "iotask" / "app" / "data").is_dir()
 
@@ -198,9 +270,9 @@ def test_remove_with_delete_data_drops_only_the_apps_own_database(tmp_path):
 def test_delete_data_never_drops_a_shared_or_borrowed_database(tmp_path, capsys):
     opt, own = _server(tmp_path)
     cal = opt / "iocalendar" / "app" / "config.env"
-    cal.write_text(cal.read_text().replace("DB_NAME=calendar", "DB_NAME=iostart"))  # the Shared ioSuite database's name here
+    cal.write_text(cal.read_text().replace("DB_NAME=iocalendar", "DB_NAME=iostart"))  # the Shared ioSuite database's name here
     task = opt / "iotask" / "app" / "config.env"
-    task.write_text(task.read_text().replace("DB_NAME=tasks", "DB_NAME=suite"))  # ioStart's own database
+    task.write_text(task.read_text().replace("DB_NAME=iotask", "DB_NAME=suite"))  # ioStart's own database
     outside = tmp_path / "elsewhere"
     outside.mkdir()
     task.write_text(task.read_text() + f"DATA_DIR={outside}\n")

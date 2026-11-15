@@ -94,7 +94,7 @@ which wins:
 
 | Setting | Meaning |
 | --- | --- |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`things`) |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`iothings`) |
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`): accounts, sessions, app passwords, roles and suite-wide settings |
 | `COOKIE_DOMAIN` | the domain the sign-in is shared on (`example.com`) |
 | `HOST`, `PORT` | where the server listens (every address, 8700) |

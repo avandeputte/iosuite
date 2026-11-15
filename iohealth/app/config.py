@@ -19,7 +19,7 @@ env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
 globals().update(shared.standard(APP, APP_DIR))
 
 # the health data: {host, port, database, user, password} (the DB_* settings)
-_db = shared.own_db("health")
+_db = shared.own_db("iohealth")
 DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD = _db["host"], _db["port"], _db["database"], _db["user"], _db["password"]
 
 MAP_TILE_URL = env("MAP_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png")

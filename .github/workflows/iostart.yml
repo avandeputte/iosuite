@@ -60,7 +60,7 @@ jobs:
           node -e 'JSON.parse(require("fs").readFileSync("static/extension/manifest.json"))'
           # <<< own: checks
       - name: Tests
-        # scratch databases suite_test and suite_test_auth on the service (iosuite_shared.testing)
+        # scratch databases iostart_test and iostart_test_auth on the service (iosuite_shared.testing)
         env:
           IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
         run: python -m pytest -q -p no:cacheprovider tests

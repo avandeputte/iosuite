@@ -15,7 +15,7 @@ globals().update(shared.standard(APP, APP_DIR))
 # the app's own database (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD; no default password). The Shared ioSuite database
 # (IOSUITE_DB_*: accounts, sessions, app passwords, roles, suite-wide settings) is read by iosuite_shared itself, on the
 # contacts' server unless told otherwise.
-_db = shared.own_db("contacts")
+_db = shared.own_db("iocontact")
 DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD = _db["host"], _db["port"], _db["database"], _db["user"], _db["password"]
 
 # LDAP directory (read-only): port 0 turns it off; it listens where the web app does unless told otherwise
