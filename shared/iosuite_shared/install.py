@@ -38,6 +38,8 @@ Adding the app again finds them. Only `--delete-data` (asked apart, default no) 
 deletes its data folder under BASE/<app>; never the Shared ioSuite database (the accounts, their roles and the keys
 stay as they are), never a database another app here uses, never the photos or digiKam's own database (ioPix) or the
 backups (ioBackup): the folders config.env names for them (KEPT) stay wherever they are, inside the app's folder too.
+An app that looks to be running on another machine now (moved there, on the same database: see used_elsewhere)
+keeps its database even with `--delete-data`, and stays in the suite's list of apps.
 The app this runs from is removed by another app that stays; the last app here is not removed.
 
 How the apps are reached (`a` in the list, or `apps --reach ports|one|one-proxy|proxy [--address URL]`) is one answer
@@ -64,10 +66,12 @@ import atexit
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 # the one repository of the suite: a folder per app, the shared library in shared/
 REPO = "avandeputte/iosuite"
@@ -509,15 +513,88 @@ def forget_app(name, log=print):
         log(f"  note: could not take {APPS[name]['label']} out of the suite's list of apps ({str(exc)[:160]}); a suite admin can, in Settings › Suite › Apps")
 
 
+def _connect(h, o, u, w):
+    import pymysql
+    return pymysql.connect(host=h, port=int(o), user=u, password=w, connect_timeout=10, autocommit=True)
+
+
+def _db_login(p, db_admin=None):
+    """Who talks to the app's database server on a removal: the administrator when one was given, else the app's user."""
+    if db_admin:
+        return db_admin, os.environ.get("DB_ADMIN_PASSWORD", "")
+    return p["cfg"].get("DB_USER", ""), p["cfg"].get("DB_PASSWORD", "")
+
+
+def _my_addresses():
+    """The names and addresses of this machine, as far as it can tell (loopback included)."""
+    out = {"127.0.0.1", "::1", "localhost"}
+    for n in (socket.gethostname, socket.getfqdn):
+        try:
+            out.add(n().lower())
+        except OSError:
+            pass
+    try:
+        out |= {i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None)}
+    except OSError:
+        pass
+    try:  # the address the default route leaves from (nothing is sent)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))
+            out.add(s.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        out |= set(subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5).stdout.split())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return out
+
+
+def used_elsewhere(name, p, db_admin=None, connect=None, mine=None):
+    """Why the app being removed looks to be running on another machine now (moved there), or None. Asked once its
+    service here is stopped, so whatever still uses it is not this machine's:
+
+      * the suite's list of apps (Shared ioSuite database) has it at an address inside the network (internal_url, which
+        each app writes as it starts) that is not one of this machine's: the copy that started last is elsewhere;
+      * its database has connections open (MariaDB's process list; the apps keep a few open while they run).
+
+    Neither sees everything: an app elsewhere that is stopped right now, an internal address on loopback (behind a proxy
+    on its own server, which says nothing about which server), or connections of another database user when the
+    login used here may not see them (MariaDB shows a user its own, and an administrator all of them)."""
+    mine = _my_addresses() if mine is None else mine
+    label = APPS[name]["label"]
+    try:
+        from iosuite_shared import suite
+        r = suite.get(name) or {}
+    except Exception:  # noqa: BLE001 - no Shared ioSuite database to ask: the other signal still counts
+        r = {}
+    url = r.get("internalUrl") or ""
+    host = (urlsplit(url).hostname or "").lower() if url else ""
+    if host and host not in mine:
+        return f"the suite's list of apps has {label} at {url}, which is not this machine"
+    if p.get("db"):
+        h, o, dbname = p["db"]
+        try:
+            conn = (connect or _connect)(h, o, *_db_login(p, db_admin))
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT HOST FROM information_schema.PROCESSLIST WHERE DB = %s AND ID != CONNECTION_ID()", (dbname,))
+                    hosts = sorted({str(row[0] if not isinstance(row, dict) else row["HOST"]).rsplit(":", 1)[0] for row in cur.fetchall()})
+            finally:
+                conn.close()
+        except Exception:  # noqa: BLE001 - the server does not answer this login: nothing to tell
+            hosts = []
+        if hosts:
+            return f"its database {dbname} is in use from {', '.join(hosts)} although {label} is stopped here"
+    return None
+
+
 def drop_database(p, db_admin=None, connect=None, log=print):
     """--delete-data: drop the app's own database, as the administrator when one was given, else as the app's user."""
     host, port, dbname = p["db"]
-    user, password = (db_admin, os.environ.get("DB_ADMIN_PASSWORD", "")) if db_admin else (p["cfg"].get("DB_USER", ""), p["cfg"].get("DB_PASSWORD", ""))
+    user, password = _db_login(p, db_admin)
     try:
-        if connect is None:
-            import pymysql
-            connect = lambda h, o, u, w: pymysql.connect(host=h, port=int(o), user=u, password=w, connect_timeout=10, autocommit=True)  # noqa: E731
-        conn = connect(host, port, user, password)
+        conn = (connect or _connect)(host, port, user, password)
         try:
             with conn.cursor() as cur:
                 cur.execute(f"DROP DATABASE IF EXISTS `{dbname}`")
@@ -540,7 +617,7 @@ def _delegate(other, name, base, delete_data, db_admin):
 
 
 def remove(names, config_dir, base=None, delete_data=False, db_admin=None, stopper=stop_service, forgetter=forget_app, dropper=drop_database,
-           delegate=_delegate, log=print):
+           delegate=_delegate, log=print, checker=None):
     """Remove every app in NAMES from this machine; returns the names where something could not be done.
     The database and the data stay unless DELETE_DATA."""
     cfg = read_env_file(Path(config_dir) / "config.env") if config_dir else {}
@@ -566,7 +643,15 @@ def remove(names, config_dir, base=None, delete_data=False, db_admin=None, stopp
             log(f"  {a['label']} is not installed here: nothing to do")
             continue
         stopper(n, p["target"], log=log)
-        forgetter(n, log=log)
+        # moved to another machine (started there on the same database)? Then it stays in the suite's list and its
+        # database is never dropped from here
+        elsewhere = (checker or used_elsewhere)(n, p, db_admin=db_admin)
+        if elsewhere:
+            log(f"  {a['label']} looks to be running on another machine: {elsewhere}")
+            log("  so it stays in the suite's list of apps" + (" and its database is kept" if delete_data and p["db"] else ""))
+            p["db_kept"] = p["db_kept"] or "it is in use on another machine"
+        else:
+            forgetter(n, log=log)
         # the program files: everything in the app's folder but the data folder and what is never deleted (KEPT)
         kept = [where for _, where in p["keep"]]
         _clear(p["target"], [p["data"]] + kept)

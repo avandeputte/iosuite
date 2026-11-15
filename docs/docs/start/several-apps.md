@@ -101,6 +101,18 @@ Install the new app on its own, anywhere, and answer the Shared ioSuite database
 apps use. That's all it takes for the accounts to be shared. To have one sign-in, give every app the same
 `COOKIE_DOMAIN` (see [Reverse proxy and HTTPS](../run/reverse-proxy.md)).
 
+### Moving an app to another machine
+
+1. Stop the app on the old machine.
+2. Install it on the new one and answer the database questions with its existing database (the same name, user and
+   password as the old `config.env`). Nothing is deleted or set up again: the tables that are there stay as they are,
+   and only what a newer version adds is added. ioPix also needs its photos folder on the new machine.
+3. Remove it from the old machine. Removing keeps the database anyway; and should you answer `DELETE`, the installer
+   still keeps a database that the app on the new machine uses. It can tell when the suite's list of apps has the app
+   at another machine's address (each app writes its address there as it starts), or when the database has
+   connections open from elsewhere. It cannot tell while the app on the new machine is stopped and the list still
+   names the old one, so answer the delete question only for an app you are taking out of the suite for good.
+
 ## Docker
 
 See [the whole suite in one stack](docker.md#the-whole-suite-in-one-stack), or run each app's own compose file with the

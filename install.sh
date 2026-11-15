@@ -18,6 +18,7 @@
 #   --yes                 no questions: every app takes those defaults
 #   --reconfigure APP,APP ask an installed app's questions again
 #   --delete-data         with --remove: also drop the app's own database and delete its data folder (cannot be undone)
+#                         (never a database an app moved to another machine still uses, as far as can be told)
 #   --list                only show what is installed
 #   --service | --no-service   the apps you add run as a service (the default as root with systemd), or are started by hand
 #   --reach ports | one | one-proxy | proxy   how every app here is reached (a in the list asks the same):
@@ -56,7 +57,7 @@ main() {
       --yes) yes=1; shift;;
       --service|--no-service) manage+=("$1"); svc="$1"; shift;;
       --reach|--address) manage+=("$1" "$2"); reach+=("$1" "$2"); shift 2;;
-      -h|--help) sed -n '2,36p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//' || true
+      -h|--help) sed -n '2,37p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null | sed 's/^# \{0,1\}//' || true
                  [ -n "${BASH_SOURCE[0]:-}" ] || echo "see the top of $REPO/blob/main/install.sh"; exit 0;;
       *) rest+=("$1"); shift;;
     esac

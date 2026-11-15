@@ -3,12 +3,15 @@ import pytest
 
 from iosuite_shared import cli, install
 
+USED_ELSEWHERE = install.used_elsewhere  # the real one (the fixture below stands in for it)
+
 
 @pytest.fixture
 def fresh_db(monkeypatch):
     """Overrides conftest's autouse database fixture: nothing here needs MariaDB. The suite's one-address switch,
     which lives there, is off unless a test says otherwise."""
     monkeypatch.setattr(install, "_switch", lambda: False)
+    monkeypatch.setattr(install, "used_elsewhere", lambda *a, **k: None)  # nothing runs on another machine, unless a test says so
     yield
 
 
@@ -588,3 +591,51 @@ def test_restart_service_without_systemd_says_so(tmp_path, monkeypatch):
     lines = []
     assert install.restart_service("iotask", tmp_path, log=lines.append, run=lambda *a, **k: pytest.fail("nothing to run")) is True
     assert "started by hand" in lines[0]
+
+
+def test_an_app_moved_to_another_machine_keeps_its_database_and_its_place(tmp_path):
+    """Removing an app that now runs on another machine (moved there, on the same database) never drops its database,
+    even with --delete-data, and leaves it in the suite's list of apps."""
+    opt = tmp_path / "opt"
+    app = opt / "iostart" / "app"
+    app.mkdir(parents=True)
+    (app / "config.env").write_text(CFG)
+    things = opt / "iothings" / "app"
+    things.mkdir(parents=True)
+    (things / "config.env").write_text(CFG.replace("DB_NAME=suite", "DB_NAME=iothings"))
+    calls = {"drop": [], "forget": []}
+    lines = []
+    failed = install.remove(["iothings"], app, delete_data=True, stopper=lambda *a, **k: None,
+                            forgetter=lambda n, log: calls["forget"].append(n), dropper=lambda p, **k: calls["drop"].append(p["db"]) or True,
+                            checker=lambda n, p, db_admin=None: "its database iothings is in use from 192.168.1.40", log=lines.append)
+    assert failed == [] and calls == {"drop": [], "forget": []}
+    out = "\n".join(lines)
+    assert "running on another machine" in out and "kept the database iothings: it is in use on another machine" in out
+
+
+def test_used_elsewhere_reads_the_list_of_apps_and_the_process_list(tmp_path, monkeypatch):
+    from iosuite_shared import suite
+    p = {"db": ("db.lan", "3307", "iothings"), "cfg": {"DB_USER": "suite", "DB_PASSWORD": "s3cret"}}
+    hosts = []
+
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, sql, args): self.args = args
+        def fetchall(self): return [(h,) for h in hosts]
+
+    class Conn:
+        def cursor(self): return Cur()
+        def close(self): pass
+
+    connect = lambda *a: Conn()  # noqa: E731
+    mine = {"127.0.0.1", "192.168.1.30"}
+    monkeypatch.setattr(suite, "get", lambda app: {"internalUrl": "http://192.168.1.30:8700"})
+    assert USED_ELSEWHERE("iothings", p, connect=connect, mine=mine) is None  # here, and nobody connected
+    hosts.append("192.168.1.40:51234")
+    assert "in use from 192.168.1.40" in USED_ELSEWHERE("iothings", p, connect=connect, mine=mine)
+    hosts.clear()
+    monkeypatch.setattr(suite, "get", lambda app: {"internalUrl": "http://192.168.1.40:8700"})
+    assert "192.168.1.40:8700, which is not this machine" in USED_ELSEWHERE("iothings", p, connect=connect, mine=mine)
+    monkeypatch.setattr(suite, "get", lambda app: {"internalUrl": "http://127.0.0.1:8700"})  # behind a proxy: says nothing
+    assert USED_ELSEWHERE("iothings", p, connect=connect, mine=mine) is None
