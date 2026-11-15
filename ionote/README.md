@@ -2,8 +2,8 @@
 
 *Your notes, clipboard snippets and screenshots, searchable everywhere.*
 
-The server behind ionote: a web app for reading, writing and organising notes from any browser, and the API the
-ionote apps for Mac and iPhone/iPad use ([ionote-apps](https://github.com/avandeputte/iosuite-apps/tree/main/ionote)). Everything is kept
+The server behind ioNote: a web app for reading, writing and organising notes from any browser, and the API the
+ioNote apps for Mac and iPhone/iPad use ([iosuite-apps](https://github.com/avandeputte/iosuite-apps/tree/main/ionote)). Everything is kept
 in one MariaDB/MySQL database, pictures included. It is built the same way as its sibling
 [iopix](https://github.com/avandeputte/iosuite/tree/main/iopix): FastAPI with a single-page vanilla JS app, the same accounts, roles
 and sign-in (Cloudflare Access too), the same installer, updater, Docker image and MCP server.
@@ -11,7 +11,7 @@ and sign-in (Cloudflare Access too), the same installer, updater, Docker image a
 ## What it does
 
 - **Notes**: a title, text, tags, a folder, a pin, and optionally a picture (a screenshot, a photo) with the text
-  read from it. Notes come from the Mac (clipboard, screenshots, right-click › Save to ionote), the iPhone (paste,
+  read from it. Notes come from the Mac (clipboard, screenshots, right-click › Save to ioNote), the iPhone (paste,
   photos, the share sheet), the web app, or an assistant through MCP.
 - **Web app**: folders and tags in the sidebar (right-click one to rename it, give it a colour or delete it; drag a
   note onto a folder to file it), all notes / pinned / pictures / no folder / trash, sorting, full-text search,
@@ -53,7 +53,7 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite/ionote
 ```
 
 Its last step is the list of the suite's apps on this machine: tick one to add it, untick one to remove it (its database and data stay), `r` and its number to ask its questions again; `./setup.sh --apps` shows only that list, and the [one-line installer](../README.md#install) does the same from anywhere. Adding (flag `--also iocalendar,ionote`, `--also all`; `--remove` and `--reconfigure` take lists too; `IONOTE_ALSO` in the environment), puts
-other apps of the suite in this same machine, beside ionote (`/opt/iocalendar/app` next to `/opt/ionote/app`),
+other apps of the suite in this same machine, beside ioNote (`/opt/iocalendar/app` next to `/opt/ionote/app`),
 each asking its own setup questions with the answers of the apps already here as the defaults (Enter keeps
 one; `--yes` takes them all): the same database server with a database of its own named after the app (`iostart`,
 `iocalendar`, `iothings`, ...; the user needs rights on those names too, or give a MariaDB administrator), the same Shared ioSuite
@@ -131,7 +131,7 @@ name and the same names), or in the environment, which wins. `config.env.example
 | `TLS_CERT_FILE` / `TLS_KEY_FILE` | | HTTPS served directly instead of behind a reverse proxy |
 | `DATA_DIR` | `./data` | what the app writes on its own: the log and the update result |
 | `LOG_FILE` | `DATA_DIR/ionote.log` | the server log (empty: none) |
-| `PUBLIC_URL` | | the address ionote is reached at, for links in MCP answers and the suite's list of apps |
+| `PUBLIC_URL` | | the address ioNote is reached at, for links in MCP answers and the suite's list of apps |
 | `COOKIE_DOMAIN` | | the domain the sign-in is shared on (e.g. `example.com`); a LAN address outside it gets a cookie of its own |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | | the first admin, created on a first start with no accounts |
 | `IOSUITE_DB_HOST` / `_PORT` / `_NAME` / `_USER` / `_PASSWORD` | `DB_HOST` / `DB_PORT` / `iosuite` / `iosuite` / none | the Shared ioSuite database (MariaDB): accounts, sessions, suite-wide settings |
@@ -157,12 +157,12 @@ name and the same names), or in the environment, which wins. `config.env.example
 
 ## Reverse proxy and HTTPS
 
-ionote speaks plain HTTP on port 8610. Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy
+ioNote speaks plain HTTP on port 8610. Run it behind a reverse proxy that terminates HTTPS (Caddy, Nginx Proxy
 Manager, HAProxy, a Cloudflare Tunnel) and reach it only through that; `/mcp` streams responses, so the proxy must not
 buffer that path.
 
-When the proxy already makes people sign in, ionote takes that sign-in, exactly as iopix does: the proxy passes who
-signed in in a header, and ionote treats that person as signed in when an account exists for them (matched on the
+When the proxy already makes people sign in, ioNote takes that sign-in, exactly as ioPix does: the proxy passes who
+signed in in a header, and ioNote treats that person as signed in when an account exists for them (matched on the
 account's email address, then its name). Settings › Security › Sign-in at the proxy (saved there, the settings are kept in the
 Shared ioSuite database for the whole suite: one Cloudflare Access application covering every app, set up once; never
 in `config.env`). The fields, by the names the Shared ioSuite database keeps them under:
@@ -175,7 +175,7 @@ in `config.env`). The fields, by the names the Shared ioSuite database keeps the
 | `AUTH_PROXY_CREATE` | `viewer`, `member` or `editor`: create an account for someone the proxy lets in who has none; `deny`: a "No access" page; empty: the sign-in screen |
 | `CF_ACCESS_TEAM` / `CF_ACCESS_AUD` | your Cloudflare Access team domain and the application's AUD tag: the signed token Cloudflare adds to every request (`Cf-Access-Jwt-Assertion`) is checked against your team's keys, and the email is taken from it. The recommended setup for a Cloudflare Tunnel |
 
-The header is believed only from the proxy: a request that reaches ionote any other way is ignored, whatever headers
+The header is believed only from the proxy: a request that reaches ioNote any other way is ignored, whatever headers
 it carries. From outside (through Cloudflare), one-click accounts without a password do not work. The Mac and iPhone
 apps sign in through the same page; for unattended use through Cloudflare they take a Cloudflare Access **service
 token** (client ID and secret, kept in the Keychain), as the iopix apps do.
@@ -186,11 +186,11 @@ Accounts are the **ioThing suite's shared accounts**, kept in the **Shared ioSui
 shared with iopix and ioContact, used through the ioSuite shared library, [`iosuite-shared`](https://github.com/avandeputte/iosuite/tree/main/shared); besides the accounts it holds sessions,
 roles, the suite's list of apps and the suite-wide settings), so one name, password and session serve every app, and
 someone signed in at `photo.example.com` is signed in at `notes.example.com` too when the apps share a domain
-(`COOKIE_DOMAIN`). What is ionote' own is kept per app: the role an account holds here and its settings. A
-*suite admin* is admin in every app. Point ionote at that database with `IOSUITE_DB_HOST`, `IOSUITE_DB_PORT`,
+(`COOKIE_DOMAIN`). What is ioNote's own is kept per app: the role an account holds here and its settings. A
+*suite admin* is admin in every app. Point ioNote at that database with `IOSUITE_DB_HOST`, `IOSUITE_DB_PORT`,
 `IOSUITE_DB_NAME`, `IOSUITE_DB_USER` and `IOSUITE_DB_PASSWORD` in `config.env` (database and user `iosuite` and the notes' server by
 default; the tables are created at start; `iosuite-shared migrate --ionote`
-folds a 1.0 install's `user_accounts` table into it). Out of the box ionote is open to anyone who can reach it;
+folds a 1.0 install's `user_accounts` table into it). Out of the box ioNote is open to anyone who can reach it;
 `setup.sh` (or `ADMIN_USER` / `ADMIN_PASSWORD`, or the person icon in the web app) creates the admin. Once an
 account exists:
 
@@ -214,9 +214,9 @@ Sessions are random tokens in an HttpOnly cookie (`iothing_session`, shared by t
 not, web or which app): `GET /api/auth/sessions` for your own, `GET /api/suite-admin/users/<id>/sessions` for suite admins. Passwords
 are Argon2id-hashed; wrong passwords cost a growing wait. Write requests from another site are refused.
 
-ionote writes its row in the **suite's list of apps** (iosuite-shared's `suite_apps` table: name, version, colour,
+ioNote writes its row in the **suite's list of apps** (iosuite-shared's `suite_apps` table: name, version, colour,
 icon, address) on its first request, so ioSuite's start page and the other apps find it without anyone typing an
-address. The address is `PUBLIC_URL` when set, otherwise the best one ionote is reached at (a host under
+address. The address is `PUBLIC_URL` when set, otherwise the best one ioNote is reached at (a host under
 `COOKIE_DOMAIN` over HTTPS beats a LAN name, which beats an IP address).
 
 ## API
@@ -276,7 +276,7 @@ Apps that take a JSON configuration and only start local processes (Claude Deskt
 ## Export, import and backups
 
 Import and export (the sidebar) › Export downloads every note as Markdown (with front matter: id, dates, tags, source) next to its picture and its files,
-in a directory per folder, plus `notes.json` with everything. Such a zip imports again on any ionote server (Import
+in a directory per folder, plus `notes.json` with everything. Such a zip imports again on any ioNote server (Import
 and export › Import): records keep their ids, and a newer copy on the server wins (a zip from another account on the same server comes in as new notes). For backups, back the database up
 (`mariadb-dump --single-transaction ionote`): notes, pictures, accounts and settings are all in it.
 
