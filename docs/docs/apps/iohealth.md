@@ -8,6 +8,9 @@ Copies your Apple Health data, all of it or just the types you pick, into your o
 fitness web app on top of it. Nothing goes through a cloud service: the **ioHealthSync** iPhone app uploads straight to
 your server.
 
+[The ioHealth page on the website, with more screenshots →](https://iosuite.iothing.net/ioHealth/)
+{ .md-button }
+
 ![The ioHealth dashboard: activity rings, last night's sleep and the trend of every metric](../img/iohealth.jpg)
 
 ## What it does

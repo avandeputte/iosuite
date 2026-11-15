@@ -15,10 +15,14 @@ rm -rf site docs/img
 mkdir -p docs/img && cp landing/img/* docs/img/
 mkdocs build --strict
 cp -R landing/. site/
+# a page for each app (/ioContact/ and the others), from landing/apps.toml
+python3 tools/app-pages.py site
+rm site/apps.toml
 cat > site/sitemap.xml <<XML
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://iosuite.iothing.net/</loc></url>
+$(python3 -c 'import tomllib; d=tomllib.load(open("landing/apps.toml","rb")); print("\n".join("  <url><loc>https://iosuite.iothing.net/%s/</loc></url>" % d[k]["name"] for k in d["order"]))')
 $(grep -o '<loc>[^<]*</loc>' site/docs/sitemap.xml | sed 's/^/  <url>/; s/$/<\/url>/')
 </urlset>
 XML

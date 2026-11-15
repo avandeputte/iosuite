@@ -1,0 +1,688 @@
+# The content of the app pages (iosuite.iothing.net/ioContact/ and the others), one table per app.
+# tools/app-pages.py turns it into site/<name>/index.html at build time (build.sh), with the look of the home page.
+#
+#   name, color, port, tag      the app's name, colour, default port and one-line description
+#   eyebrow, headline, lede     the top of the page; lede may hold <strong>, <a> and <code>
+#   chips                       short facts under the lede
+#   hero / hero_alt / phone     the big screenshot, its description, and the phone screenshot beside it (optional)
+#   highlights                  a few things worth seeing, each with a screenshot (img in landing/img/)
+#   features                    everything it does, as cards
+#   works_with                  phones, apps and standards it speaks to (optional)
+#   alone                       what it needs to run on its own
+#   together                    what it does with each other app (app = the other app's key)
+#   links                       more links for the top of the page (optional)
+#
+# Keep it true to the app: the guide's page (docs/apps/<key>.md) is the reference for what each app does.
+
+order = ["iostart", "iopix", "ionote", "iocalendar", "iotask", "iorecipe", "iothings", "iomoney", "iocontact", "iohealth"]
+
+# ---------------------------------------------------------------------------------------------------------------------
+[iostart]
+name = "ioStart"
+color = "#2f3a5a"
+port = 8630
+tag = "The start page"
+eyebrow = "the start page · optional"
+headline = "Every app, and today, on one page."
+lede = "A home page for the family: a tile for each installed app with what matters today on it, the week ahead, a search box across everything, bookmarks and the weather. <strong>It is optional</strong>: every app works without it. It earns its place once you run two or more."
+chips = ["Finds the apps by itself", "⌘K search", "Wall display", "One MCP server for the suite", "Bookmarks in every browser"]
+hero = "iostart.jpg"
+hero_alt = "The ioStart start page: a tile per app with today on it, birthdays, the week ahead and bookmarks"
+phone = "iostart-phone.jpg"
+phone_alt = "The start page on a phone"
+alone = "ioStart needs the Shared ioSuite database and nothing else. Without other apps it is a page of bookmarks, the weather and a search box; each app you add brings its own tile."
+
+[[iostart.highlights]]
+title = "A glimpse of each app"
+text = "ioPix shows the photos from this day in earlier years, ioCalendar the rest of today, ioTask what is due, ioHealth the steps, the rings and last night's sleep. Each person sees only what that app shows them, asked with their own sign-in."
+img = "iostart.jpg"
+alt = "Tiles for ioHealth, ioCalendar, ioTask and the other apps, with today's details"
+
+[[iostart.highlights]]
+title = "One search box for everything"
+text = "⌘K or Ctrl-K searches the apps and the bookmarks at once: tasks, events, notes, recipes, things and people, with the web as a fallback. Type “dentist tomorrow 9am” and Quick add puts it in the calendar."
+img = "iostart-search.jpg"
+alt = "The search box open, with tasks and the apps that match"
+
+[[iostart.highlights]]
+title = "Light, dark, and yours"
+text = "Each person hides and orders the tiles and cards. Light, dark or the device's theme, kept with the account. On a tablet on the wall, the wall display shows photos behind a big clock, the weather and the coming days' events."
+img = "iostart-dark.jpg"
+alt = "The start page in dark mode"
+
+[[iostart.features]]
+title = "A tile per app, found by itself"
+text = "Every app registers in the suite's list of apps, so there is nothing to type. An app that isn't installed has no tile; one that is down keeps its last tile."
+[[iostart.features]]
+title = "The week ahead"
+text = "A Birthdays card from ioContact and a This week card from ioCalendar."
+[[iostart.features]]
+title = "Weather and Home Assistant"
+text = "AccuWeather (a free key) for the forecast, and Home Assistant entities you can switch from the page."
+[[iostart.features]]
+title = "Bookmarks"
+text = "Groups of links with their status, the ioStart Bookmarks extension for Chrome, Edge, Firefox and the others, an iPhone app, and Floccus."
+[[iostart.features]]
+title = "One MCP server for the suite"
+text = "Connect an AI assistant here once and it gets every app's tools, each app still deciding what you may do there."
+[[iostart.features]]
+title = "One address for every app"
+text = "When a suite admin turns it on, the start page answers for every app, each in a folder: one name, one certificate, one port."
+[[iostart.features]]
+title = "Updates for the whole suite"
+text = "Settings › Global settings › Updates shows the suite's version on every app and brings them all up to date with one button."
+
+[[iostart.together]]
+app = "iocalendar"
+text = "today's events on the tile, a This week card, and Quick add from the search box."
+[[iostart.together]]
+app = "iopix"
+text = "photos from this day in earlier years, and a strip of photos under the tiles."
+[[iostart.together]]
+app = "iocontact"
+text = "the Birthdays card, and people in the search box."
+[[iostart.together]]
+app = "iohealth"
+text = "today's steps, the rings and last night's sleep."
+
+# ---------------------------------------------------------------------------------------------------------------------
+[iopix]
+name = "ioPix"
+color = "#3b4a8c"
+port = 8600
+tag = "Photos"
+eyebrow = "photos"
+headline = "Your photo library, in every browser."
+lede = "Browse, search, map and edit a library of photos from any browser, with search by what is in the photos, faces and places, worked out <strong>on your own server</strong>. A web companion for digiKam, or a library of its own without it."
+chips = ["Content and face search", "A map of every photo", "Edits digiKam reads", "iPhone, iPad, Mac and Apple TV", "MCP"]
+hero = "iopix-explore.jpg"
+hero_alt = "ioPix Explore: library totals, photos from this day in past years and a shuffle of older ones"
+alone = "ioPix needs the photos (a folder, read-only unless you turn on editing), a MariaDB or MySQL database for what it builds, and the Shared ioSuite database for its accounts. digiKam is optional."
+links = [["iopix.net", "https://iopix.net"]]
+
+[[iopix.highlights]]
+title = "This day, and every day since"
+text = "Explore opens on the library's totals, the photos taken on this day in earlier years, and a shuffle of older ones. Browse by date, folder, album, person, place and tag."
+img = "iopix-explore.jpg"
+alt = "ioPix Explore page"
+
+[[iopix.highlights]]
+title = "Faces, tags and the story of each photo"
+text = "The viewer's info panel holds the rating, the caption, the named faces, the tags, the place and the camera. Edit any of them, written to sidecars or into the files the way digiKam writes them, with an edit log and undo."
+img = "iopix-viewer.jpg"
+alt = "The ioPix viewer with its info panel"
+
+[[iopix.highlights]]
+title = "Every photo on the map"
+text = "Every geotagged photo on one map, and places worked out offline from the GPS positions: no service is asked where a photo was taken."
+img = "iopix-map.jpg"
+alt = "ioPix map of geotagged photos"
+
+[[iopix.features]]
+title = "Search by what is in them"
+text = "Content search, text in the photos, objects and faces, with models that run on your own server. Each feature is optional and downloads its model when you turn it on."
+[[iopix.features]]
+title = "People"
+text = "Name the faces in your photos; with ioContact, a person can be a contact's photo."
+[[iopix.features]]
+title = "Edit, with undo"
+text = "Ratings, titles, captions, tags, dates, locations and faces, with an edit log and undo for every change."
+[[iopix.features]]
+title = "With digiKam, or without"
+text = "A web companion for a digiKam library, or point it at a folder of photos and it keeps the library itself."
+[[iopix.features]]
+title = "Native apps"
+text = "The web app in a native shell on iPhone, iPad, Mac and Apple TV, Send to ioPix from the share sheet, and a menu bar uploader on the Mac."
+[[iopix.features]]
+title = "For AI assistants"
+text = "An MCP server: ask an assistant for the photos of a place, a person or a day."
+
+[[iopix.together]]
+app = "iocontact"
+text = "link a contact to a person named in ioPix, and the face becomes the contact's photo."
+[[iopix.together]]
+app = "iostart"
+text = "photos from this day in earlier years on the tile, a strip of photos under the tiles, and ioPix in the search box."
+
+# ---------------------------------------------------------------------------------------------------------------------
+[ionote]
+name = "ioNote"
+color = "#1c5a5e"
+port = 8610
+tag = "Notes, clipboard snippets and screenshots"
+eyebrow = "notes"
+headline = "Your notes, searchable everywhere."
+lede = "Notes with folders, tags and pins, and full-text search that reads the text <strong>inside pictures</strong> too. On the Mac everything you copy and every screenshot lands in an Inbox, to keep what is worth keeping. Every note is private to the account that made it."
+chips = ["Full-text search", "Text in pictures", "Mac, iPhone and iPad apps", "Works offline", "MCP"]
+hero = "ionote.jpg"
+hero_alt = "ioNote with folders, tags and a note open"
+phone = "ionote-phone.jpg"
+phone_alt = "ioNote's notes on a phone"
+alone = "ioNote needs its database and the Shared ioSuite database. Text recognition for pictures added in the web app is optional (RapidOCR, about 60 MB); the Mac and iPhone read the text on the device."
+
+[[ionote.highlights]]
+title = "Folders, tags and pins"
+text = "Folders and tags in the sidebar, pinned notes on top, and editing that saves as you type. A picture pasted or dropped anywhere becomes a note, with its text read."
+img = "ionote.jpg"
+alt = "ioNote with a note open"
+
+[[ionote.highlights]]
+title = "Search every word"
+text = "Titles, text, tags and the text inside pictures, through MariaDB's full-text index. A note also suggests tags and shows the notes related to it."
+img = "ionote-search.jpg"
+alt = "A search for harbour, with a note open"
+
+[[ionote.features]]
+title = "The clipboard Inbox"
+text = "On the Mac, everything you copy and every screenshot lands in an Inbox on that Mac. Right-click › Save to ioNote in any app."
+[[ionote.features]]
+title = "iPhone and iPad"
+text = "The same notes, with paste and photos, from the native app."
+[[ionote.features]]
+title = "Offline"
+text = "The apps work without the server and send their changes when it is back."
+[[ionote.features]]
+title = "Private"
+text = "Every note belongs to the account that made it: nobody else sees it, admins included."
+[[ionote.features]]
+title = "Change log, trash, import and export"
+text = "See what changed and when, bring back what was deleted, and take every note with you as files."
+[[ionote.features]]
+title = "Templates"
+text = "Start a note from a template, with the date and time filled in."
+[[ionote.features]]
+title = "For AI assistants"
+text = "An MCP server, with an app password: an assistant can find and write your notes."
+
+[[ionote.together]]
+app = "iostart"
+text = "the start page's search box searches your notes."
+[[ionote.together]]
+app = "iothings"
+text = "link the invoice or the manual you noted down to the thing it is about."
+
+# ---------------------------------------------------------------------------------------------------------------------
+[iocalendar]
+name = "ioCalendar"
+color = "#963522"
+port = 8620
+tag = "The family calendar"
+eyebrow = "calendar"
+headline = "The family calendar every phone already speaks to."
+lede = "Shared and private calendars, repeating events, reminders and public holidays, with each event tagged with the family member it is for. <strong>CalDAV</strong> puts the same events in Apple Calendar, on Android and in Thunderbird, without another app to install."
+chips = ["CalDAV", "iPhone in one tap", "webcal for Google and Outlook", "Public holidays", "MCP"]
+hero = "iocalendar-week.jpg"
+hero_alt = "ioCalendar's week view, each event tagged with the family member it is for"
+phone = "iocalendar-phone.jpg"
+phone_alt = "ioCalendar's agenda on a phone"
+alone = "ioCalendar needs its database and the Shared ioSuite database, and HTTPS if phones should sync away from home."
+
+[[iocalendar.highlights]]
+title = "The family's week"
+text = "Each event is tagged with who it is for, in that person's colour; show only one person's events with a click. Drag and drop to move them."
+img = "iocalendar-week.jpg"
+alt = "ioCalendar week view"
+
+[[iocalendar.highlights]]
+title = "The month, with the birthdays and the tasks"
+text = "Month, week, day and agenda views. Birthdays come from ioContact, the tasks that are due from ioTask, and the holidays of the countries you pick, worked out on the server."
+img = "iocalendar-month.jpg"
+alt = "ioCalendar month view with events, tasks and birthdays"
+
+[[iocalendar.highlights]]
+title = "What is coming up"
+text = "The agenda lists the coming days, events and tasks together, with the people on each."
+img = "iocalendar-agenda.jpg"
+alt = "ioCalendar agenda"
+
+[[iocalendar.features]]
+title = "Events of every kind"
+text = "A place, people, reminders, notes and a link; all-day and multi-day; repeating events, with “this one, this and later, or all of them” when you change one."
+[[iocalendar.features]]
+title = "Calendars"
+text = "A shared Family calendar, a private Personal one for each account, and as many more as you like, each with its colour."
+[[iocalendar.features]]
+title = "Family members on events"
+text = "Tag an event with who it is for, and show only one person's events."
+[[iocalendar.features]]
+title = "Public holidays"
+text = "Of one or more countries, and a region, worked out on the server: nothing is fetched."
+[[iocalendar.features]]
+title = "The weather on the calendar"
+text = "With ioStart's place set, each of the next seven days shows the weather, and an event with a place shows the weather there at its time."
+[[iocalendar.features]]
+title = "Search and shortcuts"
+text = "Search every event, and move around with the keyboard."
+[[iocalendar.features]]
+title = "For AI assistants"
+text = "An MCP server: “what is on this weekend?”, “move the dentist to Friday”."
+
+works_with = ["Apple Calendar on iPhone, iPad and Mac", "DAVx⁵ on Android", "Thunderbird, Evolution, GNOME and KDE", "Outlook (CalDAV)", "Google Calendar and Outlook (webcal link)", "Free/busy", "REST API"]
+
+[[iocalendar.together]]
+app = "iocontact"
+text = "a Birthdays calendar with the birthdays and anniversaries, and the people on an event come from your contacts."
+[[iocalendar.together]]
+app = "iotask"
+text = "the tasks that are due show on their day beside the events, and are ticked off there."
+[[iocalendar.together]]
+app = "iomoney"
+text = "the household's coming bills on the day they are due, for the people with a role in ioMoney."
+[[iocalendar.together]]
+app = "iostart"
+text = "today's events on the tile, a This week card, and Quick add from the search box."
+
+# ---------------------------------------------------------------------------------------------------------------------
+[iotask]
+name = "ioTask"
+color = "#146b5e"
+port = 8670
+tag = "The family's task lists"
+eyebrow = "tasks"
+headline = "The family's to-dos, in the reminders app each phone already has."
+lede = "Shared and private lists, due dates, repeats, alerts and subtasks, with each task tagged with who it is for. <strong>CalDAV</strong> puts the same lists in Apple Reminders, Tasks.org and Thunderbird, and quick add understands plain words."
+chips = ["Apple Reminders", "Quick add in plain words", "Repeats after it's done", "Undo anything", "MCP"]
+hero = "iotask.jpg"
+hero_alt = "ioTask's Family list: who does what and by when, with a task's subtasks"
+phone = "iotask-phone.jpg"
+phone_alt = "ioTask's Family list on a phone"
+alone = "ioTask needs its database and the Shared ioSuite database, and HTTPS if phones should sync away from home."
+
+[[iotask.highlights]]
+title = "Who does what, and by when"
+text = "A shared Family list, a private Personal one for each account, and as many more as you like. Tag a task with the person it is for; subtasks count down under it."
+img = "iotask.jpg"
+alt = "ioTask Family list"
+
+[[iotask.highlights]]
+title = "Today, overdue first"
+text = "Today, Scheduled, All and Completed across every list. Move what is overdue to today in one go, or postpone a task to tomorrow, the weekend or next week with one click."
+img = "iotask-today.jpg"
+alt = "ioTask Today view with an overdue task"
+
+[[iotask.highlights]]
+title = "Everything about a task"
+text = "Notes, a due day or a day and a time, a repeat, an alert, a priority, a link, the people it is for and its subtasks, on one page."
+img = "iotask-task.jpg"
+alt = "A task open, with its date, repeat, people and subtasks"
+
+[[iotask.highlights]]
+title = "Who did what, and undo"
+text = "The activity page shows who added, changed, ticked off or deleted what, from the web app, a phone or an assistant. Every change can be taken back."
+img = "iotask-activity.jpg"
+alt = "ioTask activity with Undo on each change"
+
+[[iotask.features]]
+title = "Quick add in plain words"
+text = "“Pay rent every month on the 1st 9am !high”, “Call mom tomorrow 5pm @emma”, “Milk #groceries”: the line shows what it understood before you press Enter."
+[[iotask.features]]
+title = "Repeat after it's done"
+text = "“Every 2 weeks after done” counts from the day you tick it off: for the things that slip, like descaling the kettle."
+[[iotask.features]]
+title = "Templates"
+text = "Save a list as a template (a packing list, the weekly clean) and add it again, with its subtasks, due on a day you pick."
+[[iotask.features]]
+title = "Your own order"
+text = "Drag tasks within a list, and the lists in the sidebar."
+[[iotask.features]]
+title = "Print"
+text = "A list on paper, as a checklist."
+[[iotask.features]]
+title = "For AI assistants"
+text = "An MCP server: an assistant can add, find and tick off tasks."
+
+works_with = ["Apple Reminders on iPhone, iPad and Mac", "Tasks.org and jtx Board (DAVx⁵) on Android", "Thunderbird", "Configuration profile for iPhone", "REST API"]
+
+[[iotask.together]]
+app = "iocalendar"
+text = "the tasks that are due show on their day in the calendar, and are ticked off there."
+[[iotask.together]]
+app = "iorecipe"
+text = "a recipe's ingredients go to a list as the shopping list."
+[[iotask.together]]
+app = "iothings"
+text = "an upkeep can be a repeating task: tick it off in ioTask and ioThings moves on too."
+[[iotask.together]]
+app = "iostart"
+text = "the tasks due today on the tile, the overdue ones first."
+
+# ---------------------------------------------------------------------------------------------------------------------
+[iorecipe]
+name = "ioRecipe"
+color = "#4a7c23"
+port = 8690
+tag = "The family's recipes"
+eyebrow = "recipes"
+headline = "The family's recipe book, on every screen in the kitchen."
+lede = "Recipes with their ingredients, steps and photos, brought in from a web address, pasted text, a photo of a cookbook page or Mealie. Cook from it: the amounts follow the servings, and the ingredients go to the shopping list. A page without recipe data is read by a <strong>small AI model that runs inside the app</strong>: nothing is sent to an AI service."
+chips = ["Import from the web", "Photo of a cookbook page", "Mealie import", "Servings and print", "MCP"]
+hero = "iorecipe.jpg"
+hero_alt = "ioRecipe's recipe cards, with favourites, ratings, a cookbook and tags"
+phone = "iorecipe-phone.jpg"
+phone_alt = "A recipe on a phone"
+alone = "ioRecipe needs its database and the Shared ioSuite database; the photos are kept in the database too, so there is nothing else to back up."
+
+[[iorecipe.highlights]]
+title = "Every recipe as a card"
+text = "With its photo and how long it takes: all of them, the family's, your own, your favourites, by tag or by cookbook. Search looks in the titles, the ingredients, the steps and the tags."
+img = "iorecipe.jpg"
+alt = "ioRecipe recipe cards"
+
+[[iorecipe.highlights]]
+title = "Cook from it"
+text = "The amounts follow the servings you want, tick the ingredients off as they go in, strike a step out when it is done, or print the recipe. A heart and one to five stars are yours; everyone sees the average."
+img = "iorecipe-recipe.jpg"
+alt = "The banana bread recipe with its ingredients and steps"
+
+[[iorecipe.highlights]]
+title = "Bring a recipe in"
+text = "Paste the address of a recipe page and ioRecipe keeps the recipe with its picture and a link back, even when the page goes away. Pasted text and a photo of a page become a draft to look over first."
+img = "iorecipe-import.jpg"
+alt = "Import from a web address"
+
+[[iorecipe.highlights]]
+title = "Cookbooks"
+text = "Recipes grouped under a name, the family's or your own: Sunday baking, the barbecue, the grandparents' classics."
+img = "iorecipe-cookbook.jpg"
+alt = "The Sunday baking cookbook"
+
+[[iorecipe.features]]
+title = "Recipes"
+text = "A description, what they make, preparation and cooking time, ingredients, steps, notes and tags. A line that ends with a colon is a heading."
+[[iorecipe.features]]
+title = "Photos"
+text = "As many as you like for a recipe, and one for any step, uploaded or taken with the phone."
+[[iorecipe.features]]
+title = "Read on your own server"
+text = "Tesseract reads a photo of a page; a small model inside the app reads a web page without recipe data. Nothing goes to an outside service."
+[[iorecipe.features]]
+title = "Export and import"
+text = "One recipe, a cookbook or everything as a .zip. The import also takes recipes and backups from Mealie."
+[[iorecipe.features]]
+title = "Family and private recipes"
+text = "Everyone sees the family's; a private one is yours alone. Viewers read, members keep their own, editors change the family's."
+[[iorecipe.features]]
+title = "For AI assistants"
+text = "An MCP server: “what can I make with leeks?”, “add the curry's ingredients to the shopping list”."
+
+[[iorecipe.together]]
+app = "iotask"
+text = "a recipe's ingredients go to one of your task lists as a shopping list."
+[[iorecipe.together]]
+app = "iostart"
+text = "a tile on the start page, and recipes in the search box."
+
+# ---------------------------------------------------------------------------------------------------------------------
+[iothings]
+name = "ioThings"
+color = "#2a6f97"
+port = 8700
+tag = "Everything you own"
+eyebrow = "home inventory"
+headline = "What you own, where it is, and what it needs."
+lede = "An inventory of everything the family owns: the appliances, the tools, the bikes, the camping gear in the attic, with their manuals, receipts and warranties, and the upkeep they need. It does what Homebox does, and <strong>brings a Homebox inventory over</strong> in one step."
+chips = ["Places and labels", "Manuals and receipts", "Upkeep reminders", "Warranties", "Homebox import", "MCP"]
+hero = "iothings.jpg"
+hero_alt = "ioThings: everything the household owns, by place and label, with upkeep and warranties"
+phone = "iothings-phone.jpg"
+phone_alt = "ioThings on a phone"
+alone = "ioThings needs its database and the Shared ioSuite database. Upkeep, its log and the morning notifications work without any other app."
+
+[[iothings.highlights]]
+title = "Everything, by place and label"
+text = "Places as a tree (House / Kitchen / Drawer by the sink) and labels with a colour. The things as cards or a table, sorted by name, price, purchase or warranty, with what they cost together."
+img = "iothings.jpg"
+alt = "ioThings cards"
+
+[[iothings.highlights]]
+title = "The whole story of a thing"
+text = "The maker, model and serial number, the purchase, the warranty, fields of your own (the filter size, the paint colour), and its photos, manual, receipt and warranty card, kept in the database."
+img = "iothings-item.jpg"
+alt = "The washing machine with its photo, purchase and warranty"
+
+[[iothings.highlights]]
+title = "Upkeep, before it is late"
+text = "What a thing needs every so many days, weeks, months or years. Done writes a line in its maintenance log (when, by whom, what it cost) and moves the upkeep on."
+img = "iothings-upkeep.jpg"
+alt = "Upkeep due this week, this month and later"
+
+[[iothings.highlights]]
+title = "Warranties that are about to end"
+text = "The ones that end within 30 days, on a page of their own and in the morning notification."
+img = "iothings-warranty.jpg"
+alt = "Warranties ending soon"
+
+[[iothings.features]]
+title = "Files"
+text = "Photos, manuals, receipts and warranty cards, dropped on the thing or taken with the phone."
+[[iothings.features]]
+title = "Maintenance log"
+text = "The upkeep that was done, and one-off lines for a repair or a part replaced."
+[[iothings.features]]
+title = "Archive"
+text = "A thing that was sold, given away or thrown out keeps its story, with who it went to and for how much."
+[[iothings.features]]
+title = "From Homebox"
+text = "Straight from the Homebox server (things, places, labels, fields, files and the log), or from its CSV export. Running it again updates instead of adding twice."
+[[iothings.features]]
+title = "Who may do what"
+text = "Viewers look; members add things, attach files and keep the upkeep; editors change everything."
+[[iothings.features]]
+title = "For AI assistants"
+text = "An MCP server: “where is the ladder?”, “when does the dishwasher's warranty end?”."
+
+[[iothings.together]]
+app = "iotask"
+text = "an upkeep can be a repeating task in one of your lists, kept in step both ways."
+[[iothings.together]]
+app = "iocontact"
+text = "link the plumber or the shop to the thing they serviced or sold."
+[[iothings.together]]
+app = "ionote"
+text = "link the invoice or the notes about a repair."
+[[iothings.together]]
+app = "iostart"
+text = "a tile on the start page, and the things in the search box."
+
+# ---------------------------------------------------------------------------------------------------------------------
+[iomoney]
+name = "ioMoney"
+color = "#94650a"
+port = 8710
+tag = "Household finances"
+eyebrow = "household finances"
+headline = "The household's money in one place."
+lede = "Every account, the transactions, a portfolio with its quotes, and what the house and the cars are worth after their loans. It copies from <strong>Monarch Money</strong> every six hours, only reading, and keeps accounts by hand beside them. Without Monarch it is a net worth and portfolio tracker."
+chips = ["Net worth over time", "Monarch Money sync", "Transfers linked", "Portfolio quotes", "Any currency", "MCP"]
+hero = "iomoney.jpg"
+hero_alt = "ioMoney's overview: net worth over the year, and every account by group"
+phone = "iomoney-phone.jpg"
+phone_alt = "ioMoney's overview on a phone"
+alone = "ioMoney needs its database and the Shared ioSuite database, and nothing else. Monarch Money is optional."
+
+[[iomoney.highlights]]
+title = "The net worth, now and over the years"
+text = "Over a month, three, a year or five, by kind of account: Cash, Investments, Credit cards, Loans and Assets."
+img = "iomoney.jpg"
+alt = "ioMoney overview"
+
+[[iomoney.highlights]]
+title = "Transactions to search and correct"
+text = "One row each, with filters on every account, category and time. A category, a payee or a note changed here stays through later syncs; rules rename, categorise or hide what matches."
+img = "iomoney-transactions.jpg"
+alt = "ioMoney transactions"
+
+[[iomoney.highlights]]
+title = "The portfolio"
+text = "Each holding's price, today's change, value and gain, with quotes from Yahoo Finance (no key needed), and the allocation by kind."
+img = "iomoney-portfolio.jpg"
+alt = "ioMoney portfolio with holdings"
+
+[[iomoney.highlights]]
+title = "Where the money went"
+text = "Spending by category for a month, and money in and out over twelve months, without the transfers between your own accounts."
+img = "iomoney-spending.jpg"
+alt = "ioMoney spending by category"
+
+[[iomoney.highlights]]
+title = "The house and the cars"
+text = "The value, the loan and the equity left, the details and the values over the years. A value can follow a yearly change between the values you give it."
+img = "iomoney-assets.jpg"
+alt = "ioMoney assets: the house and the car"
+
+[[iomoney.features]]
+title = "Monarch Money, read only"
+text = "Every account Monarch has, two years of transactions, the holdings and the coming bills, copied every six hours. Nothing is changed in Monarch."
+[[iomoney.features]]
+title = "Accounts by hand"
+text = "A savings account, an investment account with what it holds, a car with its value: following their transactions, or just a balance now and then."
+[[iomoney.features]]
+title = "Transfers linked"
+text = "To savings, a card's payment, a loan's payment: the two halves are found and linked, and a rule learns from each."
+[[iomoney.features]]
+title = "Reconciled"
+text = "Tick each transaction as checked against the bank's statement."
+[[iomoney.features]]
+title = "Bank details at hand"
+text = "Account and routing numbers (hidden until shown), IBAN, the bank's phone and website."
+[[iomoney.features]]
+title = "Any currency"
+text = "An account or a holding in another currency is converted at the day's rate."
+[[iomoney.features]]
+title = "Who sees it"
+text = "Only the people given a role in ioMoney. Members keep private accounts of their own."
+[[iomoney.features]]
+title = "For AI assistants"
+text = "An MCP server: “what did we spend on groceries this month?”."
+
+[[iomoney.together]]
+app = "iocalendar"
+text = "the coming bills show on the day they are due, for the people with a role in ioMoney."
+[[iomoney.together]]
+app = "iothings"
+text = "link the house or a car to the things, notes and photos about it."
+[[iomoney.together]]
+app = "iostart"
+text = "a tile on the start page."
+
+# ---------------------------------------------------------------------------------------------------------------------
+[iocontact]
+name = "ioContact"
+color = "#4f2f7d"
+port = 8640
+tag = "Contacts for the family"
+eyebrow = "contacts"
+headline = "One family address book, on every device."
+lede = "Every field a phone has, relations kept on both sides and drawn as a <strong>family tree</strong>, birthdays and anniversaries. CardDAV puts the same contacts on every phone and in every mail app, and an LDAP directory serves the printers and desk phones."
+chips = ["Family tree", "CardDAV", "LDAP directory", "Duplicates and merges", "Birthday calendar", "MCP"]
+hero = "iocontact.jpg"
+hero_alt = "ioContact's family tree, drawn from the relations in the address book"
+phone = "iocontact-phone.jpg"
+phone_alt = "A contact on a phone"
+alone = "ioContact needs its database and the Shared ioSuite database, and HTTPS if phones should sync away from home. The LDAP directory speaks plain LDAP: keep it on the home network."
+
+[[iocontact.highlights]]
+title = "The family tree"
+text = "Make Tim Mary's son and Mary becomes Tim's mother. The tree is laid out by generation from anyone's side, and says how everyone is related to them: aunt, cousin, grandmother."
+img = "iocontact.jpg"
+alt = "Lily Parker's family tree with parents, grandparents, aunt, uncle and cousin"
+
+[[iocontact.highlights]]
+title = "Every field a phone has"
+text = "Names, any number of phones, emails and addresses, birthdays, anniversaries, the company, social profiles, websites, labels and notes, and the relations, with those the family implies."
+img = "iocontact-contact.jpg"
+alt = "Emma Parker's contact with her relations"
+
+[[iocontact.highlights]]
+title = "Birthdays and anniversaries"
+text = "The coming ones with the age they turn, a reminder for each, and a birthday calendar to subscribe to."
+img = "iocontact-birthdays.jpg"
+alt = "Birthdays and anniversaries in the next 60 days"
+
+[[iocontact.highlights]]
+title = "Clean up"
+text = "Likely duplicates with the reasons, compare and merge (and undo), data quality checks with one-click fixes, and suggestions from public profiles that wait for you to accept them."
+img = "iocontact-cleanup.jpg"
+alt = "Likely duplicates, with the reasons"
+
+[[iocontact.features]]
+title = "Address books"
+text = "The shared Family book, a private Personal one for each account, and more as you like."
+[[iocontact.features]]
+title = "vCard 3.0 and 4.0"
+text = "Import and export, from and to any other address book."
+[[iocontact.features]]
+title = "LDAP directory"
+text = "For mail apps, desk phones and printers that look people up."
+[[iocontact.features]]
+title = "Merges you can undo"
+text = "Compare two contacts and merge them; the merge history takes any merge back."
+[[iocontact.features]]
+title = "Look up"
+text = "Fill in a contact from public profiles, as suggestions you accept or not."
+[[iocontact.features]]
+title = "For AI assistants"
+text = "An MCP server: “what is Lucy's address?”, “when is grandma's birthday?”."
+
+works_with = ["Apple Contacts on iPhone, iPad and Mac", "DAVx⁵ on Android", "Thunderbird and Evolution", "Mail apps, desk phones and printers (LDAP)", "Configuration profile for iPhone", "REST API"]
+
+[[iocontact.together]]
+app = "iocalendar"
+text = "the birthdays and anniversaries as a Birthdays calendar, and the people on an event from your contacts."
+[[iocontact.together]]
+app = "iopix"
+text = "link a contact to a person named in ioPix, and that face is the contact's photo everywhere."
+[[iocontact.together]]
+app = "iostart"
+text = "a Birthdays card on the start page, and people in the search box."
+
+# ---------------------------------------------------------------------------------------------------------------------
+[iohealth]
+name = "ioHealth"
+color = "#e8445a"
+port = 8650
+tag = "Apple Health, on your own server"
+eyebrow = "health"
+headline = "Your Apple Health data, on your own server."
+lede = "The ioHealthSync iPhone app copies Apple Health to your server, in the background. The web app shows the rings, sleep, workouts with their routes, every metric over any range and how they relate. <strong>Everyone in the household</strong> syncs into their own account and sees only their own data."
+chips = ["ioHealthSync for iPhone", "Sleep stages", "Workouts on a map", "Correlations", "CSV and PDF"]
+hero = "iohealth.jpg"
+hero_alt = "The ioHealth dashboard: activity rings, last night's sleep and the trend of every metric"
+phone = "iohealth-phone.jpg"
+phone_alt = "The ioHealth dashboard on a phone"
+alone = "ioHealth needs its database, the Shared ioSuite database, and the ioHealthSync app on each iPhone. Health data only exists on the iPhone, so it is iPhone only."
+
+[[iohealth.highlights]]
+title = "The dashboard"
+text = "Today's rings and the last week's, last night's sleep, every metric against your usual, recent workouts, and a heads-up list: resting heart rate up, HRV down, glucose lows, goal streaks."
+img = "iohealth.jpg"
+alt = "ioHealth dashboard"
+
+[[iohealth.highlights]]
+title = "Sleep, night by night"
+text = "Sleep stages per night, bedtimes and wake times, and one night's timeline."
+img = "iohealth-sleep.jpg"
+alt = "ioHealth sleep page"
+
+[[iohealth.features]]
+title = "Metrics"
+text = "Chart any synced type over any range, zoom and pan, stack or overlay several, compare with a year earlier, goal lines."
+[[iohealth.features]]
+title = "Workouts"
+text = "With their GPS routes on a map, splits, heart rate zones and training load."
+[[iohealth.features]]
+title = "Glucose"
+text = "From a CGM or a meter, with the lows and highs."
+[[iohealth.features]]
+title = "Correlations and records"
+text = "How any two metrics move together, and your bests."
+[[iohealth.features]]
+title = "ioHealthSync"
+text = "Everything or the types you pick, incremental, in the background, signed in with your suite account."
+[[iohealth.features]]
+title = "Take it with you"
+text = "CSV of any chart, PDF of any page, and a JSON API with app passwords for scripts."
+
+[[iohealth.together]]
+app = "iostart"
+text = "today's steps with the last seven days as bars, the rings and last night's sleep on the tile."

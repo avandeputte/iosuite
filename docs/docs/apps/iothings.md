@@ -9,6 +9,9 @@ the car, the camping gear and what is stored in the attic, with
 their manuals, receipts and warranties, and the upkeep they need (the boiler's yearly service, the car's MOT, the
 fridge's water filter). It does what Homebox does, and brings a Homebox inventory over in one step.
 
+[The ioThings page on the website, with more screenshots →](https://iosuite.iothing.net/ioThings/)
+{ .md-button }
+
 ![ioThings: everything the household owns, by place and label, with upkeep and warranties](../img/iothings.jpg)
 
 ## What it does

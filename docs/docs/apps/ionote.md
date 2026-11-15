@@ -7,6 +7,9 @@ description: ioNote, notes, clipboard snippets and screenshots in the ioThing su
 Your notes, clipboard snippets and screenshots, searchable everywhere. The server keeps them in its database, pictures
 included, and gives you a web app; the **ioNote apps for Mac, iPhone and iPad** keep a full copy and sync with it.
 
+[The ioNote page on the website, with more screenshots →](https://iosuite.iothing.net/ioNote/)
+{ .md-button }
+
 ![ioNote with folders, tags and a note open](../img/ionote.jpg)
 
 ## What it does

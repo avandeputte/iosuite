@@ -12,11 +12,14 @@ and is done; the other apps, and the start page, are optional and can come later
 ```
 landing/            the landing page, served at /  (index.html, 404.html, robots.txt, _headers)
 landing/img/        the app icons (each app's static/icons/mark.svg) and the screenshots
+landing/site.css    the styles of the landing page and the app pages; landing/app.js their copy buttons, tabs, lightbox
+landing/apps.toml   the words and screenshots of each app's own page (/ioContact/ and so on)
 docs/               the guide (MkDocs Material), served at /docs/
 docs/stylesheets/   the Material theme in the landing page's palette
 overrides/          the header brand
 tools/check-facts.py  holds the pages to the apps' code (links, ports, container sizes, images)
 tools/check-site.py   every local link and image in the built site resolves
+tools/app-pages.py    writes site/<App>/index.html for each app from landing/apps.toml
 mkdocs.yml          site settings and the nav
 build.sh            check, build into site/, lay the landing page over it, write the sitemap
 CLOUDFLARE.md       hosting on Cloudflare Workers: the Worker, the domain, the deploy token
@@ -28,6 +31,11 @@ wrangler.jsonc      the Worker: serves site/ as static assets at iosuite.iothing
 Edit the markdown in `docs/`, add a page to the `nav` in `mkdocs.yml`, push. The guide is the suite-level view: what
 every app shares, how to install one or several, how to run them. What belongs to one app in depth stays in that app's
 README (and, for ioPix, at [iopix.net](https://iopix.net/docs/)); link there rather than copy it.
+
+Each app has its own page on the website, at `/<App>/` (`/ioContact/`, `/ioMoney/`, ...), for someone who wants that
+one app: a desktop and a phone screenshot, three or four screens with a line each, what it does, how it works with
+the other apps and how to install it alone. The pages are written from `landing/apps.toml` by `tools/app-pages.py` at
+build time; edit the TOML, not the HTML. Phone screenshots are 585 × 1266.
 
 Screenshots live in `landing/img/` (the guide gets a copy at build time), 1600 × 1000 JPEGs, under 400 KB each. They
 are the real apps holding made-up data (the Parker family); the ioPix ones are from

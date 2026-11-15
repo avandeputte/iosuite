@@ -16,338 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-:root{
-  --bg:#f3f4f7;
-  --card:#ffffff;
-  --ink:#1b2236;
-  --body:#333c52;
-  --muted:#5d6680;
-  --accent:#3b4a8c;
-  --gold:#f3c96b;
-  --gold-ink:#1a1608;
-  --line:#dfe2ea;
-  --term-bg:#1b2236;
-  --term-fg:#dde2ee;
-  --term-line:#2a3350;
-  --shadow:0 1px 2px rgba(27,34,54,.06),0 10px 30px -12px rgba(27,34,54,.2);
-}
-@media (prefers-color-scheme: dark){
-  :root{
-    --bg:#0f1320;
-    --card:#171c2e;
-    --ink:#eef0f6;
-    --body:#c9cedd;
-    --muted:#8c93ab;
-    --accent:#f3c96b;
-    --gold:#f3c96b;
-    --line:#262c44;
-    --term-bg:#0c101b;
-    --term-fg:#dde2ee;
-    --term-line:#232a40;
-    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -14px rgba(0,0,0,.6);
-  }
-}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth;scroll-padding-top:72px}
-@media (prefers-reduced-motion: reduce){
-  html{scroll-behavior:auto}
-  *,*::before,*::after{animation:none!important;transition:none!important}
-}
-body{
-  margin:0;
-  background:var(--bg);
-  color:var(--body);
-  font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-  font-size:16.5px;
-  line-height:1.6;
-  -webkit-font-smoothing:antialiased;
-}
-h1,h2,h3{color:var(--ink);line-height:1.15;margin:0 0 .5em;letter-spacing:-.015em}
-h1{font-size:clamp(2.1rem,4.6vw,3.25rem);font-weight:700}
-h2{font-size:clamp(1.5rem,3vw,2.1rem);font-weight:700}
-h3{font-size:1.05rem;font-weight:600}
-p{margin:0 0 1em}
-a{color:var(--accent);text-decoration:none}
-a:hover{text-decoration:underline}
-:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:4px}
-code,pre,.mono{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-code{font-size:.9em}
-.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
-@media (max-width:480px){ .wrap{padding:0 16px} }
-.eyebrow{
-  font-family:'IBM Plex Mono',monospace;
-  font-size:.78rem;font-weight:500;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--accent);display:block;margin-bottom:.7em;
-}
-section{padding:72px 0}
-.section-head{max-width:660px;margin-bottom:40px}
-.section-head p{color:var(--muted)}
-.io{color:#c99a2e}
-@media (prefers-color-scheme: dark){ .io{color:var(--gold)} }
-
-/* ---------- header ---------- */
-header{
-  position:sticky;top:0;z-index:50;
-  background:var(--bg);
-  background:color-mix(in srgb,var(--bg) 82%,transparent);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  border-bottom:1px solid var(--line);
-}
-.nav{display:flex;align-items:center;gap:28px;height:64px}
-.brand{display:flex;align-items:center;gap:11px;margin-right:auto;color:var(--ink);text-decoration:none}
-.brand:hover{text-decoration:none}
-.brand img{width:34px;height:34px;display:block}
-.brand b{font-weight:700;font-size:1.02rem;letter-spacing:-.01em}
-.brand b .suite{color:var(--muted);font-weight:400}
-.nav a.link{color:var(--body);font-size:.92rem;font-weight:500}
-.nav a.link:hover{color:var(--accent);text-decoration:none}
-.nav .gh{
-  display:inline-flex;align-items:center;gap:7px;
-  border:1px solid var(--line);border-radius:8px;padding:7px 13px;
-  font-size:.88rem;font-weight:500;color:var(--ink);background:var(--card);
-}
-.nav .gh:hover{border-color:var(--gold);text-decoration:none}
-.nav .gh svg{width:16px;height:16px;fill:currentColor}
-@media (max-width:760px){ .nav a.link{display:none} }
-
-/* ---------- hero ---------- */
-.hero{padding:80px 0 64px}
-.hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
-@media (max-width:920px){ .hero-grid{grid-template-columns:1fr;gap:40px} }
-.hero p.lede{font-size:1.12rem;color:var(--muted);max-width:34em}
-.hero p.lede strong{color:var(--ink)}
-.hero .meta{
-  font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--muted);
-  margin:18px 0 26px;letter-spacing:.02em;
-}
-.cta{display:flex;flex-wrap:wrap;gap:12px}
-.btn{
-  display:inline-flex;align-items:center;gap:8px;
-  border-radius:9px;padding:12px 20px;font-weight:600;font-size:.95rem;
-  text-decoration:none;border:1px solid transparent;cursor:pointer;font-family:inherit;
-}
-.btn:hover{text-decoration:none}
-.btn-primary{background:var(--gold);color:var(--gold-ink)}
-.btn-primary:hover{background:#e9bb55}
-.btn-ghost{border-color:var(--line);color:var(--ink);background:var(--card)}
-.btn-ghost:hover{border-color:var(--gold)}
-.btn svg{width:17px;height:17px;fill:currentColor}
-
-/* the hero card: one app, a few, or all of them */
-.mix{
-  background:var(--card);border:1px solid var(--line);border-radius:16px;
-  padding:26px 24px 16px;box-shadow:var(--shadow);margin:0;
-}
-.mix-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
-@media (max-width:980px){ .mix-grid{grid-template-columns:repeat(4,1fr)} }
-@media (max-width:560px){ .mix-grid{grid-template-columns:repeat(3,1fr)} }
-.mix-app{
-  display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px 12px;
-  border:1px solid var(--line);border-radius:12px;background:var(--bg);
-  opacity:.38;filter:grayscale(.85);transform:scale(.97);
-  transition:opacity .45s, filter .45s, transform .45s, border-color .45s;
-}
-.mix-app.on{opacity:1;filter:none;transform:none;border-color:var(--gold)}
-.mix-app img{width:46px;height:46px;display:block;border-radius:11px}
-.mix-app b{font-size:.9rem;color:var(--ink);font-weight:600}
-.mix-app small{font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:var(--muted)}
-.mix-label{
-  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
-  margin:18px 2px 4px;font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--muted);
-}
-.mix-label b{color:var(--ink);font-weight:600;font-family:'IBM Plex Sans',sans-serif;font-size:1rem}
-.mix figcaption{font-size:.85rem;color:var(--muted);text-align:center;padding:12px 8px 4px}
-
-/* ---------- terminal blocks ---------- */
-.term{
-  background:var(--term-bg);border:1px solid var(--term-line);border-radius:12px;
-  overflow:hidden;box-shadow:var(--shadow);
-}
-.term + .term{margin-top:18px}
-.term-head{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  padding:9px 14px;border-bottom:1px solid var(--term-line);
-  font-family:'IBM Plex Mono',monospace;font-size:.75rem;letter-spacing:.08em;
-  text-transform:uppercase;color:#8a93b0;
-}
-.term pre{
-  margin:0;padding:16px 18px;overflow-x:auto;
-  font-size:.86rem;line-height:1.65;color:var(--term-fg);white-space:pre;
-}
-.term code .p{color:var(--gold);user-select:none}
-.term code .c{color:#76809e}
-.copy{
-  font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.06em;
-  background:transparent;color:#a5aecb;border:1px solid var(--term-line);
-  border-radius:6px;padding:4px 10px;cursor:pointer;text-transform:uppercase;flex:none;
-}
-.copy:hover{color:var(--gold);border-color:var(--gold)}
-
-/* ---------- apps ---------- */
-.tools{margin-top:34px;border-top:1px dashed var(--line);padding-top:26px}
-.tools h3{margin:0 0 4px;font-size:1rem}
-.tools>p{margin:0 0 16px;color:var(--muted);font-size:.92rem;max-width:44em}
-.tgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-@media (max-width:760px){ .tgrid{grid-template-columns:1fr} }
-.tool{display:flex;gap:13px;align-items:flex-start;border:1px solid var(--line);border-radius:12px;background:var(--bg);padding:14px 16px}
-.tool img{width:32px;height:32px;border-radius:8px;flex:none;margin-top:2px}
-.tool b{color:var(--ink)}
-.tool p{margin:2px 0 6px;font-size:.9rem;color:var(--body)}
-.tool .links{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.86rem;font-weight:500}
-
-.apps{background:var(--card);border-block:1px solid var(--line)}
-.agroup{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin:38px 0 14px}
-.section-head + .agroup{margin-top:0}
-.agroup h3{margin:0;font-size:1.08rem}
-.agroup p{margin:0;color:var(--muted);font-size:.9rem}
-.agrid.agrid-one{grid-template-columns:1fr}
-.app-wide ul{columns:2;column-gap:40px}
-.app-wide li{break-inside:avoid}
-@media (max-width:760px){ .app-wide ul{columns:1} }
-.agrid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
-@media (max-width:980px){ .agrid{grid-template-columns:repeat(2,1fr)} }
-@media (max-width:620px){ .agrid{grid-template-columns:1fr} }
-.app{
-  display:flex;flex-direction:column;border:1px solid var(--line);border-radius:14px;
-  background:var(--bg);padding:22px 22px 18px;position:relative;overflow:hidden;
-}
-.app::before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:var(--c)}
-.app-top{display:flex;align-items:center;gap:13px;margin-bottom:12px}
-.app-top img{width:44px;height:44px;border-radius:10px;display:block;flex:none}
-.app-top h3{margin:0;font-size:1.15rem}
-.app-top .tag{display:block;font-size:.85rem;color:var(--muted);font-weight:400;margin-top:2px}
-.app ul{margin:0 0 14px;padding-left:1.1em;font-size:.92rem;color:var(--body)}
-.app li{margin:.25em 0}
-.app .alone{
-  font-size:.84rem;color:var(--muted);border-top:1px dashed var(--line);
-  padding-top:11px;margin-top:auto;
-}
-.app .alone b{color:var(--ink);font-weight:600}
-.app .links{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:12px;font-size:.88rem;font-weight:500;align-items:center}
-.app .port{
-  margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--muted);
-  border:1px solid var(--line);border-radius:99px;padding:2px 9px;background:var(--card);
-}
-
-/* ---------- one app is enough ---------- */
-.ogrid{display:grid;grid-template-columns:repeat(3,1fr);gap:28px 32px}
-@media (max-width:900px){ .ogrid{grid-template-columns:1fr} }
-.opt .fk{
-  font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--accent);display:block;margin-bottom:8px;
-}
-.opt p{font-size:.95rem;color:var(--muted);margin:0 0 .6em}
-.opt p strong{color:var(--ink);font-weight:600}
-.together{
-  margin-top:44px;padding-top:26px;border-top:1px solid var(--line);
-  display:grid;grid-template-columns:repeat(2,1fr);gap:14px 32px;
-}
-@media (max-width:760px){ .together{grid-template-columns:1fr} }
-.pair{display:flex;gap:12px;align-items:flex-start;font-size:.92rem;color:var(--muted)}
-.pair .icons{display:flex;flex:none}
-.pair .icons img{width:26px;height:26px;border-radius:7px;display:block;border:2px solid var(--bg)}
-.pair .icons img + img{margin-left:-8px}
-.pair b{color:var(--ink);font-weight:600}
-
-/* ---------- gallery ---------- */
-.shots{background:var(--card);border-block:1px solid var(--line)}
-.ggrid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
-@media (max-width:900px){ .ggrid{grid-template-columns:repeat(2,1fr)} }
-@media (max-width:560px){ .ggrid{grid-template-columns:1fr} }
-.shot{
-  display:block;width:100%;padding:0;border:1px solid var(--line);border-radius:12px;
-  overflow:hidden;background:var(--card);cursor:zoom-in;box-shadow:var(--shadow);
-  text-align:left;font:inherit;color:inherit;
-}
-.shot:hover{border-color:var(--gold)}
-.shot img{display:block;width:100%;height:auto;aspect-ratio:16/10;object-fit:cover;object-position:top}
-.shot figcaption{
-  display:flex;align-items:center;gap:9px;
-  padding:11px 14px;font-size:.83rem;color:var(--muted);
-  border-top:1px solid var(--line);
-}
-.shot figcaption img{width:18px;height:18px;aspect-ratio:auto;border-radius:5px;flex:none}
-.credit{margin-top:22px;font-size:.82rem;color:var(--muted)}
-dialog.lightbox{
-  border:none;border-radius:14px;padding:0;max-width:min(1200px,94vw);
-  background:var(--card);box-shadow:0 30px 80px rgba(0,0,0,.45);
-}
-dialog.lightbox::backdrop{background:rgba(12,15,26,.75);backdrop-filter:blur(3px)}
-dialog.lightbox img{display:block;width:100%;height:auto;max-height:82vh;object-fit:contain;background:var(--bg)}
-dialog.lightbox .lb-foot{
-  display:flex;align-items:center;justify-content:space-between;gap:16px;
-  padding:12px 18px;font-size:.86rem;color:var(--muted);
-}
-dialog.lightbox button{
-  font-family:'IBM Plex Mono',monospace;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;
-  background:transparent;border:1px solid var(--line);border-radius:7px;
-  color:var(--ink);padding:6px 14px;cursor:pointer;
-}
-dialog.lightbox button:hover{border-color:var(--gold)}
-
-/* ---------- install picker ---------- */
-.pick{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px}
-@media (max-width:900px){ .pick{grid-template-columns:repeat(3,1fr)} }
-@media (max-width:420px){ .pick{grid-template-columns:repeat(2,1fr)} }
-.pick label{
-  display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;
-  border:1px solid var(--line);border-radius:12px;padding:14px 6px 11px;background:var(--card);
-  transition:border-color .2s, box-shadow .2s;position:relative;user-select:none;
-}
-.pick label:hover{border-color:var(--gold)}
-.pick input{position:absolute;opacity:0;pointer-events:none}
-.pick label img{width:38px;height:38px;border-radius:9px;display:block;filter:grayscale(.9);opacity:.55;transition:filter .2s,opacity .2s}
-.pick label b{font-size:.88rem;color:var(--muted);font-weight:600}
-.pick label small{font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:var(--muted)}
-.pick input:checked + img{filter:none;opacity:1}
-.pick input:checked ~ b{color:var(--ink)}
-.pick label:has(input:checked){border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
-.pick input:focus-visible ~ b{outline:2px solid var(--gold);outline-offset:2px;border-radius:4px}
-.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
-.tabs button{
-  font:500 .88rem 'IBM Plex Sans',sans-serif;color:var(--body);background:var(--card);
-  border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;
-}
-.tabs button[aria-selected="true"]{border-color:var(--gold);color:var(--ink);box-shadow:0 0 0 1px var(--gold) inset}
-.pick-note{font-size:.92rem;color:var(--muted);margin:14px 2px 0;min-height:1.6em}
-.pick-note strong{color:var(--ink)}
-.istep{
-  margin-top:34px;background:var(--card);border:1px solid var(--line);border-radius:14px;
-  padding:24px 26px;box-shadow:var(--shadow);
-}
-.istep h3{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
-.istep p{font-size:.93rem;color:var(--muted)}
-.istep p:last-child{margin-bottom:0}
-.chip{
-  font-family:'IBM Plex Mono',monospace;font-size:.72rem;font-weight:600;
-  background:var(--gold);color:var(--gold-ink);border-radius:99px;padding:3px 11px;letter-spacing:.04em;
-}
-.ports{display:flex;flex-wrap:wrap;gap:8px 18px;font-family:'IBM Plex Mono',monospace;font-size:.82rem;margin:4px 0 14px}
-.ports span{color:var(--muted)} .ports b{color:var(--ink);font-weight:600}
-
-/* ---------- docs ---------- */
-.docs{background:var(--card);border-block:1px solid var(--line)}
-.dgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-@media (max-width:900px){ .dgrid{grid-template-columns:repeat(2,1fr)} }
-@media (max-width:600px){ .dgrid{grid-template-columns:1fr} }
-.dcard{
-  display:block;border:1px solid var(--line);border-radius:12px;padding:20px 22px;
-  background:var(--bg);color:inherit;
-}
-.dcard:hover{border-color:var(--gold);text-decoration:none}
-.dcard h3{margin-bottom:.3em}
-.dcard h3 span{color:var(--accent);font-weight:400}
-.dcard p{margin:0;font-size:.9rem;color:var(--muted)}
-
-/* ---------- footer ---------- */
-footer{padding:44px 0 56px;font-size:.86rem;color:var(--muted)}
-footer .frow{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center}
-footer .fbrand{display:flex;align-items:center;gap:9px;color:var(--ink);font-weight:600;margin-right:auto}
-footer .fbrand img{width:24px;height:24px}
-footer .fbrand .io{font-weight:600}
-footer p{margin:16px 0 0;max-width:52em}
-</style>
+<link rel="stylesheet" href="/site.css">
 </head>
 <body>
 
@@ -425,7 +94,7 @@ footer p{margin:16px 0 0;max-width:52em}
             <li>Tag events with the family member they're for</li>
           </ul>
           <p class="alone"><b>On its own:</b> a family calendar every phone already speaks to.</p>
-          <div class="links"><a href="/docs/apps/iocalendar/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iocalendar" rel="noopener">GitHub</a><span class="port">:8620</span></div>
+          <div class="links"><a class="more-link" href="/ioCalendar/">More about ioCalendar</a><a href="/docs/apps/iocalendar/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iocalendar" rel="noopener">GitHub</a><span class="port">:8620</span></div>
         </article>
         <article class="app" style="--c:#146b5e">
           <div class="app-top"><img src="img/iotask.svg" alt="" width="44" height="44"><h3>ioTask<span class="tag">The family's task lists</span></h3></div>
@@ -435,7 +104,7 @@ footer p{margin:16px 0 0;max-width:52em}
             <li>Tag tasks with the family member they're for</li>
           </ul>
           <p class="alone"><b>On its own:</b> the family's to-dos, in the reminders app each phone already has.</p>
-          <div class="links"><a href="/docs/apps/iotask/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iotask" rel="noopener">GitHub</a><span class="port">:8670</span></div>
+          <div class="links"><a class="more-link" href="/ioTask/">More about ioTask</a><a href="/docs/apps/iotask/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iotask" rel="noopener">GitHub</a><span class="port">:8670</span></div>
         </article>
         <article class="app" style="--c:#4a7c23">
           <div class="app-top"><img src="img/iorecipe.svg" alt="" width="44" height="44"><h3>ioRecipe<span class="tag">The family's recipes</span></h3></div>
@@ -445,7 +114,7 @@ footer p{margin:16px 0 0;max-width:52em}
             <li>Scale the servings, print, send the ingredients to ioTask</li>
           </ul>
           <p class="alone"><b>On its own:</b> the family's recipe book, on every screen in the kitchen.</p>
-          <div class="links"><a href="/docs/apps/iorecipe/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iorecipe" rel="noopener">GitHub</a><span class="port">:8690</span></div>
+          <div class="links"><a class="more-link" href="/ioRecipe/">More about ioRecipe</a><a href="/docs/apps/iorecipe/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iorecipe" rel="noopener">GitHub</a><span class="port">:8690</span></div>
         </article>
       </div>
       <div class="agroup"><h3>What you keep</h3><p>Photos, notes and the people you know, on every device.</p></div>
@@ -458,7 +127,7 @@ footer p{margin:16px 0 0;max-width:52em}
             <li>A web companion for digiKam, or a library of its own without it</li>
           </ul>
           <p class="alone"><b>On its own:</b> a complete photo app. Point it at a folder of photos.</p>
-          <div class="links"><a href="/docs/apps/iopix/">Docs</a><a href="https://iopix.net" rel="noopener">iopix.net</a><a href="https://github.com/avandeputte/iosuite/tree/main/iopix" rel="noopener">GitHub</a><span class="port">:8600</span></div>
+          <div class="links"><a class="more-link" href="/ioPix/">More about ioPix</a><a href="/docs/apps/iopix/">Docs</a><a href="https://iopix.net" rel="noopener">iopix.net</a><a href="https://github.com/avandeputte/iosuite/tree/main/iopix" rel="noopener">GitHub</a><span class="port">:8600</span></div>
         </article>
         <article class="app" style="--c:#1c5a5e">
           <div class="app-top"><img src="img/ionote.svg" alt="" width="44" height="44"><h3>ioNote<span class="tag">Notes, clipboard snippets and screenshots</span></h3></div>
@@ -468,7 +137,7 @@ footer p{margin:16px 0 0;max-width:52em}
             <li>Notes are private to each account</li>
           </ul>
           <p class="alone"><b>On its own:</b> your notes, searchable everywhere.</p>
-          <div class="links"><a href="/docs/apps/ionote/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/ionote" rel="noopener">GitHub</a><span class="port">:8610</span></div>
+          <div class="links"><a class="more-link" href="/ioNote/">More about ioNote</a><a href="/docs/apps/ionote/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/ionote" rel="noopener">GitHub</a><span class="port">:8610</span></div>
         </article>
         <article class="app" style="--c:#4f2f7d">
           <div class="app-top"><img src="img/iocontact.svg" alt="" width="44" height="44"><h3>ioContact<span class="tag">Contacts for the family</span></h3></div>
@@ -478,7 +147,7 @@ footer p{margin:16px 0 0;max-width:52em}
             <li>Duplicates, data quality checks and merges you can undo</li>
           </ul>
           <p class="alone"><b>On its own:</b> one family address book on every device.</p>
-          <div class="links"><a href="/docs/apps/iocontact/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iocontact" rel="noopener">GitHub</a><span class="port">:8640</span></div>
+          <div class="links"><a class="more-link" href="/ioContact/">More about ioContact</a><a href="/docs/apps/iocontact/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iocontact" rel="noopener">GitHub</a><span class="port">:8640</span></div>
         </article>
       </div>
       <div class="agroup"><h3>The household</h3><p>What you own, what it is worth, and how everyone is doing.</p></div>
@@ -491,7 +160,7 @@ footer p{margin:16px 0 0;max-width:52em}
             <li>Brings a Homebox inventory over, and exports it back</li>
           </ul>
           <p class="alone"><b>On its own:</b> where everything is, what it cost, and when the boiler needs its service.</p>
-          <div class="links"><a href="/docs/apps/iothings/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iothings" rel="noopener">GitHub</a><span class="port">:8700</span></div>
+          <div class="links"><a class="more-link" href="/ioThings/">More about ioThings</a><a href="/docs/apps/iothings/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iothings" rel="noopener">GitHub</a><span class="port">:8700</span></div>
         </article>
         <article class="app" style="--c:#94650a">
           <div class="app-top"><img src="img/iomoney.svg" alt="" width="44" height="44"><h3>ioMoney<span class="tag">The household's finances</span></h3></div>
@@ -501,7 +170,7 @@ footer p{margin:16px 0 0;max-width:52em}
             <li>The house and the cars, with their loans and the equity left</li>
           </ul>
           <p class="alone"><b>On its own:</b> the net worth, the spending and the portfolio, on your own server.</p>
-          <div class="links"><a href="/docs/apps/iomoney/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iomoney" rel="noopener">GitHub</a><span class="port">:8710</span></div>
+          <div class="links"><a class="more-link" href="/ioMoney/">More about ioMoney</a><a href="/docs/apps/iomoney/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iomoney" rel="noopener">GitHub</a><span class="port">:8710</span></div>
         </article>
         <article class="app" style="--c:#e8445a">
           <div class="app-top"><img src="img/iohealth.svg" alt="" width="44" height="44"><h3>ioHealth<span class="tag">Apple Health, on your own server</span></h3></div>
@@ -511,7 +180,7 @@ footer p{margin:16px 0 0;max-width:52em}
             <li>Everyone sees only their own data</li>
           </ul>
           <p class="alone"><b>On its own:</b> a fitness web app that needs no cloud service.</p>
-          <div class="links"><a href="/docs/apps/iohealth/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iohealth" rel="noopener">GitHub</a><span class="port">:8650</span></div>
+          <div class="links"><a class="more-link" href="/ioHealth/">More about ioHealth</a><a href="/docs/apps/iohealth/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iohealth" rel="noopener">GitHub</a><span class="port">:8650</span></div>
         </article>
       </div>
       <div class="agroup"><h3>And a start page that ties them together</h3><p>Optional, for when you run two or more.</p></div>
@@ -525,7 +194,7 @@ footer p{margin:16px 0 0;max-width:52em}
             <li>One MCP server for the whole suite: an AI assistant reaches every app through it</li>
           </ul>
           <p class="alone"><b>Optional:</b> worth it once you run two or more apps. It finds them by itself.</p>
-          <div class="links"><a href="/docs/apps/iostart/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iostart" rel="noopener">GitHub</a><span class="port">:8630</span></div>
+          <div class="links"><a class="more-link" href="/ioStart/">More about ioStart</a><a href="/docs/apps/iostart/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iostart" rel="noopener">GitHub</a><span class="port">:8630</span></div>
         </article>
       </div>
       <div class="tools">

@@ -7,6 +7,9 @@ description: ioStart, the start page of the ioThing suite.
 A self-hosted home page for the family: a tile per installed app, with what matters today on it. **It is optional**:
 every app works without it. It earns its place once you run two or more apps.
 
+[The ioStart page on the website, with more screenshots →](https://iosuite.iothing.net/ioStart/)
+{ .md-button }
+
 ![The ioStart start page: a tile per app with today on it, birthdays, the week ahead and bookmarks](../img/iostart.jpg)
 
 ## What it does
