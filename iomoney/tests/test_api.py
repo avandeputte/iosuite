@@ -298,6 +298,11 @@ def test_transfers_between_own_accounts_are_linked(client, as_user):
     assert sum(1 for (o, _i), w in why.items() if o == third["id"] and w.startswith("as likely")) == 2
     assert (out["id"], into["id"]) not in why
     assert client.get("/api/transfers/possible").json()["items"] == m["possible"]
+    # not a transfer: off the list for good, and not linked by itself
+    grocer_out = next(t["id"] for t in client.get("/api/transactions?q=grocer").json()["items"] if t["amount"] < 0)
+    assert client.post("/api/transfers/not", json={"outId": refund["id"], "inId": grocer_out}).status_code == 400  # out first
+    assert client.post("/api/transfers/not", json={"outId": grocer_out, "inId": refund["id"]}).json()["ok"]
+    assert (grocer_out, refund["id"]) not in {(p["out"]["id"], p["in"]["id"]) for p in client.get("/api/transfers/possible").json()["items"]}
     c = client.get(f"/api/transactions/{third['id']}/transfer").json()
     assert c["other"] is None and len(c["candidates"]) == 2
     r = client.put(f"/api/transactions/{third['id']}/transfer", json={"with": c["candidates"][0]["id"]}).json()
