@@ -248,7 +248,7 @@ const sameKey = (buf, key) => { if (!buf) return false; const a = new Uint8Array
 const sha256 = async (s) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map((b) => b.toString(16).padStart(2, '0')).join('');
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const appleMobile = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const MORNING_KINDS = ['tasks', 'birthdays'];
+const MORNING_KINDS = ['tasks', 'birthdays', 'health_week'];
 
 async function workerRegistration(create) {
   let reg = await navigator.serviceWorker.getRegistration(SCOPE.href);
@@ -311,7 +311,7 @@ export async function mountNotifications(el, opts = {}) {
       info.kinds.map((k) => h('label', { class: 'sv-check' }, h('input', { type: 'checkbox', checked: k.on,
         onchange: async (e) => { try { await save('auth/push/prefs', { method: 'PUT', json: { kinds: { [k.kind]: e.target.checked } } }); toast('Saved'); } catch (err) { fail(err); } } }),
       h('span', null, h('b', null, k.label), h('span', { class: 'sv-muted sv-small' }, ` · ${k.hint}`))))) : null;
-    const morning = info.kinds.some((k) => MORNING_KINDS.includes(k.kind)) ? row('Morning summary', 'When the tasks and birthdays of the day arrive.',
+    const morning = info.kinds.some((k) => MORNING_KINDS.includes(k.kind)) ? row('Morning summary', 'When the tasks and birthdays of the day, and the Monday health summary, arrive.',
       h('input', { class: 'sv-in', type: 'time', step: 300, value: info.morning, style: 'max-width:130px',
         onchange: async (e) => { try { await save('auth/push/prefs', { method: 'PUT', json: { morning: e.target.value } }); toast('Saved'); } catch (err) { fail(err); } } })) : null;
     const list = info.devices.length ? h('table', { class: 'sv-t' }, h('tr', null, h('th', null, 'Device'), h('th', null, 'Turned on in'), h('th', null, 'Last delivered'), h('th')),

@@ -5,6 +5,9 @@ turned notifications on.
 Only goals whose numbers mean the same in every unit system are looked at (steps, minutes, kilocalories, hours and
 the activity rings): a goal is kept in the units the web app shows, which the server does not know.
 
+And on Monday, at the person's morning time (Settings › Account › Notifications), the weekly summary: last week's
+steps, sleep and workouts next to the week before (weekly(), run every minute by the app).
+
 "Today" is the person's own: the zone their phone sends when a sync starts (timeZone), or the web app's, as last seen
 (webapi.remember_zone); the server's TZ only until either has been seen.
 """
@@ -76,3 +79,79 @@ def after_sync_quietly(uid: int) -> None:
         after_sync(uid)
     except Exception:  # noqa: BLE001 - a goal alert never fails a sync
         log.exception("goal notifications after the sync of account %s", uid)
+
+
+# ------------------------------------------------------------------ the weekly summary
+
+def _week(uid: int, start: datetime, loc) -> dict:
+    """One week from `start` (a local midnight): steps a day, hours asleep a night, workouts and their time. None
+    where there is nothing to go on."""
+    frm, to = db.naive(start), db.naive(webapi.local_add_days(start, 7, loc))
+    steps = [p["v"] for p in webapi.series_for(uid, "step_count", frm, to, "day", loc)["points"] if p.get("v")]
+    nights = [p["v"] for p in webapi.sleep_series(uid, frm, to, "day", loc)["points"] if p.get("v")]
+    works = webapi.workout_list(uid, frm, to)
+    return {"steps": sum(steps) / 7 if steps else None,  # a day of the week, days without a step count as none
+            "sleep": sum(nights) / len(nights) if nights else None,  # a night slept, over the nights there is sleep for
+            "workouts": len(works), "workoutMin": sum(w["duration"] for w in works) / 60}
+
+
+def _hm(minutes: float) -> str:
+    m = int(round(minutes))
+    return f"{m // 60} h {m % 60:02d}" if m >= 60 else f"{m} min"
+
+
+def _lines(now: dict, before: dict) -> list:
+    out = []
+    if now["steps"] is not None:
+        line = f"Steps: {_num(now['steps'])} a day"
+        if before["steps"]:
+            pct = round((now["steps"] - before["steps"]) / before["steps"] * 100)
+            line += ", the same as the week before" if pct == 0 else f", {abs(pct)}% {'more' if pct > 0 else 'fewer'} than the week before"
+        out.append(line)
+    if now["sleep"] is not None:
+        line = f"Sleep: {_hm(now['sleep'] * 60)} a night"
+        if before["sleep"] is not None:
+            d = round((now["sleep"] - before["sleep"]) * 60)
+            line += ", the same as the week before" if abs(d) < 5 else f", {_hm(abs(d))} {'more' if d > 0 else 'less'}"
+        out.append(line)
+    if now["workouts"] or before["workouts"]:
+        n, b = now["workouts"], before["workouts"]
+        line = f"Workouts: {n}" + (f", {_hm(now['workoutMin'])}" if n else "")
+        if n != b:
+            line += f" ({abs(n - b)} {'more' if n > b else 'fewer'} than the week before)"
+        elif n:
+            line += " (as many as the week before)"
+        out.append(line)
+    return out
+
+
+def summary(uid: int, monday: datetime, loc) -> tuple | None:
+    """(title, body) of the summary sent on `monday` (its local midnight), or None when last week holds nothing."""
+    last = webapi.local_add_days(monday, -7, loc)
+    now, before = _week(uid, last, loc), _week(uid, webapi.local_add_days(monday, -14, loc), loc)
+    if now["steps"] is None and now["sleep"] is None and not now["workouts"]:
+        return None
+    end = webapi.local_add_days(monday, -1, loc)
+    span = f"{last.day} {last:%b} to {end.day} {end:%b}"
+    return f"Your week in health, {span}", "\n".join(_lines(now, before))
+
+
+def weekly(now: datetime = None) -> int:
+    """Monday, at each person's morning time in their own zone: last week's summary, once."""
+    sent = 0
+    for u in push.recipients("health_week"):
+        uid = u["id"]
+        loc = webapi.zone_of(uid)
+        local = (now or datetime.now(loc)).astimezone(loc)
+        if local.weekday() != 0 or not push.is_morning(uid, local.replace(tzinfo=None)):
+            continue
+        monday = datetime(local.year, local.month, local.day, tzinfo=loc)
+        key = f"health:week:{monday.date()}"
+        if push.was_sent(uid, key):
+            continue
+        msg = summary(uid, monday, loc)
+        if not msg:
+            push.claim(uid, key)  # nothing to say this week, and nothing to work out again this morning
+            continue
+        sent += push.notify(uid, "health_week", msg[0], msg[1], url=push.link(APP, "#/"), once=key, tag="health-week")
+    return sent
