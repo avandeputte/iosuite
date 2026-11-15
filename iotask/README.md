@@ -32,9 +32,9 @@ ioTask needs Python 3.10+ and a MariaDB or MySQL database. Give it its own datab
 and user, for example:
 
 ```sql
-CREATE DATABASE tasks CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'tasks'@'app-host' IDENTIFIED BY 'a-long-random-password';
-GRANT ALL ON tasks.* TO 'tasks'@'app-host';
+CREATE DATABASE iotask CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iotask'@'app-host' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL ON iotask.* TO 'iotask'@'app-host';
 ```
 
 `app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)

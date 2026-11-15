@@ -82,7 +82,7 @@ IONOTE_DB=db.example.lan:3306/ionote:ionote:secret IONOTE_SUITE_DB=db.example.la
 (the passwords in the environment stay off the command line). Without the service, `./run.sh` starts it in the
 foreground.
 
-The database user needs to create tables in its database (`GRANT ALL ON notes.* TO 'notes'@'app-host'`). Pictures are
+The database user needs to create tables in its database (`GRANT ALL ON ionote.* TO 'ionote'@'app-host'`). Pictures are
 stored in the database: MariaDB's `max_allowed_packet` (16 MB by default) must be larger than the largest picture
 (`MAX_IMAGE_MB`, 15 MB); `setup.sh` warns when it is not.
 

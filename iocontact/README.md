@@ -21,9 +21,9 @@ A self-hosted contact manager: a web app for the whole family, and the standard 
 ioContact needs Python 3.10+ and a MariaDB or MySQL database. Give it its own database and user, for example:
 
 ```sql
-CREATE DATABASE contacts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'contacts'@'app-host' IDENTIFIED BY 'a-good-password';
-GRANT ALL ON contacts.* TO 'contacts'@'app-host';
+CREATE DATABASE iocontact CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iocontact'@'app-host' IDENTIFIED BY 'a-good-password';
+GRANT ALL ON iocontact.* TO 'iocontact'@'app-host';
 ```
 
 `app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)

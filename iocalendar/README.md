@@ -13,6 +13,7 @@ A self-hosted calendar: a web app for the whole family, and the standard protoco
 - **ioContact (optional)**: the people on an event come from your contacts (picked as you type, with a link back to each), and a shared, read-only **Birthdays** calendar shows the birthdays and anniversaries kept in ioContact, brought up to date every six hours.
 - **ioTask (optional)**: the tasks that are due show on their day, beside the events, in every view: a round tick in the list's colour, at their time when they have one. Tick one off (or open it again) right on the calendar; a repeating task moves on to its next day. Click the title to open the task in ioTask. Each person sees the lists they see in ioTask, the Family filter applies to tasks too, and **Tasks due** in the sidebar hides them.
 - **Weather**: the forecast on each of the next seven days (the day headers of the month, week and agenda views) at the start page's weather place, and on an event that has a place, the weather there at its time. Nothing to set up: the place comes from ioStart (Settings › Weather), the forecast from Open-Meteo (free, no key), an event's place is looked up once with OpenStreetMap's Nominatim (only the place's text leaves the server). No ioStart place: no weather on the days; events with a place still get theirs.
+- **ioMoney (optional)**: the household's coming bills (Monarch Money's recurring transactions) show on the day they are due, with the payee and the amount, to the people who have a role in ioMoney; nobody else sees them or the sidebar's **Bills due**, which hides them. Click one to see its payments in ioMoney.
 - **Public holidays**: shared, read-only **Holidays** calendars with the public holidays of one or more countries and, if you like, a state or province for each (Settings › Holidays and birthdays; it starts with the country of the family's time zone, else the United States). Worked out on the server with the `holidays` package (nothing is fetched), last year to three years ahead, renewed daily; anyone can hide each one in the sidebar.
 - **Outside calendars**: subscribe to a calendar by its web address (`https://`, `http://` or `webcal://`: a school's, a sports club's, the bin collection) from the + beside Shared or Mine. It is kept as a read-only calendar beside the family's own, fetched again on a schedule (hourly to weekly, Settings › Calendars, or Fetch now), with its reminders dropped. The server only fetches hosts on the internet (not itself, the home network or link-local; every redirect checked the same way), at most 16 MB within 20 s; the address is shown only to those who manage the calendar (members their own, editors the shared ones).
 - **Family members on events**: tag an event with the people of the family it is for ("For Emma"). The tags show as coloured initials on the calendar, the sidebar's Family list shows only one person's (or a few people's) events, and the tag is kept as an iCalendar `CATEGORIES` value with the member's name, so phones and calendar apps show it and a category typed there tags the event here too. The REST API, the subscription links (`?member=emma`) and MCP filter by member as well. The family is the suite's one list (Settings › Security › Family, suite admins), the same in every app: each member's colour, initials and face (their ioPix person, else their ioContact card) match everywhere. An account that is not a person (an admin or guest) can be taken out there: it is not offered as a tag and gets no private calendar.
@@ -28,9 +29,9 @@ ioCalendar needs Python 3.10+ and a MariaDB or MySQL database. Give it its own d
 and user, for example:
 
 ```sql
-CREATE DATABASE calendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'calendar'@'app-host' IDENTIFIED BY 'a-long-random-password';
-GRANT ALL ON calendar.* TO 'calendar'@'app-host';
+CREATE DATABASE iocalendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iocalendar'@'app-host' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL ON iocalendar.* TO 'iocalendar'@'app-host';
 ```
 
 `app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)
@@ -127,6 +128,12 @@ the viewer's own session (or the app password they came with), so ioTask answers
 takes a tick (`POST /api/tasks/<id>/complete`) only from someone who may change the list. Nothing about tasks is kept
 here. Behind Cloudflare Access, the suite's service token goes along. When ioTask is away, the calendar draws without
 the tasks and the sidebar's **Tasks due** says why.
+
+### ioMoney
+
+The same way: ioMoney is found in the suite's list of apps and asked for the bills due in the days on screen
+(`GET /api/bills?start=&end=` here) as the viewer, so ioMoney answers only to someone with a role there, with the bills
+of the accounts that person sees. Without a role, there are no bills and no **Bills due** in the sidebar.
 
 ## Updates
 
@@ -265,6 +272,7 @@ app/ical.py        iCalendar and jCal: reading, indexing, expanding repeating ev
 app/model.py       calendars and events in MariaDB, sync tokens and tombstones for CalDAV
 app/contacts.py    the ioContact client: people and the Birthdays calendar
 app/tasks.py       the ioTask client: the tasks due on a day, ticked off from the calendar (asked as the viewer)
+app/bills.py       the ioMoney client: the household's coming bills on their day (asked as the viewer)
 app/holiday.py     the Holidays calendars (one per country, with region and language; filled daily)
 app/members.py     family members on events (kept as CATEGORIES), and the member filter
 app/mcp/           the MCP server: base (the server, finding events; who is asking comes from iosuite_shared.mcp), read, write and admin tools

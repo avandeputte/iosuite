@@ -32,6 +32,7 @@ should sync away from home.
 - **ioContact**: a read-only **Birthdays** calendar with the birthdays and anniversaries kept in ioContact, brought up
   to date every six hours; the people on an event come from your contacts.
 - **ioTask**: the tasks that are due show on their day, beside the events, in the month, week, day and agenda views.
+- **ioMoney**: the household's coming bills show on the day they are due, to the people with a role in ioMoney.
   Tick one off right on the calendar; a repeating task moves on to its next day.
 - **ioStart**: today's events on the tile, a This week card, and "Quick add" from the search box ("dentist tomorrow 9am").
   The other way round, the calendar shows the weather at the start page's place (Settings › Weather there) on each of

@@ -27,9 +27,9 @@ ioRecipe needs Python 3.10+ and a MariaDB or MySQL database. Give it its own dat
 and user, for example:
 
 ```sql
-CREATE DATABASE recipe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'recipe'@'app-host' IDENTIFIED BY 'a-long-random-password';
-GRANT ALL ON recipe.* TO 'recipe'@'app-host';
+CREATE DATABASE iorecipe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iorecipe'@'app-host' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL ON iorecipe.* TO 'iorecipe'@'app-host';
 ```
 
 `app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)

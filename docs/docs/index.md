@@ -18,6 +18,7 @@ Small self-hosted apps for the family, each one a complete product on its own:
 | [ioTask](apps/iotask.md) | The family's task lists, in Apple Reminders and every tasks app over CalDAV | 8670 | [iotask](https://github.com/avandeputte/iosuite/tree/main/iotask) |
 | [ioRecipe](apps/iorecipe.md) | The family's recipes, with photos and import from the web | 8690 | [iorecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe) |
 | [ioThings](apps/iothings.md) | Everything you own: manuals, warranties, upkeep; imports Homebox | 8700 | [iothings](https://github.com/avandeputte/iosuite/tree/main/iothings) |
+| [ioMoney](apps/iomoney.md) | The household's finances: Monarch Money's accounts and transactions, the portfolio, the house and the cars | 8710 | [iomoney](https://github.com/avandeputte/iosuite/tree/main/iomoney) |
 
 Two **admin tools** come with the suite, for the person who runs the servers. Only suite admins see them:
 

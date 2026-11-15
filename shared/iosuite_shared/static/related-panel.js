@@ -18,6 +18,7 @@ const KINDS = {
   recipe: { label: 'Recipe', ic: 'M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z', c: '#d93025' },
   item: { label: 'Thing', ic: 'M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V4c0-1.1-1-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4l16-.02V7z', c: '#2a6f97' },
   photo: { label: 'Photo', ic: 'M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z', c: '#9334e6' },
+  asset: { label: 'House or car', ic: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z', c: '#94650a' },
 };
 const IC = {
   link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',
@@ -27,7 +28,7 @@ const IC = {
   check: 'M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
   open: 'M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z',
 };
-const APPS = { iocalendar: 'ioCalendar', iotask: 'ioTask', ionote: 'ioNote', iocontact: 'ioContact', iorecipe: 'ioRecipe', iopix: 'ioPix', iothings: 'ioThings' };
+const APPS = { iocalendar: 'ioCalendar', iotask: 'ioTask', ionote: 'ioNote', iocontact: 'ioContact', iorecipe: 'ioRecipe', iopix: 'ioPix', iothings: 'ioThings', iomoney: 'ioMoney' };
 const svg = (d, cls = 'rl-ic') => { const s = document.createElement('span'); s.className = cls; s.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`; return s; };
 
 const CSS = `

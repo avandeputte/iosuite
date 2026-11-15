@@ -37,10 +37,10 @@
 #   ... | IOSTART_DB=127.0.0.1:3306/iostart:iostart:PASSWORD IOSTART_ADMIN=alex:PASSWORD DB_ADMIN_PASSWORD=PASSWORD \
 #         bash -s -- --yes --db-admin root --add all
 # (see that app's `setup.sh --help`): passwords in the environment stay out of the process list and the shell history.
-# The apps: iostart iocalendar iocontact ionote iohealth iotask iorecipe iothings iopix iodns iobackup
+# The apps: iostart iocalendar iocontact ionote iohealth iotask iorecipe iothings iomoney iopix iodns iobackup
 set -euo pipefail
 REPO="${IOSUITE_REPO:-https://github.com/avandeputte/iosuite}"
-APPS="iostart iocalendar iocontact ionote iohealth iotask iorecipe iothings iopix iodns iobackup"
+APPS="iostart iocalendar iocontact ionote iohealth iotask iorecipe iothings iomoney iopix iodns iobackup"
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
@@ -80,6 +80,17 @@ main() {
     [ ${#rest[@]} -eq 0 ] || die "ioSuite is already on this server (in $base): ${rest[*]} is for a first install. To change an app's settings: --reconfigure APP"
     [ -z "$dbadmin" ] || manage+=(--db-admin "${dbadmin%%:*}")
     [ "$yes" = 0 ] || manage+=(--yes)
+    # the list is the suite's as it is now, not as it was when that app was installed: the shared library is fetched
+    # fresh and runs in that app's Python for this once (the app itself keeps its own until its next update)
+    local now; now="$(mktemp -d)"
+    if command -v git >/dev/null 2>&1 && git clone -q --depth 1 "$REPO" "$now" 2>/dev/null && [ -f "$now/shared/iosuite_shared/install.py" ]; then
+      local rc=0
+      PYTHONPATH="$now/shared${PYTHONPATH:+:$PYTHONPATH}" IOSUITE_REPO="$REPO" "$home/.venv/bin/python" -m iosuite_shared.cli \
+        --config "$home" apps --into "$base" ${manage[@]+"${manage[@]}"} || rc=$?
+      rm -rf "$now"; exit "$rc"
+    fi
+    rm -rf "$now"
+    say "Could not fetch ioSuite from $REPO: the list is the one this server has (an app added since is not on it)"
     exec "$home/.venv/bin/iosuite-shared" --config "$home" apps --into "$base" ${manage[@]+"${manage[@]}"}
   fi
 

@@ -116,6 +116,16 @@ services:
       DB_NAME: iothings
       # PUBLIC_URL: https://things.example.com
       # INTERNAL_URL: http://192.168.1.151:8700   # this host's LAN address and the port, for the suite's list of apps
+  iomoney:
+    <<: *app
+    image: ghcr.io/avandeputte/iosuite/iomoney:latest
+    container_name: iomoney
+    ports: ["8710:8710"]                 # web app, REST API, MCP (/mcp)
+    environment:
+      <<: *shared
+      DB_NAME: iomoney
+      # PUBLIC_URL: https://money.example.com
+      # INTERNAL_URL: http://192.168.1.151:8710   # this host's LAN address and the port, for the suite's list of apps
 
   iocontact:
     <<: *app
@@ -187,6 +197,7 @@ configs:
       CREATE DATABASE IF NOT EXISTS iotask CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS iorecipe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS iothings CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS iomoney CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS iocontact CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS ionote CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS iohealth CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -196,6 +207,7 @@ configs:
       GRANT ALL PRIVILEGES ON iotask.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON iorecipe.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON iothings.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON iomoney.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON iocontact.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON ionote.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON iohealth.* TO 'suite'@'%';

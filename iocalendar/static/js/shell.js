@@ -1,4 +1,4 @@
-import { $, DOW, ICONS, LOCAL_TZ, REFRESH_HOURS, S, addDays, addMonths, api, canOwn, canShared, dialog, fail, h, hue, icon, initials, isAuto, loadCals, memberBadge, memberColor, sameDay, startOfWeek, tasksOn, toast, toggleCal, toggleTasks, toggleWho, weekStart, writable, ymd } from './core.js';
+import { $, DOW, ICONS, LOCAL_TZ, REFRESH_HOURS, S, addDays, addMonths, api, canOwn, canShared, dialog, fail, h, hue, icon, initials, isAuto, loadCals, memberBadge, memberColor, sameDay, startOfWeek, tasksOn, billsOn, billsOffered, toggleBills, toast, toggleCal, toggleTasks, toggleWho, weekStart, writable, ymd } from './core.js';
 import { go, route } from './main.js';
 import { drawView } from './views.js';
 
@@ -124,6 +124,13 @@ export function drawNav() {
       title: why || (tasksOn() ? 'Hide the tasks that are due' : 'Show the tasks on the day they are due'),
       onclick: (e) => { e.preventDefault(); toggleTasks(); } }, ck, h('span', { class: 'nl' }, 'Tasks due'));
   };
+  const billRow = () => {
+    const ck = h('span', { class: 'ck' }); ck.innerHTML = check;
+    const why = billsOn() && S.bills.available === false ? S.bills.reason : null;
+    return h('a', { href: '#', 'data-v': 'cal', class: `cal ${billsOn() ? 'shown' : ''} ${why ? 'away' : ''}`, style: { '--hue': '#94650a' },
+      title: why || (billsOn() ? 'Hide the bills that are due' : 'Show the household’s bills on the day they are due'),
+      onclick: (e) => { e.preventDefault(); toggleBills(); } }, ck, h('span', { class: 'nl' }, 'Bills due'));
+  };
   const shared = S.cals.filter((c) => c.shared), mine = S.cals.filter((c) => !c.shared);
   nav.replaceChildren(...[
     h('div', { class: 'navhead' },
@@ -150,6 +157,9 @@ export function drawNav() {
     S.status.iotask ? [h('div', { class: 'navgap' }),
       sec('ioTask', S.tasks.url ? h('a', { class: 'iconbtn', href: S.tasks.url, target: '_blank', rel: 'noopener', title: 'Open ioTask' }, icon('open', 's')) : null),
       taskRow()] : null,
+    billsOffered() ? [h('div', { class: 'navgap' }),
+      sec('ioMoney', S.bills.url ? h('a', { class: 'iconbtn', href: S.bills.url, target: '_blank', rel: 'noopener', title: 'Open ioMoney' }, icon('open', 's')) : null),
+      billRow()] : null,
     h('div', { class: 'navgap' }), sec('Manage'),
     writable().some((c) => !isAuto(c)) ? link('import', '#/import', 'upload', 'Import', null, r.view === 'import', '--c-green') : null,
     h('div', { class: 'navfoot' }, link('settings', '#/settings', 'settings', 'Settings', null, r.view === 'settings')),

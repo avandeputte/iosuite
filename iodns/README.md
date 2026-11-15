@@ -71,9 +71,9 @@ Adding another kind is one module in `app/providers/`: a `Provider` subclass tha
 ioDNS needs Python 3.10+ and a MariaDB or MySQL database. Give it its own database and user, for example:
 
 ```sql
-CREATE DATABASE dns CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'dns'@'app-host' IDENTIFIED BY 'a-long-random-password';
-GRANT ALL ON dns.* TO 'dns'@'app-host';
+CREATE DATABASE iodns CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iodns'@'app-host' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL ON iodns.* TO 'iodns'@'app-host';
 ```
 
 `app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)

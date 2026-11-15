@@ -18,6 +18,7 @@ container or one database server:
 | ioTask | 8670 | `tasks` | `/opt/iotask/app` |
 | ioRecipe | 8690 | `recipe` | `/opt/iorecipe/app` |
 | ioThings | 8700 | `things` | `/opt/iothings/app` |
+| ioMoney | 8710 | `money` | `/opt/iomoney/app` |
 
 ## One line: install, add, remove, reconfigure
 
@@ -27,7 +28,8 @@ curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/install.sh
 
 On a new server this sets up ioStart and then shows the list of apps. Run it again at any time: it shows what is
 installed. Tick an app to add it, untick one to remove it, type `r` and its number to answer its setup questions again
-(port, public address, database...).
+(port, public address, database...). The list is always the suite's latest, so an app added to the suite since your
+apps were installed is on it too.
 
 Removing an app stops it, deletes its program files and takes it out of the other apps' switchers. **Its database and
 its data stay**, so adding it again brings everything back. Deleting those too is a separate question that you answer by

@@ -148,3 +148,17 @@ def test_signed_out_gets_nothing(suite_apps):
     c = TestClient(app, base_url="http://tasks.example.com")
     assert c.get("/api/related/task/12").status_code == 401
     assert c.get("/api/related/ui.js").status_code in (200, 401)
+
+
+def test_a_house_in_iomoney(suite_apps, monkeypatch):
+    suite.register("iomoney", name="iomoney", url="https://iomoney.example.com")
+    suite.invalidate()
+    monkeypatch.setitem(SEEN, ("iomoney", "/api/accounts/4"), {"id": 4, "name": "12 Oak Lane", "kindLabel": "Real estate",
+                                                                "balance": 585000.0, "estimate": None, "currency": "USD"})
+    monkeypatch.setitem(SEEN, ("iomoney", "/api/accounts"), {"items": [{"id": 4, "name": "12 Oak Lane", "kindLabel": "Real estate", "balance": 585000.0, "currency": "USD"}]})
+    c = client()
+    got = c.post("/api/related/task/12", json={"kind": "asset", "id": 4}).json()
+    assert got["title"] == "12 Oak Lane" and got["text"] == "Real estate · USD 585,000"
+    assert got["url"] == "https://iomoney.example.com/#/account/4"
+    found = c.get("/api/related/search", params={"q": "oak", "kinds": "asset"}).json()["groups"]
+    assert found and found[0]["items"][0]["title"] == "12 Oak Lane"

@@ -23,6 +23,7 @@ Give each app a host name under one domain, for example:
 | ioTask | `tasks.example.com` | `192.168.1.10:8670` |
 | ioRecipe | `recipes.example.com` | `192.168.1.10:8690` |
 | ioThings | `things.example.com` | `192.168.1.10:8700` |
+| ioMoney | `money.example.com` | `192.168.1.10:8710` |
 
 and set in each app's `config.env`:
 
@@ -87,7 +88,7 @@ Two things differ from a name per app. Phones find a CalDAV or CardDAV account b
 
 The start page (ioStart) can do the same by itself. With **Settings › Global settings › Apps › Serve the suite on one
 address** on, it answers at its own address as before and passes `…/calendar/`, `…/notes/`, `…/contacts/`,
-`…/tasks/`, `…/pix/`, `…/recipes/`, `…/things/`, `…/health/`, `…/dns/` and `…/backup/` on to the app that owns the folder, as the
+`…/tasks/`, `…/pix/`, `…/recipes/`, `…/things/`, `…/money/`, `…/health/`, `…/dns/` and `…/backup/` on to the app that owns the folder, as the
 request came: uploads, video, CalDAV and CardDAV, MCP.
 
 ```

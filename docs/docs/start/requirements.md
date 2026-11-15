@@ -24,9 +24,9 @@ is used once and not written anywhere. Leave it empty when the databases exist a
 To make them yourself instead:
 
 ```sql
-CREATE DATABASE calendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'calendar'@'app-host' IDENTIFIED BY 'a-good-password';
-GRANT ALL ON calendar.* TO 'calendar'@'app-host';
+CREATE DATABASE iocalendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iocalendar'@'app-host' IDENTIFIED BY 'a-good-password';
+GRANT ALL ON iocalendar.* TO 'iocalendar'@'app-host';
 
 CREATE DATABASE iosuite CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER 'iosuite'@'app-host' IDENTIFIED BY 'another-good-password';
@@ -53,7 +53,7 @@ Pick one; every app offers all three.
 | **Docker** | Docker with Compose, amd64 or arm64. The images are public on `ghcr.io/avandeputte/iosuite/` | [Docker](docker.md) |
 | **Any Linux or Mac** | Python 3.10 or later (ioHealth: 3.11), git. `setup.sh` makes a virtual environment and a systemd service (launchd on a Mac) | [Any Linux or Mac](linux-mac.md) |
 
-Each app is small: the Proxmox containers for ioCalendar, ioTask, ioRecipe, ioThings, ioContact, ioNote, ioHealth and ioStart default to 1 or 2 CPUs and 512 MB to 2 GB of memory. ioPix
+Each app is small: the Proxmox containers for ioCalendar, ioTask, ioRecipe, ioThings, ioMoney, ioContact, ioNote, ioHealth and ioStart default to 1 or 2 CPUs and 512 MB to 2 GB of memory. ioPix
 is the exception when its AI features are on (content search, faces, objects, text in photos): its container defaults to
 4 CPUs and 4 GB, and the models it downloads take a few GB of disk.
 
@@ -61,9 +61,9 @@ is the exception when its AI features are on (content search, faces, objects, te
 
 Every app has its own default port, so all of them can run on one host:
 
-| ioPix | ioNote | ioCalendar | ioStart | ioContact | ioHealth | ioTask | ioRecipe | ioThings |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 8600 | 8610 | 8620 | 8630 | 8640 | 8650 | 8670 | 8690 | 8700 |
+| ioPix | ioNote | ioCalendar | ioStart | ioContact | ioHealth | ioTask | ioRecipe | ioThings | ioMoney |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 8600 | 8610 | 8620 | 8630 | 8640 | 8650 | 8670 | 8690 | 8700 | 8710 |
 
 ioContact also serves an LDAP directory, on port 3890 by default (the Proxmox installer offers 389).
 
