@@ -1,6 +1,7 @@
 #!/bin/sh
 # ioHealth setup: asks a few questions (or takes flags), then installs the Python packages, writes the settings,
-# creates the tables and the admin account and, on Linux with systemd, installs and starts the service.
+# creates the tables and the admin account and installs and starts the service (systemd on Linux, run as root; a
+# login item on a Mac).
 #
 #   ./setup.sh                 ask the questions
 #   ./setup.sh --yes ...       no questions: what config.env already holds, the flags below, and the defaults
@@ -177,10 +178,38 @@ if [ -n "$ADMIN" ]; then
 fi
 
 # ---- the service
+MAC=0; [ "$(uname -s)" != Darwin ] || MAC=1
 if [ -z "$SERVICE" ]; then
-  if command -v systemctl >/dev/null && [ -d /run/systemd/system ] && [ "$(id -u)" = 0 ]; then SERVICE=1; else SERVICE=0; fi
+  if [ "$MAC" = 1 ] || { command -v systemctl >/dev/null && [ -d /run/systemd/system ] && [ "$(id -u)" = 0 ]; }; then SERVICE=1; else SERVICE=0; fi
 fi
-if [ "$SERVICE" = 1 ]; then
+if [ "$SERVICE" = 1 ] && [ "$MAC" = 1 ]; then
+  # a Mac: a login item (launchd) that starts the app and starts it again when it stops. The settings stay in
+  # config.env, which the app reads itself; its output goes nowhere, as the app keeps its own log (DATA_DIR)
+  say "Installing the iohealth login item"
+  LABEL=net.iothing.iohealth.server
+  PL="$HOME/Library/LaunchAgents/$LABEL.plist"
+  mkdir -p "$HOME/Library/LaunchAgents"
+  cat > "$PL" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key><array><string>$APP/.venv/bin/python</string><string>-m</string><string>app</string></array>
+  <key>WorkingDirectory</key><string>$APP</string>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/dev/null</string>
+  <key>StandardErrorPath</key><string>/dev/null</string>
+</dict>
+</plist>
+PLIST
+  launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$PL" || die "launchctl could not start the login item $PL (see above)"
+  say "ioHealth runs on port $PORT (a login item: it starts with your session)"
+elif [ "$SERVICE" = 1 ]; then
   say "Installing the iohealth service"
   OWNER="$(stat -c %U "$APP" 2>/dev/null || echo root)"
   # run as root in a folder somebody else owns: what was made here is theirs, as the service that runs as them reads it

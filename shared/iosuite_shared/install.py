@@ -81,8 +81,7 @@ APPS = {
     "iostart": dict(label="ioStart", port=8630, env="IOSTART"),
     "iocalendar": dict(label="ioCalendar", port=8620, env="IOCALENDAR"),
     "iocontact": dict(label="ioContact", port=8640, env="IOCONTACT"),
-    "ionote": dict(label="ioNote", port=8610, env="IONOTE", data=True,
-                    extra=["--features", "none"], launchd="net.iothing.ionote.server"),
+    "ionote": dict(label="ioNote", port=8610, env="IONOTE", data=True, extra=["--features", "none"]),
     "iohealth": dict(label="ioHealth", port=8650, env="IOHEALTH"),
     "iotask": dict(label="ioTask", port=8670, env="IOTASK"),
     "iodns": dict(label="ioDNS", port=8660, env="IODNS"),
@@ -479,12 +478,17 @@ def removal_plan(name, base, caller_cfg=None, config_dir=None):
                 db=key, db_kept=kept, keep=keep)
 
 
+def launchd_label(name):
+    """The login item setup.sh makes for NAME on a Mac: net.iothing.<name>.server (ioPix keeps its own)."""
+    return APPS[name].get("launchd") or f"net.iothing.{name}.server"
+
+
 def stop_service(name, target, log=print, run=subprocess.run):
     """Stop the app and take its service away: the systemd unit setup.sh wrote (only when it points at TARGET), or the
     login item on a Mac. Without either, the app was started by hand (run.sh) and the person stops it."""
     unit = Path(f"/etc/systemd/system/{name}.service")
-    label = APPS[name].get("launchd")
-    plist = Path.home() / "Library" / "LaunchAgents" / f"{label}.plist" if label else None
+    label = launchd_label(name)
+    plist = Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
     if unit.is_file() and shutil.which("systemctl"):
         if str(target) not in unit.read_text(errors="replace"):
             log(f"  note: the service {name} runs from another folder, not {target}: left alone")
@@ -495,7 +499,7 @@ def stop_service(name, target, log=print, run=subprocess.run):
         run(sudo + ["systemctl", "daemon-reload"], capture_output=True)
         run(sudo + ["systemctl", "reset-failed", name], capture_output=True)
         log(f"  stopped the service {name} and took it away")
-    elif plist is not None and plist.is_file():
+    elif plist.is_file():
         run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"], capture_output=True)
         plist.unlink()
         log(f"  stopped the login item {label} and took it away")
@@ -867,8 +871,8 @@ def restart_service(name, target, log=print, run=subprocess.run):
     """Start the app again so it reads its config.env: its systemd unit (only when it points at TARGET) or its login
     item on a Mac. Without either the app was started by hand, and the person does it."""
     unit = Path(f"/etc/systemd/system/{name}.service")
-    label = APPS[name].get("launchd")
-    plist = Path.home() / "Library" / "LaunchAgents" / f"{label}.plist" if label else None
+    label = launchd_label(name)
+    plist = Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
     if unit.is_file() and shutil.which("systemctl") and str(target) in unit.read_text(errors="replace"):
         sudo = [] if os.geteuid() == 0 else ["sudo"]
         if run(sudo + ["systemctl", "restart", name], capture_output=True).returncode == 0:
@@ -876,7 +880,7 @@ def restart_service(name, target, log=print, run=subprocess.run):
             return True
         log(f"  could not restart the service {name}: journalctl -u {name} -n 50")
         return False
-    if plist is not None and plist.is_file():
+    if plist.is_file():
         run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{label}"], capture_output=True)
         log(f"  restarted the login item {label}")
         return True

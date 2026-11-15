@@ -66,13 +66,15 @@ the app's database and user, the Shared ioSuite database and user and, with othe
 databases too, with the passwords you answered (`iosuite-shared provision`). Nothing is dropped, and the administrator's
 password is used once and not written anywhere.
 
-`setup.sh` is the installer: it asks where the MariaDB/MySQL database is (host, port, database, user, password;
-it tests the connection and creates the database when the user may), where the **Shared ioSuite database** is
-(below; database and user `iosuite` by default, tested and created the same way), the port (8610), whether pictures added in the
-web app should have their text read (RapidOCR, ~60 MB), an admin account, and whether to start ionote at login
-(launchd on macOS, systemd on Linux). Then it creates the Python environment, installs the packages, writes
-`config.env`, creates the tables and the admin, and starts the service. Run it again at any time. Flags skip the
-questions (`./setup.sh --help`), e.g.
+`setup.sh` is the installer, the same as every app's of the suite (made from `shared/templates/setup.sh`): it asks
+for the notes' MariaDB/MySQL database (host, port, database, user, password; `ionote` by default), the **Shared ioSuite
+database** (below; database and user `iosuite` by default), the web port (8610), then ioNote's own questions: the
+folder for its own files (session secret, log; `data/`) and whether pictures added in the web app should have their text
+read (RapidOCR, ~60 MB); then the public address, the domain the sign-in is shared on, an admin account and, optionally,
+a MariaDB administrator who creates the databases and users. Then it creates the Python environment, installs the
+packages, writes `config.env`, creates the tables and the admin and installs the service: systemd on Linux when run as
+root, a login item (launchd) on a Mac. Run it again at any time: what `config.env` holds is the default of every
+question. Flags skip the questions (`./setup.sh --help`), e.g.
 
 ```sh
 IONOTE_DB=db.example.lan:3306/ionote:ionote:secret IONOTE_SUITE_DB=db.example.lan:3306/iosuite:iosuite:secret \
@@ -97,14 +99,14 @@ community-scripts. On the Proxmox host, as root:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/ionote/proxmox/ct/ionote.sh)"
 ```
 
-It asks about the app first: where the notes live in MariaDB/MySQL (host, port, database, user, password; the
-defaults are 127.0.0.1, 3306, `notes`, `notes`), where the Shared ioSuite
-database is (host, port, database, user, password; database and user `iosuite` by default), whether pictures added in
-the web app get their text read (RapidOCR), and the admin account; then the framework's own questions (resources,
-network). It creates an unprivileged Debian 13 container (2 CPU, 2 GB, 8 GB disk by default) and runs the app's own
-`setup.sh` inside with those answers: packages, settings, tables, admin, and the `ionote` service on port 8610.
+After the framework's own questions (resources, network) it asks about the app, in the same order as the other
+apps' scripts: where the notes live in MariaDB/MySQL (host, port, database, user, password; database and user `ionote`
+by default), the Shared ioSuite database (database and user `iosuite` by default), the web port (8610), whether pictures
+added in the web app get their text read (RapidOCR), the public address, the sign-in domain, the admin account and
+the optional MariaDB administrator. It creates an unprivileged Debian 13 container (2 CPU, 2 GB, 8 GB disk by default) and runs the app's own
+`setup.sh` inside with those answers: packages, settings, tables, admin, and the `ionote` service.
 For unattended runs set `IONOTE_DB` (`host:port/db:user:pass`), `IONOTE_SUITE_DB`
-(`host:port/db:user:pass`), `IONOTE_FEATURES` (`ocr` or `none`)
+(`host:port/db:user:pass`), `IONOTE_PORT`, `IONOTE_FEATURES` (`ocr` or `none`),
 `IONOTE_ADMIN` (`name:password`, or empty for none yet), `IONOTE_PUBLIC_URL` and `IONOTE_COOKIE_DOMAIN` in the environment. The passwords reach `setup.sh`
 inside the container through its environment (a root-only file pushed in and removed again), not on a command line.
 The setup's output is kept in `/opt/ionote/setup.log`; on failure its last lines are shown and the command to rerun
@@ -127,7 +129,7 @@ name and the same names), or in the environment, which wins. `config.env.example
 
 | Variable | Default | |
 | --- | --- | --- |
-| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | `127.0.0.1` / `3306` / `notes` / `notes` / | the MariaDB/MySQL database (setup.sh writes them) |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | `127.0.0.1` / `3306` / `ionote` / `ionote` / | the MariaDB/MySQL database (setup.sh writes them) |
 | `HOST` / `PORT` | `0.0.0.0` / `8610` | where the server listens (every app of the suite has its own port) |
 | `TLS_CERT_FILE` / `TLS_KEY_FILE` | | HTTPS served directly instead of behind a reverse proxy |
 | `DATA_DIR` | `./data` | what the app writes on its own: the log and the update result |
@@ -280,7 +282,7 @@ Apps that take a JSON configuration and only start local processes (Claude Deskt
 Import and export (the sidebar) › Export downloads every note as Markdown (with front matter: id, dates, tags, source) next to its picture and its files,
 in a directory per folder, plus `notes.json` with everything. Such a zip imports again on any ionote server (Import
 and export › Import): records keep their ids, and a newer copy on the server wins (a zip from another account on the same server comes in as new notes). For backups, back the database up
-(`mariadb-dump --single-transaction notes`): notes, pictures, accounts and settings are all in it.
+(`mariadb-dump --single-transaction ionote`): notes, pictures, accounts and settings are all in it.
 
 ## Tests
 
