@@ -2,6 +2,7 @@
 # the AI model it fetches (a file that can always be fetched again).
 # The AI that reads a page without recipe data (app/ai.py) is llama.cpp, compiled here once, for any processor of
 # the image's kind (not this machine's own), and carried over as a wheel: the compilers stay out of the image.
+# The final stage installs that very wheel (not whatever version is newest on PyPI, which it could not compile).
 FROM python:3.12-slim AS llama
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake git \
     && CMAKE_ARGS="-DGGML_NATIVE=OFF -DLLAVA_BUILD=OFF" pip wheel --no-cache-dir --no-deps -w /wheels "llama-cpp-python>=0.3,<0.4"
@@ -19,7 +20,7 @@ RUN pip install --no-cache-dir /opt/iosuite-shared
 # start into /app/data/models: keep that folder on a volume (docker-compose.yml does)
 RUN --mount=type=bind,from=llama,source=/wheels,target=/wheels \
     apt-get update && apt-get install -y --no-install-recommends libgomp1 tesseract-ocr tesseract-ocr-nld tesseract-ocr-fra tesseract-ocr-deu \
-    && pip install --no-cache-dir -e . && pip install --no-cache-dir --find-links /wheels "llama-cpp-python>=0.3,<0.4" \
+    && pip install --no-cache-dir -e . && pip install --no-cache-dir /wheels/llama_cpp_python-*.whl \
     && mkdir -p /app/data \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin iorecipe && chown -R iorecipe:iorecipe /app
