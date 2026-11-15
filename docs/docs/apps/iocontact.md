@@ -7,7 +7,7 @@ description: ioContact, contacts for the family in the ioThing suite.
 A contact manager for the whole family: a web app, and the standard protocols every mail, contacts and calendar app
 already speaks, so the same contacts show up on phones, in Apple Contacts, Outlook, Thunderbird and anywhere else.
 
-![ioContact with a contact open](../img/iocontact.jpg)
+![ioContact's family tree, drawn from the relations in the address book](../img/iocontact.jpg)
 
 ## What it does
 
