@@ -1,6 +1,6 @@
-# Tests on SQLite and on MariaDB, then builds the container image and pushes it to GitHub's registry (ghcr.io) on
-# every push to main, also tagged v<the suite's version> (shared/iosuite_shared/__init__.py); pull requests only build. The shared accounts go in scratch databases
-# on the same MariaDB (iosuite_shared.testing, IOSUITE_TEST_DB).
+# Tests on MariaDB, then builds the container image and pushes it to GitHub's registry (ghcr.io) on
+# every push to main, also tagged v<the suite's version> (shared/iosuite_shared/__init__.py); pull requests only build. The notes and the shared accounts go in scratch
+# databases on that MariaDB (iosuite_shared.testing, IOSUITE_TEST_DB).
 name: ioNote
 
 on:
@@ -52,13 +52,8 @@ jobs:
           for f in static/app.js static/js/*.js; do node --input-type=module --check < "$f" || exit 1; done; node --check static/sw.js
           for f in *.sh; do sh -n "$f"; done
           bash -n proxmox/ct/ionote.sh proxmox/install/ionote-install.sh
-      - name: Tests on SQLite
+      - name: Tests
         env:
-          IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
-        run: python -m pytest -q -p no:cacheprovider tests
-      - name: Tests on MariaDB
-        env:
-          IONOTE_TEST_DB: mysql
           IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
         run: python -m pytest -q -p no:cacheprovider tests
 

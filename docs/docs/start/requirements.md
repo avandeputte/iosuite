@@ -39,10 +39,9 @@ with a password someone could guess is what to avoid. The installers make the us
 The tables are created on the first start, and later versions bring them up to date by themselves. The database users
 must be allowed to connect from where the app runs (a container has an address of its own).
 
-!!! note "Exceptions"
-    **ioNote** can keep its notes in a SQLite file instead (`--sqlite`, for a quick try); its accounts are still in
-    the Shared ioSuite database. **ioPix** reads your photos from a folder (and digiKam's database, if you use
-    digiKam) and keeps what it builds in its own database and data folder; its Docker stack ships a MariaDB of its own.
+!!! note "The exception"
+    **ioPix** reads your photos from a folder (and digiKam's database, if you use digiKam) and keeps what it builds in
+    its own database and data folder; its Docker stack ships a MariaDB of its own.
 
 ## Somewhere to run the app
 

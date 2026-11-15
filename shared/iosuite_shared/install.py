@@ -135,7 +135,7 @@ def dsn(host, port, name, user, password):
 def shared_answers(cfg):
     """The answers every app shares, from the calling app's config.env: the app database server (its credentials;
     the database name differs per app), the Shared ioSuite database and the cookie domain. An app without a MariaDB
-    of its own (ioNote on SQLite, ioPix set up from its web page) lends the Shared ioSuite database's server and
+    of its own yet (ioPix, before its database is set up from its web page) lends the Shared ioSuite database's server and
     credentials for the companions' databases instead."""
     s_host = cfg.get("IOSUITE_DB_HOST") or cfg.get("DB_HOST") or "127.0.0.1"
     s_port = cfg.get("IOSUITE_DB_PORT") or cfg.get("DB_PORT") or "3306"
@@ -355,7 +355,7 @@ def _clear(folder, keep=()):
 
 
 def _db_key(cfg, default_name=None):
-    """(host, port, database) of an app's own MariaDB database, None when it has none (SQLite, or nothing set)."""
+    """(host, port, database) of an app's own MariaDB database, None when it has none (nothing set yet)."""
     if cfg.get("DB_TYPE", "mysql") not in ("mysql", "mariadb") or not cfg.get("DB_HOST"):
         return None
     name = cfg.get("DB_NAME") or default_name

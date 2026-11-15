@@ -16,18 +16,17 @@ LOG_LINES_MAX = 2000
 
 @server.tool(annotations=READ_ONLY)
 def diagnostics() -> dict:
-    """ionote' own health: version and commit, Python and platform, the database (type, server version,
+    """ionote' own health: version and commit, Python and platform, the database (server version,
     reachable), the stored pictures, text recognition, accounts, and the switches that are on."""
     need_admin()
     s = db.public_settings()
     out = {"version": __version__, "commit": updater.local_commit()[:7], "python": sys.version.split()[0], "platform": platform.platform(),
-           "docker": updater.in_docker(), "database": {k: s[k] for k in ("type", "host", "port", "database", "user") if k in s},
+           "docker": updater.in_docker(), "database": {k: s[k] for k in ("host", "port", "database", "user")},
            "pictures": images.stats(), "ocr": ocr.status(), "accounts": len(users.list_users(config.APP)), "rev": db.current_rev(),
            "require_login": users.require_login(config.APP), "data_dir": str(config.DATA_DIR), "app_url": config.BASE_URL}
-    if s["type"] == "mysql":
-        t = db.test({})
-        out["database"].update({"reachable": t["ok"], "server": t.get("version"), "max_allowed_packet": t.get("maxAllowedPacket"),
-                                "warning": t.get("warning"), "error": t.get("error")})
+    t = db.test({})
+    out["database"].update({"reachable": t["ok"], "server": t.get("version"), "max_allowed_packet": t.get("maxAllowedPacket"),
+                            "warning": t.get("warning"), "error": t.get("error")})
     return {k: v for k, v in out.items() if v is not None}
 
 

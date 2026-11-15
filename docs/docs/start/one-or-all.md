@@ -13,8 +13,7 @@ A single app needs:
 
 - somewhere to run: a Proxmox VE container, a Docker host, or any Linux machine or Mac;
 - a MariaDB or MySQL server with two databases on it: the app's own, and the **Shared ioSuite database** that holds its
-  accounts. The installer can create both for you (give it a database administrator once). ioNote can even keep its
-  notes in a SQLite file instead.
+  accounts. The installer can create both for you (give it a database administrator once).
 
 That's all. A photo app alone is a perfectly good install:
 

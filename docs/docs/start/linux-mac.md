@@ -20,7 +20,7 @@ Replace `iocalendar` with `iopix`, `ionote`, `iostart`, `iocontact`, `iohealth`,
 It needs Python 3.10 or later (ioHealth: 3.11) and git, and asks for:
 
 - the app's database (host, port, database, user, password), tests the connection and creates the database when the
-  user may; ioNote also offers `--sqlite`;
+  user may;
 - the Shared ioSuite database, the same way (database and user `iosuite` by default);
 - a MariaDB / MySQL administrator, optional, to create the databases and users for you;
 - the port (each app's own default), the public address and the sign-in domain (optional), an admin account;
