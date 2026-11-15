@@ -130,7 +130,7 @@ def test_with_somebody_at_the_keyboard_each_app_asks_its_questions(tmp_path, mon
         return 0
 
     monkeypatch.setenv("DB_ADMIN_PASSWORD", "r00t")
-    failed = install.install(["iothings", "iopix"], app, service=True, db_admin="root", photos="/srv/photos", fetcher=fetcher, runner=runner,
+    failed = install.install(["iothings", "iopix"], app, service=True, db_admin="root", photos=str(tmp_path / "photos"), fetcher=fetcher, runner=runner,
                              log=lambda *_: None, ask=True)
     assert failed == []
     e = ran["iothings"]
@@ -144,7 +144,7 @@ def test_with_somebody_at_the_keyboard_each_app_asks_its_questions(tmp_path, mon
     assert seed["PORT"] == "8700" and seed["COOKIE_DOMAIN"] == "example.com" and seed["TZ"] == "Europe/Brussels"
     assert seed["PUBLIC_URL"] == "https://things.example.com"  # made like ioCalendar's
     pix = install.read_env_file(opt / "iopix" / "app" / "config.env")
-    assert pix["DB_NAME"] == "iopix" and pix["DB_TYPE"] == "mysql" and pix["PHOTOS_ROOT"] == "/srv/photos" and pix["PUBLIC_URL"] == "https://pix.example.com"
+    assert pix["DB_NAME"] == "iopix" and pix["DB_TYPE"] == "mysql" and pix["PHOTOS_ROOT"] == str(tmp_path / "photos") and pix["PUBLIC_URL"] == "https://pix.example.com"
     assert "--no-digikam" not in ran["iopix"]["args"]  # its own questions, digiKam's too
 
 
