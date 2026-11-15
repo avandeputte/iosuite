@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir /opt/iosuite-shared \
 ARG COMMIT=unknown
 RUN echo "$COMMIT" > COMMIT
 # the database settings come from the environment (docker-compose.yml): no password is baked into the image
-ENV DB_HOST=db DB_PORT=3306 DB_NAME=money DB_USER=money PORT=8710 PYTHONUNBUFFERED=1
+ENV DB_HOST=db DB_PORT=3306 DB_NAME=iomoney DB_USER=iomoney PORT=8710 PYTHONUNBUFFERED=1
 EXPOSE 8710
 USER iomoney
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8710/api/status', timeout=4)" || exit 1

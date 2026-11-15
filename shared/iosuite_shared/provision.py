@@ -50,8 +50,6 @@ def client_hosts(server, port, client=None, here=None) -> list:
 def plan_sql(cfg, also=(), client=None, here=None):
     """What to run, per server: {(host, port): [(sql, args), ...]}. Pure but for `here` (this machine's address towards
     a remote server), for the tests and for --dry-run."""
-    from iosuite_shared.install import APPS
-
     jobs = {}
 
     def add(host, port, db, user, password, shared=False):
@@ -72,11 +70,10 @@ def plan_sql(cfg, also=(), client=None, here=None):
     s_port = cfg.get("IOSUITE_DB_PORT") or cfg.get("DB_PORT")
     add(s_host, s_port, cfg.get("IOSUITE_DB_NAME") or "iosuite", cfg.get("IOSUITE_DB_USER") or "iosuite", cfg.get("IOSUITE_DB_PASSWORD", ""), shared=True)
     for name in also:
-        a = APPS[name]
         if app_db:
-            add(cfg["DB_HOST"], cfg.get("DB_PORT"), a["db"], cfg["DB_USER"], cfg.get("DB_PASSWORD", ""))
+            add(cfg["DB_HOST"], cfg.get("DB_PORT"), name, cfg["DB_USER"], cfg.get("DB_PASSWORD", ""))
         else:  # the companions use the Shared ioSuite database's server and user (install.shared_answers does the same)
-            add(s_host, s_port, a["db"], cfg.get("IOSUITE_DB_USER") or "iosuite", cfg.get("IOSUITE_DB_PASSWORD", ""), shared=True)
+            add(s_host, s_port, name, cfg.get("IOSUITE_DB_USER") or "iosuite", cfg.get("IOSUITE_DB_PASSWORD", ""), shared=True)
     for stmts in jobs.values():
         stmts.append(("FLUSH PRIVILEGES", None))
     return jobs

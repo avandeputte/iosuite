@@ -45,7 +45,7 @@ ask_app_settings() {
     h=$(whiptail --backtitle "$bt" --inputbox "MariaDB / MySQL host or IP (the health data is kept there)" 9 70 "127.0.0.1" 3>&1 1>&2 2>&3) || exit 1
     p=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
     d=$(whiptail --backtitle "$bt" --inputbox "Database for the health data (created if the user may)" 9 70 "health" 3>&1 1>&2 2>&3) || exit 1
-    u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "health" 3>&1 1>&2 2>&3) || exit 1
+    u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "iohealth" 3>&1 1>&2 2>&3) || exit 1
     w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
     IOHEALTH_DB="$h:$p/$d:$u:$w"
   fi

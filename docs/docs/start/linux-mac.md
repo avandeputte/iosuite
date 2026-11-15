@@ -40,7 +40,7 @@ The flags are the same in every app: `--db`, `--suite-db`, `--admin`, `--port`, 
 command line in `IO<APP>_DB`, `IO<APP>_SUITE_DB`, `IO<APP>_ADMIN` and `IO<APP>_DB_ADMIN`:
 
 ```sh
-IOCONTACT_DB=db.lan:3306/contacts:contacts:secret \
+IOCONTACT_DB=db.lan:3306/iocontact:iocontact:secret \
 IOCONTACT_SUITE_DB=db.lan:3306/iosuite:iosuite:secret \
 IOCONTACT_ADMIN=alex:secret ./setup.sh --yes --service
 ```

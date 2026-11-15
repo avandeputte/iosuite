@@ -42,8 +42,8 @@ ask_app_settings() {
     local h p d u w
     h=$(whiptail --backtitle "$bt" --inputbox "MariaDB / MySQL host or IP (ioBackup keeps its jobs there)" 9 70 "" 3>&1 1>&2 2>&3) || exit 1
     p=$(whiptail --backtitle "$bt" --inputbox "Port" 9 60 "3306" 3>&1 1>&2 2>&3) || exit 1
-    d=$(whiptail --backtitle "$bt" --inputbox "Database (created if the user may)" 9 60 "backup" 3>&1 1>&2 2>&3) || exit 1
-    u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "backup" 3>&1 1>&2 2>&3) || exit 1
+    d=$(whiptail --backtitle "$bt" --inputbox "Database (created if the user may)" 9 60 "iobackup" 3>&1 1>&2 2>&3) || exit 1
+    u=$(whiptail --backtitle "$bt" --inputbox "User" 9 60 "iobackup" 3>&1 1>&2 2>&3) || exit 1
     w=$(whiptail --backtitle "$bt" --passwordbox "Password" 9 60 3>&1 1>&2 2>&3) || exit 1
     IOBACKUP_DB="$h:$p/$d:$u:$w"
   fi

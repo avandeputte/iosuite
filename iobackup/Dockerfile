@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends mariadb-client 
 ARG COMMIT=unknown
 RUN echo "$COMMIT" > COMMIT
 # the database settings come from the environment (docker-compose.yml): no password is baked into the image
-ENV DB_HOST=db DB_PORT=3306 DB_NAME=backup DB_USER=backup PORT=8680 DATA_DIR=/data BACKUP_DIR=/backups PYTHONUNBUFFERED=1
+ENV DB_HOST=db DB_PORT=3306 DB_NAME=iobackup DB_USER=iobackup PORT=8680 DATA_DIR=/data BACKUP_DIR=/backups PYTHONUNBUFFERED=1
 VOLUME ["/data", "/backups"]
 EXPOSE 8680
 USER iobackup

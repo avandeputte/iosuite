@@ -6,7 +6,7 @@ comes here: with the calling app's config.env (`--config FOLDER`) this reads the
 app and hands them to each companion's own setup.sh, which runs unattended (`--yes`):
 
   * the app database server: DB_HOST, DB_PORT, DB_USER and DB_PASSWORD are reused, each app gets its own database
-    name (iostart -> suite, iocalendar -> calendar, ...; the app creates it when the user may);
+    name, the app's own (iostart, iocalendar, ...; the app creates it when the user may);
   * the Shared ioSuite database: IOSUITE_DB_* as they are;
   * the sign-in domain (COOKIE_DOMAIN) and, with `--admin NAME` and ADMIN_PASSWORD in the environment, the admin
     account, made an admin of every companion too (the account already exists in the shared database).
@@ -38,6 +38,8 @@ Adding the app again finds them. Only `--delete-data` (asked apart, default no) 
 deletes its data folder under BASE/<app>; never the Shared ioSuite database (the accounts, their roles and the keys
 stay as they are), never a database another app here uses, never the photos or digiKam's own database (ioPix) or the
 backups (ioBackup): the folders config.env names for them (KEPT) stay wherever they are, inside the app's folder too.
+An app that looks to be running on another machine now (moved there, on the same database: see used_elsewhere)
+keeps its database even with `--delete-data`, and stays in the suite's list of apps.
 The app this runs from is removed by another app that stays; the last app here is not removed.
 
 How the apps are reached (`a` in the list, or `apps --reach ports|one|one-proxy|proxy [--address URL]`) is one answer
@@ -64,29 +66,31 @@ import atexit
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 # the one repository of the suite: a folder per app, the shared library in shared/
 REPO = "avandeputte/iosuite"
-# name -> how to set it up (its folder in the repository has the same name). `db` is the app's default database name; `env` the prefix of the environment
-# variables its setup.sh reads the secrets from (PFX_DB, PFX_SUITE_DB, PFX_ADMIN).
+# name -> how to set it up (its folder in the repository has the same name, and so do its database and its database
+# user by default: iothings). `env` is the prefix of the environment variables its setup.sh reads the secrets from (PFX_DB, PFX_SUITE_DB, PFX_ADMIN).
 APPS = {
-    "iostart": dict(label="ioStart", db="suite", port=8630, env="IOSTART"),
-    "iocalendar": dict(label="ioCalendar", db="calendar", port=8620, env="IOCALENDAR"),
-    "iocontact": dict(label="ioContact", db="contacts", port=8640, env="IOCONTACT"),
-    "ionote": dict(label="ioNote", db="notes", port=8610, env="IONOTE", data=True,
+    "iostart": dict(label="ioStart", port=8630, env="IOSTART"),
+    "iocalendar": dict(label="ioCalendar", port=8620, env="IOCALENDAR"),
+    "iocontact": dict(label="ioContact", port=8640, env="IOCONTACT"),
+    "ionote": dict(label="ioNote", port=8610, env="IONOTE", data=True,
                     extra=["--features", "none"], launchd="net.iothing.ionote.server"),
-    "iohealth": dict(label="ioHealth", db="health", port=8650, env="IOHEALTH"),
-    "iotask": dict(label="ioTask", db="tasks", port=8670, env="IOTASK"),
-    "iodns": dict(label="ioDNS", db="dns", port=8660, env="IODNS"),
-    "iobackup": dict(label="ioBackup", db="backup", port=8680, env="IOBACKUP"),
-    "iorecipe": dict(label="ioRecipe", db="recipe", port=8690, env="IORECIPE"),
-    "iothings": dict(label="ioThings", db="things", port=8700, env="IOTHINGS"),
-    "iomoney": dict(label="ioMoney", db="money", port=8710, env="IOMONEY"),
-    "iopix": dict(label="ioPix", db="iopix", port=8600, env="IOPIX", data=True,
+    "iohealth": dict(label="ioHealth", port=8650, env="IOHEALTH"),
+    "iotask": dict(label="ioTask", port=8670, env="IOTASK"),
+    "iodns": dict(label="ioDNS", port=8660, env="IODNS"),
+    "iobackup": dict(label="ioBackup", port=8680, env="IOBACKUP"),
+    "iorecipe": dict(label="ioRecipe", port=8690, env="IORECIPE"),
+    "iothings": dict(label="ioThings", port=8700, env="IOTHINGS"),
+    "iomoney": dict(label="ioMoney", port=8710, env="IOMONEY"),
+    "iopix": dict(label="ioPix", port=8600, env="IOPIX", data=True,
                   extra=["--no-digikam", "--features", "none"], photos=True, launchd="com.iopix"),
 }
 DEFAULT_PHOTOS = "/library/photos"
@@ -158,8 +162,12 @@ def base_dir(config_dir):
     return d.parent.parent if d.name == "app" else d.parent
 
 
-def plan(names, cfg, base, admin=None, service=None, photos=None, from_app=None):
-    """One entry per app: where it goes, the setup.sh arguments and the environment with the secrets."""
+def plan(names, cfg, base, admin=None, service=None, photos=None, from_app=None, ask=False, db_admin=None):
+    """One entry per app: where it goes, the setup.sh arguments and the environment with the secrets.
+
+    With `ask` (somebody at the keyboard), each app's setup.sh asks its own questions instead (no --yes, no answers
+    on its command line): `seed` holds what the apps already here answered, written where the app's setup.sh takes
+    its defaults from, so each question shows it and Enter confirms it. The app's database is named after the app."""
     ans = shared_answers(cfg)
     a_host, a_port, a_user, a_pw = ans["app_db"]
     out = []
@@ -178,13 +186,66 @@ def plan(names, cfg, base, admin=None, service=None, photos=None, from_app=None)
             args += ["--data", str(Path(base) / n / "data")]
         if a.get("photos"):
             args += ["--photos", photos or DEFAULT_PHOTOS]
-        env = {f"{a['env']}_DB": dsn(a_host, a_port, a["db"], a_user, a_pw), f"{a['env']}_SUITE_DB": ans["suite_db"]}
+        env = {f"{a['env']}_DB": dsn(a_host, a_port, n, a_user, a_pw), f"{a['env']}_SUITE_DB": ans["suite_db"]}
         if admin:
             env[f"{a['env']}_ADMIN"] = f"{admin}:{os.environ.get('ADMIN_PASSWORD', '')}"
         else:
             args.append("--no-admin")
-        out.append(dict(name=n, label=a["label"], target=target, args=args, env=env, port=a["port"]))
+        seed = None
+        if ask:
+            seed = defaults(n, cfg, base, photos=photos)
+            args = ["--also", "none"] + [x for x in ("--service", "--no-service") if x in args]
+            env = {f"{a['env']}_ADMIN": env[f"{a['env']}_ADMIN"]} if admin else {}
+            if db_admin:  # the app's setup.sh creates its database and user, with the names the person answered
+                env[f"{a['env']}_DB_ADMIN"] = f"{db_admin}:{os.environ.get('DB_ADMIN_PASSWORD', '')}"
+        out.append(dict(name=n, label=a["label"], target=target, args=args, env=env, port=a["port"], seed=seed))
     return out
+
+
+def defaults(name, cfg, base, photos=None):
+    """The answers an app's questions start from when it is added beside others: the database server, user and
+    password of the app already here with its own database named after the new app (iothings), the Shared ioSuite
+    database, the sign-in domain, the time zone, the app's usual port and a public address made like the others'."""
+    ans = shared_answers(cfg)
+    a_host, a_port, a_user, a_pw = ans["app_db"]
+    s = re.match(r"^(.*):(\d+)/([^:]*):([^:]*):(.*)$", ans["suite_db"])
+    out = {"DB_HOST": a_host, "DB_PORT": a_port, "DB_NAME": name, "DB_USER": a_user, "DB_PASSWORD": a_pw,
+           "IOSUITE_DB_HOST": s.group(1), "IOSUITE_DB_PORT": s.group(2), "IOSUITE_DB_NAME": s.group(3),
+           "IOSUITE_DB_USER": s.group(4), "IOSUITE_DB_PASSWORD": s.group(5),
+           "PORT": str(APPS[name]["port"]), "PUBLIC_URL": public_url_like_others(name, base),
+           "COOKIE_DOMAIN": ans["cookie_domain"]}
+    if cfg.get("TZ"):
+        out["TZ"] = cfg["TZ"]
+    if name == "iopix":
+        out["DB_TYPE"] = "mysql"
+        out["PHOTOS_ROOT"] = photos or DEFAULT_PHOTOS
+    if APPS[name].get("data"):
+        out["DATA_DIR"] = str(Path(base) / name / "data")
+    return out
+
+
+def public_url_like_others(name, base):
+    """A public address for NAME made the way an app already here has its own: https://calendar.example.com ->
+    https://things.example.com (the app's folder name, or its key when the other uses its key:
+    https://iocalendar.example.com -> https://iothings.example.com), and https://home.example.com/calendar ->
+    https://home.example.com/things. Empty when no app here names itself in its address (the start page's own
+    address says nothing about the others')."""
+    for other in APPS:
+        if other == name:
+            continue
+        url = (read_env_file(Path(base) / other / "app" / "config.env").get("PUBLIC_URL") or "").rstrip("/")
+        if not ADDRESS.match(url):
+            continue
+        scheme, rest = url.split("://", 1)
+        host, _, path = rest.partition("/")
+        label, dot, domain = host.partition(".")
+        words = {other: name, folder_of(other): folder_of(name) or name}
+        last = path.rsplit("/", 1)[-1]
+        if path and last in words:
+            return f"{scheme}://{host}/{path[:len(path) - len(last)]}{words[last]}"
+        if not path and dot and label in words:
+            return f"{scheme}://{words[label]}.{domain}"
+    return ""
 
 
 def prepare_local_databases(entries, cfg, log=print):
@@ -196,15 +257,15 @@ def prepare_local_databases(entries, cfg, log=print):
     if host not in ("127.0.0.1", "localhost", "::1") or not cfg.get("DB_USER") or os.geteuid() != 0 or not shutil.which("mariadb"):
         return
     user = cfg["DB_USER"].replace("'", "''")
-    sql = "".join(f"CREATE DATABASE IF NOT EXISTS `{APPS[e['name']]['db']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\n"
-                  f"GRANT ALL PRIVILEGES ON `{APPS[e['name']]['db']}`.* TO '{user}'@'localhost', '{user}'@'127.0.0.1';\n" for e in entries) + "FLUSH PRIVILEGES;\n"
+    sql = "".join(f"CREATE DATABASE IF NOT EXISTS `{e['name']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\n"
+                  f"GRANT ALL PRIVILEGES ON `{e['name']}`.* TO '{user}'@'localhost', '{user}'@'127.0.0.1';\n" for e in entries) + "FLUSH PRIVILEGES;\n"
     try:
         r = subprocess.run(["mariadb"], input=sql, text=True, capture_output=True, timeout=60)
     except (OSError, subprocess.TimeoutExpired) as exc:
         log(f"  note: could not prepare the databases on the local MariaDB ({exc}); each app creates its own when {cfg['DB_USER']} may")
         return
     if r.returncode == 0:
-        log(f"  local MariaDB: the databases {', '.join(APPS[e['name']]['db'] for e in entries)} belong to {cfg['DB_USER']} too")
+        log(f"  local MariaDB: the databases {', '.join(e['name'] for e in entries)} belong to {cfg['DB_USER']} too")
     else:
         log(f"  note: could not prepare the databases on the local MariaDB ({r.stderr.strip()[:200]}); each app creates its own when {cfg['DB_USER']} may")
 
@@ -254,12 +315,13 @@ def run_setup(entry, log=print):
 
 
 def install(names, config_dir, base=None, admin=None, service=None, photos=None, from_app=None, db_admin=None, fetcher=fetch, runner=run_setup, log=print,
-            reach=None):
+            reach=None, ask=False):
     """Install every app in NAMES; returns the names that failed (empty when all went well). A new app is reached
-    the way the others here are (REACH; `reach`: the way that is about to be set)."""
+    the way the others here are (REACH; `reach`: the way that is about to be set). With `ask`, each app's setup.sh
+    asks its questions, the answers of the apps already here as the defaults (plan)."""
     cfg = read_env_file(Path(config_dir) / "config.env") if config_dir else {}
     base = Path(base) if base else base_dir(config_dir or os.getcwd())
-    entries = plan(names, cfg, base, admin=admin, service=service, photos=photos, from_app=from_app)
+    entries = plan(names, cfg, base, admin=admin, service=service, photos=photos, from_app=from_app, ask=ask, db_admin=db_admin)
     if not entries:
         log("nothing to install")
         return []
@@ -267,14 +329,17 @@ def install(names, config_dir, base=None, admin=None, service=None, photos=None,
     shared = shared_address(base, config_dir) if mode == "proxy" else None
     for e in entries:
         if shared and e["name"] != "iostart":  # the proxy serves one name, a folder per app: this one's folder of it
-            e["args"][e["args"].index("--public-url") + 1] = f"{shared}/{folder_of(e['name'])}"
+            if e["seed"] is not None:
+                e["seed"]["PUBLIC_URL"] = f"{shared}/{folder_of(e['name'])}"
+            else:
+                e["args"][e["args"].index("--public-url") + 1] = f"{shared}/{folder_of(e['name'])}"
     if any(APPS[e["name"]].get("photos") for e in entries):
         p = Path(photos or DEFAULT_PHOTOS)
         if not p.is_dir():
             p.mkdir(parents=True, exist_ok=True)
             log(f"  made the photos folder {p}: mount or copy your photos there (ioPix's Settings can add more folders)")
     fresh = [e for e in entries if not (e["target"] / "config.env").exists()]
-    if db_admin and fresh:  # a MariaDB administrator was given: the companions' databases are made for the app user, wherever the server is
+    if db_admin and fresh and not ask:  # a MariaDB administrator was given: the companions' databases are made for the app user, wherever the server is
         from iosuite_shared import provision
         provision.run(db_admin, os.environ.get("DB_ADMIN_PASSWORD", ""), cfg, also=[e["name"] for e in fresh], log=log)
     else:
@@ -292,7 +357,16 @@ def install(names, config_dir, base=None, admin=None, service=None, photos=None,
             failed.append(e["name"])
             continue
         pre = _local_env(e["name"], {}) if _local_only(mode, e["name"]) else None
-        if pre:  # before it first starts: its setup.sh keeps what config.env already says
+        if e["seed"] is not None:
+            # its questions start from these answers: in config.env.failed, which a first setup takes its defaults
+            # from (and leaves as a first install until it succeeds); ioPix reads them from config.env
+            seed = dict(e["seed"], **(pre or {}))
+            takes = "config.env.failed" in (e["target"] / "setup.sh").read_text(encoding="utf-8", errors="replace")
+            write_env_file(e["target"] / ("config.env.failed" if takes else "config.env"), seed)
+            say(f"{e['label']}'s questions: the answers of the apps already here are the defaults; Enter keeps one")
+            if pre:
+                log(f"  {e['label']} listens on this machine only, like the other apps here ({REACH[mode][0]})")
+        elif pre:  # before it first starts: its setup.sh keeps what config.env already says
             write_env_file(e["target"] / "config.env", pre)
             log(f"  {e['label']} listens on this machine only, like the other apps here ({REACH[mode][0]})")
         rc = runner(e, log=log)
@@ -381,7 +455,7 @@ def removal_plan(name, base, caller_cfg=None, config_dir=None):
     data = Path(cfg.get("DATA_DIR") or (target / "data")).expanduser()
     if not data.is_absolute():
         data = target / data
-    key = _db_key(cfg, a["db"])
+    key = _db_key(cfg, name)
     kept = None
     if key:
         if not IDENT.match(key[2]):
@@ -393,7 +467,7 @@ def removal_plan(name, base, caller_cfg=None, config_dir=None):
                 if other == name:
                     continue
                 ocfg = caller_cfg if other == app_of(config_dir) and caller_cfg is not None else read_env_file(Path(base) / other / "app" / "config.env")
-                if _db_key(ocfg, APPS[other]["db"]) == key:
+                if _db_key(ocfg, other) == key:
                     kept = f"{APPS[other]['label']} uses it too"
                     break
     keep = []
@@ -440,15 +514,88 @@ def forget_app(name, log=print):
         log(f"  note: could not take {APPS[name]['label']} out of the suite's list of apps ({str(exc)[:160]}); a suite admin can, in Settings › Suite › Apps")
 
 
+def _connect(h, o, u, w):
+    import pymysql
+    return pymysql.connect(host=h, port=int(o), user=u, password=w, connect_timeout=10, autocommit=True)
+
+
+def _db_login(p, db_admin=None):
+    """Who talks to the app's database server on a removal: the administrator when one was given, else the app's user."""
+    if db_admin:
+        return db_admin, os.environ.get("DB_ADMIN_PASSWORD", "")
+    return p["cfg"].get("DB_USER", ""), p["cfg"].get("DB_PASSWORD", "")
+
+
+def _my_addresses():
+    """The names and addresses of this machine, as far as it can tell (loopback included)."""
+    out = {"127.0.0.1", "::1", "localhost"}
+    for n in (socket.gethostname, socket.getfqdn):
+        try:
+            out.add(n().lower())
+        except OSError:
+            pass
+    try:
+        out |= {i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None)}
+    except OSError:
+        pass
+    try:  # the address the default route leaves from (nothing is sent)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))
+            out.add(s.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        out |= set(subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5).stdout.split())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return out
+
+
+def used_elsewhere(name, p, db_admin=None, connect=None, mine=None):
+    """Why the app being removed looks to be running on another machine now (moved there), or None. Asked once its
+    service here is stopped, so whatever still uses it is not this machine's:
+
+      * the suite's list of apps (Shared ioSuite database) has it at an address inside the network (internal_url, which
+        each app writes as it starts) that is not one of this machine's: the copy that started last is elsewhere;
+      * its database has connections open (MariaDB's process list; the apps keep a few open while they run).
+
+    Neither sees everything: an app elsewhere that is stopped right now, an internal address on loopback (behind a proxy
+    on its own server, which says nothing about which server), or connections of another database user when the
+    login used here may not see them (MariaDB shows a user its own, and an administrator all of them)."""
+    mine = _my_addresses() if mine is None else mine
+    label = APPS[name]["label"]
+    try:
+        from iosuite_shared import suite
+        r = suite.get(name) or {}
+    except Exception:  # noqa: BLE001 - no Shared ioSuite database to ask: the other signal still counts
+        r = {}
+    url = r.get("internalUrl") or ""
+    host = (urlsplit(url).hostname or "").lower() if url else ""
+    if host and host not in mine:
+        return f"the suite's list of apps has {label} at {url}, which is not this machine"
+    if p.get("db"):
+        h, o, dbname = p["db"]
+        try:
+            conn = (connect or _connect)(h, o, *_db_login(p, db_admin))
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT HOST FROM information_schema.PROCESSLIST WHERE DB = %s AND ID != CONNECTION_ID()", (dbname,))
+                    hosts = sorted({str(row[0] if not isinstance(row, dict) else row["HOST"]).rsplit(":", 1)[0] for row in cur.fetchall()})
+            finally:
+                conn.close()
+        except Exception:  # noqa: BLE001 - the server does not answer this login: nothing to tell
+            hosts = []
+        if hosts:
+            return f"its database {dbname} is in use from {', '.join(hosts)} although {label} is stopped here"
+    return None
+
+
 def drop_database(p, db_admin=None, connect=None, log=print):
     """--delete-data: drop the app's own database, as the administrator when one was given, else as the app's user."""
     host, port, dbname = p["db"]
-    user, password = (db_admin, os.environ.get("DB_ADMIN_PASSWORD", "")) if db_admin else (p["cfg"].get("DB_USER", ""), p["cfg"].get("DB_PASSWORD", ""))
+    user, password = _db_login(p, db_admin)
     try:
-        if connect is None:
-            import pymysql
-            connect = lambda h, o, u, w: pymysql.connect(host=h, port=int(o), user=u, password=w, connect_timeout=10, autocommit=True)  # noqa: E731
-        conn = connect(host, port, user, password)
+        conn = (connect or _connect)(host, port, user, password)
         try:
             with conn.cursor() as cur:
                 cur.execute(f"DROP DATABASE IF EXISTS `{dbname}`")
@@ -471,7 +618,7 @@ def _delegate(other, name, base, delete_data, db_admin):
 
 
 def remove(names, config_dir, base=None, delete_data=False, db_admin=None, stopper=stop_service, forgetter=forget_app, dropper=drop_database,
-           delegate=_delegate, log=print):
+           delegate=_delegate, log=print, checker=None):
     """Remove every app in NAMES from this machine; returns the names where something could not be done.
     The database and the data stay unless DELETE_DATA."""
     cfg = read_env_file(Path(config_dir) / "config.env") if config_dir else {}
@@ -497,7 +644,15 @@ def remove(names, config_dir, base=None, delete_data=False, db_admin=None, stopp
             log(f"  {a['label']} is not installed here: nothing to do")
             continue
         stopper(n, p["target"], log=log)
-        forgetter(n, log=log)
+        # moved to another machine (started there on the same database)? Then it stays in the suite's list and its
+        # database is never dropped from here
+        elsewhere = (checker or used_elsewhere)(n, p, db_admin=db_admin)
+        if elsewhere:
+            log(f"  {a['label']} looks to be running on another machine: {elsewhere}")
+            log("  so it stays in the suite's list of apps" + (" and its database is kept" if delete_data and p["db"] else ""))
+            p["db_kept"] = p["db_kept"] or "it is in use on another machine"
+        else:
+            forgetter(n, log=log)
         # the program files: everything in the app's folder but the data folder and what is never deleted (KEPT)
         kept = [where for _, where in p["keep"]]
         _clear(p["target"], [p["data"]] + kept)
@@ -962,6 +1117,8 @@ def _install_options(p):
     p.add_argument("--photos", default=None, help=f"ioPix: the folder with the photos (default {DEFAULT_PHOTOS})")
     p.add_argument("--from", dest="from_app", default=None, help="the app that is calling (never reinstalled, never removed)")
     p.add_argument("--db-admin", default=None, help="a MariaDB administrator (password from DB_ADMIN_PASSWORD): the companions' databases are created for the app user")
+    p.add_argument("--yes", action="store_true", help="no questions: each app added takes the answers of the apps already here and its own defaults "
+                                                      "(without it, and with somebody at the keyboard, each app's own setup questions are asked)")
 
 
 def main(a):
@@ -970,7 +1127,13 @@ def main(a):
     if a.cmd == "apps":
         return main_apps(a)
     names = parse_apps(a.apps)
-    return _report(install(names, a.config, base=a.into, admin=a.admin, service=a.service, photos=a.photos, from_app=a.from_app, db_admin=a.db_admin), [])
+    return _report(install(names, a.config, base=a.into, admin=a.admin, service=a.service, photos=a.photos, from_app=a.from_app, db_admin=a.db_admin,
+                           ask=_asks(a)), [])
+
+
+def _asks(a):
+    """Whether each app added asks its own setup questions: somebody is at the keyboard and --yes was not given."""
+    return not a.yes and sys.stdin.isatty()
 
 
 def _report(not_installed, not_removed):
@@ -1024,7 +1187,7 @@ def main_apps(a):
     if service is None and own and Path(f"/etc/systemd/system/{own}.service").is_file():
         service = True  # the app this runs from is a service: so are the ones added beside it
     not_installed = install(add, a.config, base=base, admin=a.admin, service=service, photos=a.photos,
-                            from_app=a.from_app or app_of(a.config), db_admin=a.db_admin, reach=reach.get("mode")) if add else []
+                            from_app=a.from_app or app_of(a.config), db_admin=a.db_admin, reach=reach.get("mode"), ask=_asks(a)) if add else []
     not_redone = reconfigure(redo, a.config, base=base) if redo else []
     reached = set_reach(reach["mode"], a.config, base=base, address=reach.get("address")) if reach.get("mode") else True
     if own in rem:  # last: another app that is here removes this one

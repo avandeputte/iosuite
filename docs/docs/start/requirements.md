@@ -24,9 +24,9 @@ is used once and not written anywhere. Leave it empty when the databases exist a
 To make them yourself instead:
 
 ```sql
-CREATE DATABASE calendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'calendar'@'app-host' IDENTIFIED BY 'a-good-password';
-GRANT ALL ON calendar.* TO 'calendar'@'app-host';
+CREATE DATABASE iocalendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iocalendar'@'app-host' IDENTIFIED BY 'a-good-password';
+GRANT ALL ON iocalendar.* TO 'iocalendar'@'app-host';
 
 CREATE DATABASE iosuite CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER 'iosuite'@'app-host' IDENTIFIED BY 'another-good-password';

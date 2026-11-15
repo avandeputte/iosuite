@@ -1,6 +1,6 @@
 """The files every app of the suite keeps alike, made from the templates in this folder: setup.sh, run.sh and the app's
 CI workflow (.github/workflows/<app>.yml). A template names the app with @@NAME@@ (iocalendar), @@LABEL@@
-(ioCalendar), @@UP@@ (IOCALENDAR), @@DB@@ (its database and user) and @@PORT@@, all from the suite's list of apps
+(ioCalendar), @@UP@@ (IOCALENDAR), @@DB@@ (its database and user: the app's name too) and @@PORT@@, all from the suite's list of apps
 (APPS in iosuite_shared/install.py), and keeps room for what is the app's own in blocks:
 
     # >>> own: questions
@@ -51,7 +51,7 @@ def own_blocks(text: str) -> dict:
 def render(template: str, app: str, a: dict, current: str) -> str:
     mine = own_blocks(current)
     out = (template.replace("@@NAME@@", app).replace("@@LABEL@@", a["label"]).replace("@@UP@@", a["env"])
-           .replace("@@DB@@", a["db"]).replace("@@PORT@@", str(a["port"])))
+           .replace("@@DB@@", app).replace("@@PORT@@", str(a["port"])))
     return BLOCK.sub(lambda m: f"{m.group(1)}# >>> own: {m.group(2)}\n{mine.get(m.group(2), m.group(3))}{m.group(1)}# <<< own: {m.group(2)}\n", out)
 
 

@@ -15,8 +15,8 @@ services:
       TZ: America/New_York            # schedules run in this time zone
       DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
       DB_PORT: "3306"
-      DB_NAME: backup
-      DB_USER: backup
+      DB_NAME: iobackup
+      DB_USER: iobackup
       DB_PASSWORD: change-me          # CHANGE ME
       # the Shared ioSuite database: accounts and suite-wide settings (the same one every app of the suite uses)
       # IOSUITE_DB_HOST: db.example.lan   # default: DB_HOST

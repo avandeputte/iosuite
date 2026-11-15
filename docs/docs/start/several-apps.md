@@ -86,18 +86,34 @@ takes the lists as flags:
     Or tick them in the installer's checklist. ioPix's installer offers all the others; theirs leave out ioPix, whose
     installer is the one that mounts the photo library.
 
-The questions every app shares are asked once: the database server (each app gets its own database on it, so the
-database user needs rights on those names too, or give a database administrator), the Shared ioSuite database, the
-sign-in domain and the admin. Each companion is fetched from GitHub into `/opt/<app>/app`, installed by its own
-`setup.sh`, and gets its own service on its usual port. Afterwards each app updates itself as always.
+Each app you add asks its own setup questions, one by one, with the answers of the apps already here as the
+defaults, so Enter confirms each: the database server, user and password of the others with a database of its own
+named after the app (`iothings` for ioThings), the Shared ioSuite database, the port, a public address made like the
+others' (`https://calendar.example.com` gives `https://things.example.com`), the sign-in domain, and its own questions.
+The database user needs rights on the new database too, or give a database administrator. With `--yes` (or without
+anybody at the keyboard, as the Proxmox installers run it) every app takes those defaults without asking. Each
+companion is fetched from GitHub into `/opt/<app>/app`, installed by its own `setup.sh`, and gets its own service.
+Afterwards each app updates itself as always.
 
-ioPix installed this way starts without digiKam and without AI features; run its `setup.sh` again to add them.
+ioPix added with `--yes` starts without digiKam and without AI features; run its `setup.sh` again to add them.
 
 ## An app on another machine
 
 Install the new app on its own, anywhere, and answer the Shared ioSuite database question with the one your other
 apps use. That's all it takes for the accounts to be shared. To have one sign-in, give every app the same
 `COOKIE_DOMAIN` (see [Reverse proxy and HTTPS](../run/reverse-proxy.md)).
+
+### Moving an app to another machine
+
+1. Stop the app on the old machine.
+2. Install it on the new one and answer the database questions with its existing database (the same name, user and
+   password as the old `config.env`). Nothing is deleted or set up again: the tables that are there stay as they are,
+   and only what a newer version adds is added. ioPix also needs its photos folder on the new machine.
+3. Remove it from the old machine. Removing keeps the database anyway; and should you answer `DELETE`, the installer
+   still keeps a database that the app on the new machine uses. It can tell when the suite's list of apps has the app
+   at another machine's address (each app writes its address there as it starts), or when the database has
+   connections open from elsewhere. It cannot tell while the app on the new machine is stopped and the list still
+   names the old one, so answer the delete question only for an app you are taking out of the suite for good.
 
 ## Docker
 

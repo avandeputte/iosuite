@@ -32,9 +32,9 @@ ioTask needs Python 3.10+ and a MariaDB or MySQL database. Give it its own datab
 and user, for example:
 
 ```sql
-CREATE DATABASE tasks CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'tasks'@'app-host' IDENTIFIED BY 'a-long-random-password';
-GRANT ALL ON tasks.* TO 'tasks'@'app-host';
+CREATE DATABASE iotask CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iotask'@'app-host' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL ON iotask.* TO 'iotask'@'app-host';
 ```
 
 `app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)
@@ -72,9 +72,10 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite/iotask
 
 Its last step is the list of the suite's apps on this machine: tick one to add it, untick one to remove it (its database and data stay), `r` and its number to ask its questions again; `./setup.sh --apps` shows only that list, and the [one-line installer](../README.md#install) does the same from anywhere. Adding (flag `--also iocalendar,ionote`, `--also all`; `--remove` and `--reconfigure` take lists too; `IOTASK_ALSO` in the environment), puts
 other apps of the suite in this same machine, beside ioTask (`/opt/iocalendar/app` next to `/opt/iotask/app`),
-without asking the shared questions again: the same database server (each app gets its own database: `suite`,
-`calendar`, `contacts`, `notes`, `health`, `iopix`, `tasks`; the user needs rights on those names too), the same Shared ioSuite
-database, sign-in domain and admin (`iosuite-shared install`, from the shared library). Each app keeps its usual port
+each asking its own setup questions with the answers of the apps already here as the defaults (Enter keeps
+one; `--yes` takes them all): the same database server with a database of its own named after the app (`iostart`,
+`iocalendar`, `iothings`, ...; the user needs rights on those names too, or give a MariaDB administrator), the same Shared ioSuite
+database, sign-in domain and admin, a public address made like the others' (`iosuite-shared install`, from the shared library). Each app keeps its usual port
 and updates itself as always. The Proxmox installer offers the same as a checklist, for one container with several apps.
 
 The databases and users need not exist beforehand: give a MariaDB / MySQL administrator (the question after the
@@ -83,7 +84,7 @@ the app's database and user, the Shared ioSuite database and user and, with othe
 databases too, with the passwords you answered (`iosuite-shared provision`). Nothing is dropped, and the administrator's
 password is used once and not written anywhere.
 
-`setup.sh` offers 127.0.0.1, database `tasks`, user `tasks`, password `tasks` as the defaults; its flags
+`setup.sh` offers 127.0.0.1, database `iotask`, user `iotask`, password `iotask` as the defaults; its flags
 (`--db`, `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in
 every app of the suite. `python -m app.cli import LIST-ID FILE.ics` and `check` work from a shell;
 accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app iotask` (password from
@@ -95,7 +96,7 @@ accounts are the suite's: `.venv/bin/iosuite-shared --config . admin NAME --app 
 
 | Setting | Meaning |
 | --- | --- |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`tasks`) |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`iotask`) |
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`, on `DB_HOST` unless set): accounts, passwords, sessions, app passwords, roles and suite-wide settings, shared by every app of the suite |
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `calendar.example.com`, signed in at `tasks.example.com` too |
 | `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8670; every app of the suite has its own port) |

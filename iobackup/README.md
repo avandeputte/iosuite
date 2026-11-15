@@ -58,7 +58,7 @@ python3 -m app.offline restore Nightly-20261103-020000.mdbk.tar --db notes --sql
 
 The `mysql` system database is not dumped; users, roles and grants are exported logically instead, which is what moves
 cleanly between versions and servers. Server settings (`my.cnf`), plugins and binary logs are not part of a backup.
-ioBackup's own settings live in its database (`backup`): back that up too, with any job on the same server.
+ioBackup's own settings live in its database (`iobackup`): back that up too, with any job on the same server.
 
 ## Galera
 
@@ -91,9 +91,9 @@ Uploads are resumable and retried; a restore from Drive downloads the backup fir
 For backups:
 
 ```sql
-CREATE USER 'backup'@'app-host' IDENTIFIED BY '...';
-GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES, SHOW DATABASES ON *.* TO 'backup'@'app-host';
--- Galera desync also needs: GRANT SUPER ON *.* TO 'backup'@'app-host';
+CREATE USER 'iobackup'@'app-host' IDENTIFIED BY '...';
+GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES, SHOW DATABASES ON *.* TO 'iobackup'@'app-host';
+-- Galera desync also needs: GRANT SUPER ON *.* TO 'iobackup'@'app-host';
 ```
 
 `app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)
@@ -108,9 +108,9 @@ ioBackup needs Python 3.10+, the MariaDB client programs (`mariadb-dump`, `maria
 database for its own settings. Give it its own database and user, for example:
 
 ```sql
-CREATE DATABASE backup CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'backup'@'app-host' IDENTIFIED BY 'a-long-random-password';
-GRANT ALL ON backup.* TO 'backup'@'app-host';
+CREATE DATABASE iobackup CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iobackup'@'app-host' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL ON iobackup.* TO 'iobackup'@'app-host';
 ```
 
 The accounts and the suite-wide settings live in the Shared ioSuite database (`iosuite`, user `iosuite`; the one every

@@ -16,8 +16,8 @@ services:
       TZ: America/New_York
       DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
       DB_PORT: "3306"
-      DB_NAME: contacts
-      DB_USER: contacts
+      DB_NAME: iocontact
+      DB_USER: iocontact
       DB_PASSWORD: change-me          # CHANGE ME
       # the Shared ioSuite database (accounts, sessions and settings shared by every app of the suite); by default on DB_HOST
       IOSUITE_DB_NAME: iosuite

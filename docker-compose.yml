@@ -69,7 +69,7 @@ services:
     ports: ["8630:8630"]
     environment:
       <<: *shared
-      DB_NAME: suite
+      DB_NAME: iostart
       # PUBLIC_URL: https://home.example.com
       # INTERNAL_URL: http://192.168.1.151:8630   # this host's LAN address and the port, for the suite's list of apps
 
@@ -80,7 +80,7 @@ services:
     ports: ["8620:8620"]                 # web app, CalDAV (/dav/), REST API, subscription links (/ics/)
     environment:
       <<: *shared
-      DB_NAME: calendar
+      DB_NAME: iocalendar
       # PUBLIC_URL: https://calendar.example.com
       # INTERNAL_URL: http://192.168.1.151:8620   # this host's LAN address and the port, for the suite's list of apps
 
@@ -91,7 +91,7 @@ services:
     ports: ["8670:8670"]                 # web app, CalDAV for reminders apps (/dav/), REST API, MCP (/mcp)
     environment:
       <<: *shared
-      DB_NAME: tasks
+      DB_NAME: iotask
       # PUBLIC_URL: https://tasks.example.com
       # INTERNAL_URL: http://192.168.1.151:8670   # this host's LAN address and the port, for the suite's list of apps
 
@@ -102,7 +102,7 @@ services:
     ports: ["8690:8690"]                 # web app, REST API, MCP (/mcp)
     environment:
       <<: *shared
-      DB_NAME: recipe
+      DB_NAME: iorecipe
       # PUBLIC_URL: https://recipes.example.com
       # INTERNAL_URL: http://192.168.1.151:8690   # this host's LAN address and the port, for the suite's list of apps
 
@@ -113,7 +113,7 @@ services:
     ports: ["8700:8700"]                 # web app, REST API, MCP (/mcp)
     environment:
       <<: *shared
-      DB_NAME: things
+      DB_NAME: iothings
       # PUBLIC_URL: https://things.example.com
       # INTERNAL_URL: http://192.168.1.151:8700   # this host's LAN address and the port, for the suite's list of apps
   iomoney:
@@ -123,7 +123,7 @@ services:
     ports: ["8710:8710"]                 # web app, REST API, MCP (/mcp)
     environment:
       <<: *shared
-      DB_NAME: money
+      DB_NAME: iomoney
       # PUBLIC_URL: https://money.example.com
       # INTERNAL_URL: http://192.168.1.151:8710   # this host's LAN address and the port, for the suite's list of apps
 
@@ -136,7 +136,7 @@ services:
       - "389:3890"                       # LDAP directory for mail apps (read-only); drop it when not needed
     environment:
       <<: *shared
-      DB_NAME: contacts
+      DB_NAME: iocontact
       # PUBLIC_URL: https://contacts.example.com
       # INTERNAL_URL: http://192.168.1.151:8640   # this host's LAN address and the port, for the suite's list of apps
 
@@ -149,7 +149,7 @@ services:
       - ionote-data:/data               # the session secret and the log; the notes are in the database
     environment:
       <<: *shared
-      DB_NAME: notes
+      DB_NAME: ionote
       # PUBLIC_URL: https://notes.example.com
       # INTERNAL_URL: http://192.168.1.151:8610   # this host's LAN address and the port, for the suite's list of apps
 
@@ -160,7 +160,7 @@ services:
     ports: ["8650:8650"]                 # the iPhone app uploads here; the web app is on the same port
     environment:
       <<: *shared
-      DB_NAME: health
+      DB_NAME: iohealth
       # PUBLIC_URL: https://health.example.com
       # INTERNAL_URL: http://192.168.1.151:8650   # this host's LAN address and the port, for the suite's list of apps
 
@@ -192,25 +192,25 @@ configs:
       CREATE USER IF NOT EXISTS 'iosuite'@'%' IDENTIFIED BY '$$SUITE_DB_PASSWORD';
       CREATE DATABASE IF NOT EXISTS iosuite CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       GRANT ALL PRIVILEGES ON iosuite.* TO 'iosuite'@'%';
-      CREATE DATABASE IF NOT EXISTS suite CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE DATABASE IF NOT EXISTS calendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE DATABASE IF NOT EXISTS tasks CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE DATABASE IF NOT EXISTS recipe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE DATABASE IF NOT EXISTS things CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE DATABASE IF NOT EXISTS money CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE DATABASE IF NOT EXISTS contacts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE DATABASE IF NOT EXISTS notes CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      CREATE DATABASE IF NOT EXISTS health CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS iostart CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS iocalendar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS iotask CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS iorecipe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS iothings CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS iomoney CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS iocontact CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS ionote CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS iohealth CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS iopix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-      GRANT ALL PRIVILEGES ON suite.* TO 'suite'@'%';
-      GRANT ALL PRIVILEGES ON calendar.* TO 'suite'@'%';
-      GRANT ALL PRIVILEGES ON tasks.* TO 'suite'@'%';
-      GRANT ALL PRIVILEGES ON recipe.* TO 'suite'@'%';
-      GRANT ALL PRIVILEGES ON things.* TO 'suite'@'%';
-      GRANT ALL PRIVILEGES ON money.* TO 'suite'@'%';
-      GRANT ALL PRIVILEGES ON contacts.* TO 'suite'@'%';
-      GRANT ALL PRIVILEGES ON notes.* TO 'suite'@'%';
-      GRANT ALL PRIVILEGES ON health.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON iostart.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON iocalendar.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON iotask.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON iorecipe.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON iothings.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON iomoney.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON iocontact.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON ionote.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON iohealth.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON iopix.* TO 'suite'@'%';
       FLUSH PRIVILEGES;
       SQL

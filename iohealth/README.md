@@ -118,7 +118,7 @@ there). Update later with `docker compose pull && docker compose up -d`.
 ### Docker: with plain `docker run`
 ```sh
 docker run -d --name iohealth --restart unless-stopped -p 8650:8650 \
-  -e DB_HOST=db.example.lan -e DB_USER=health -e DB_PASSWORD=change-me -e DB_NAME=health \
+  -e DB_HOST=db.example.lan -e DB_USER=iohealth -e DB_PASSWORD=change-me -e DB_NAME=iohealth \
   -e IOSUITE_DB_NAME=iosuite -e IOSUITE_DB_USER=iosuite -e IOSUITE_DB_PASSWORD=change-me \
   ghcr.io/avandeputte/iosuite/iohealth:latest
 docker logs -f iohealth
@@ -136,9 +136,10 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite/iohealth
 
 Its last step is the list of the suite's apps on this machine: tick one to add it, untick one to remove it (its database and data stay), `r` and its number to ask its questions again; `./setup.sh --apps` shows only that list, and the [one-line installer](../README.md#install) does the same from anywhere. Adding (flag `--also iocalendar,ionote`, `--also all`; `--remove` and `--reconfigure` take lists too; `IOHEALTH_ALSO` in the environment), puts
 other apps of the suite in this same machine, beside ioHealth (`/opt/iocalendar/app` next to `/opt/iohealth/app`),
-without asking the shared questions again: the same database server (each app gets its own database: `suite`,
-`calendar`, `contacts`, `notes`, `health`, `iopix`; the user needs rights on those names too), the same Shared ioSuite
-database, sign-in domain and admin (`iosuite-shared install`, from the shared library). Each app keeps its usual port
+each asking its own setup questions with the answers of the apps already here as the defaults (Enter keeps
+one; `--yes` takes them all): the same database server with a database of its own named after the app (`iostart`,
+`iocalendar`, `iothings`, ...; the user needs rights on those names too, or give a MariaDB administrator), the same Shared ioSuite
+database, sign-in domain and admin, a public address made like the others' (`iosuite-shared install`, from the shared library). Each app keeps its usual port
 and updates itself as always. The Proxmox installer offers the same as a checklist, for one container with several apps.
 
 The databases and users need not exist beforehand: give a MariaDB / MySQL administrator (the question after the
@@ -165,7 +166,7 @@ for the important ones, and `config.env.example` lists them all) or in the envir
 | `DB_HOST` | yes | MariaDB host name or IP |
 | `DB_PORT` | no | default `3306` |
 | `DB_USER`, `DB_PASSWORD` | yes | a user that may create tables in `DB_NAME` (and the database itself, ideally) |
-| `DB_NAME` | no | default `health` |
+| `DB_NAME` | no | default `iohealth` |
 | `IOSUITE_DB_HOST`, `IOSUITE_DB_PORT` | no | the server with the Shared ioSuite database; default: the same as `DB_HOST` / `DB_PORT` |
 | `IOSUITE_DB_NAME`, `IOSUITE_DB_USER`, `IOSUITE_DB_PASSWORD` | yes | the Shared ioSuite database (accounts and suite-wide settings; name and user `iosuite` by default) and a user that may create tables in it |
 | `PUBLIC_URL` | no | the address people and the other apps reach ioHealth at (`https://health.example.com`); empty: the best address it is reached at |

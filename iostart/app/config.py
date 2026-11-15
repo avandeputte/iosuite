@@ -18,7 +18,7 @@ ROOT = APP_DIR
 # the app's own database (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD; no default password). The Shared ioSuite database
 # (IOSUITE_DB_*: accounts, sessions, app passwords, roles, suite-wide settings and the list of apps) is read by
 # iosuite_shared itself, on the same server unless told otherwise.
-_db = shared.own_db("suite")
+_db = shared.own_db("iostart")
 DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD = _db["host"], _db["port"], _db["database"], _db["user"], _db["password"]
 
 # where the apps are: each registers itself in the suite's list in the Shared ioSuite database (see app/apps.py)

@@ -15,8 +15,8 @@ services:
       TZ: America/New_York            # the time zone the log and dates use
       DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
       DB_PORT: "3306"
-      DB_NAME: money
-      DB_USER: money
+      DB_NAME: iomoney
+      DB_USER: iomoney
       DB_PASSWORD: change-me          # CHANGE ME
       # the Shared ioSuite database: accounts and suite-wide settings (the same one every app of the suite uses)
       # IOSUITE_DB_HOST: db.example.lan   # default: DB_HOST

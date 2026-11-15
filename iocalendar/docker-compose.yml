@@ -15,8 +15,8 @@ services:
       TZ: America/New_York            # the family's time zone, for times written without one
       DB_HOST: db.example.lan         # CHANGE ME: your MariaDB host
       DB_PORT: "3306"
-      DB_NAME: calendar
-      DB_USER: calendar
+      DB_NAME: iocalendar
+      DB_USER: iocalendar
       DB_PASSWORD: change-me          # CHANGE ME
       # the Shared ioSuite database: accounts and suite-wide settings (the same one every app of the suite uses)
       # IOSUITE_DB_HOST: db.example.lan   # default: DB_HOST

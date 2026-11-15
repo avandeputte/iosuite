@@ -21,9 +21,9 @@ A self-hosted contact manager: a web app for the whole family, and the standard 
 ioContact needs Python 3.10+ and a MariaDB or MySQL database. Give it its own database and user, for example:
 
 ```sql
-CREATE DATABASE contacts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'contacts'@'app-host' IDENTIFIED BY 'a-good-password';
-GRANT ALL ON contacts.* TO 'contacts'@'app-host';
+CREATE DATABASE iocontact CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iocontact'@'app-host' IDENTIFIED BY 'a-good-password';
+GRANT ALL ON iocontact.* TO 'iocontact'@'app-host';
 ```
 
 `app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)
@@ -60,9 +60,10 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite/iocontact
 
 Its last step is the list of the suite's apps on this machine: tick one to add it, untick one to remove it (its database and data stay), `r` and its number to ask its questions again; `./setup.sh --apps` shows only that list, and the [one-line installer](../README.md#install) does the same from anywhere. Adding (flag `--also iocalendar,ionote`, `--also all`; `--remove` and `--reconfigure` take lists too; `IOCONTACT_ALSO` in the environment), puts
 other apps of the suite in this same machine, beside ioContact (`/opt/iocalendar/app` next to `/opt/iocontact/app`),
-without asking the shared questions again: the same database server (each app gets its own database: `suite`,
-`calendar`, `contacts`, `notes`, `health`, `iopix`; the user needs rights on those names too), the same Shared ioSuite
-database, sign-in domain and admin (`iosuite-shared install`, from the shared library). Each app keeps its usual port
+each asking its own setup questions with the answers of the apps already here as the defaults (Enter keeps
+one; `--yes` takes them all): the same database server with a database of its own named after the app (`iostart`,
+`iocalendar`, `iothings`, ...; the user needs rights on those names too, or give a MariaDB administrator), the same Shared ioSuite
+database, sign-in domain and admin, a public address made like the others' (`iosuite-shared install`, from the shared library). Each app keeps its usual port
 and updates itself as always. The Proxmox installer offers the same as a checklist, for one container with several apps.
 
 The databases and users need not exist beforehand: give a MariaDB / MySQL administrator (the question after the

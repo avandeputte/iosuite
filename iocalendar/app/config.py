@@ -13,7 +13,7 @@ env, env_flag, env_int = shared.env, shared.env_flag, shared.env_int
 globals().update(shared.standard(APP, APP_DIR))
 
 # the app's own database (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD; no default password)
-_db = shared.own_db("calendar")
+_db = shared.own_db("iocalendar")
 DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD = _db["host"], _db["port"], _db["database"], _db["user"], _db["password"]
 
 # the time zone new events and all-day feeds default to (the server's own when empty)

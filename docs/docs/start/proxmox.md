@@ -46,7 +46,7 @@ passwords reach `setup.sh` through its environment, never on a command line. The
 Every question has an environment variable, named after the app, for example for ioCalendar:
 
 ```sh
-IOCALENDAR_DB=db.lan:3306/calendar:calendar:secret \
+IOCALENDAR_DB=db.lan:3306/iocalendar:iocalendar:secret \
 IOCALENDAR_SUITE_DB=db.lan:3306/iosuite:iosuite:secret \
 IOCALENDAR_ADMIN=alex:secret IOCALENDAR_TIMEZONE=Europe/Brussels \
 IOCALENDAR_ALSO=none \

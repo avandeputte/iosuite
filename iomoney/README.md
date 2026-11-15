@@ -70,9 +70,9 @@ network, then Sync now.
 ioMoney needs Python 3.10+ and a MariaDB or MySQL database. Give it its own database and user, for example:
 
 ```sql
-CREATE DATABASE money CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'money'@'app-host' IDENTIFIED BY 'a-long-random-password';
-GRANT ALL ON money.* TO 'money'@'app-host';
+CREATE DATABASE iomoney CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iomoney'@'app-host' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL ON iomoney.* TO 'iomoney'@'app-host';
 ```
 
 `app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine). The accounts and the
@@ -123,7 +123,7 @@ which wins:
 
 | Setting | Meaning |
 | --- | --- |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`money`) |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`iomoney`) |
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`, on `DB_HOST` unless set) |
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`) |
 | `HOST`, `PORT` | where the server listens (all addresses, 8710) |

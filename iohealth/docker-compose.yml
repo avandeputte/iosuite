@@ -23,8 +23,8 @@ services:
       # --- The health data: MariaDB / MySQL (created on first start if the user may; tables are always created/migrated)
       DB_HOST: db.example.lan                     # CHANGE ME: your MariaDB host or IP
       DB_PORT: "3306"
-      DB_NAME: health
-      DB_USER: health
+      DB_NAME: iohealth
+      DB_USER: iohealth
       DB_PASSWORD: change-me                      # CHANGE ME
       # --- The Shared ioSuite database: accounts, sessions and suite-wide settings, shared with the other ioThing apps
       # (same server as DB_HOST / DB_PORT unless IOSUITE_DB_HOST / IOSUITE_DB_PORT are set)

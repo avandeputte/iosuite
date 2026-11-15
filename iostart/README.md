@@ -141,9 +141,9 @@ ioStart needs Python 3.10+ and a MariaDB or MySQL database. Give it its own data
 and user, for example:
 
 ```sql
-CREATE DATABASE suite CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'suite'@'app-host' IDENTIFIED BY 'a-long-random-password';
-GRANT ALL ON suite.* TO 'suite'@'app-host';
+CREATE DATABASE iostart CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'iostart'@'app-host' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL ON iostart.* TO 'iostart'@'app-host';
 ```
 
 `app-host` is the machine the app runs on (`localhost` when MariaDB is on the same machine); a user for any host (`'%'`)
@@ -195,7 +195,7 @@ git clone https://github.com/avandeputte/iosuite && cd iosuite/iostart
 ./update.sh         # later: the latest code, same settings
 ```
 
-`setup.sh` offers 127.0.0.1, database `suite`, user `suite`, password `suite` as the defaults; its flags (`--db`,
+`setup.sh` offers 127.0.0.1, database `iostart`, user `iostart`, password `iostart` as the defaults; its flags (`--db`,
 `--suite-db`, `--admin`, `--port`, `--public-url`, `--cookie-domain`, `--service`, `--yes`) are the same in every app of
 the suite. Its last question, "Also install …?" (flag `--also iopix,ionote`, `--also all`), puts other apps of the
 suite in this same machine, beside ioStart (`/opt/iocalendar/app` next to `/opt/iostart/app`), without asking the
@@ -216,7 +216,7 @@ password is used once and not written anywhere.
 
 | Setting | Meaning |
 | --- | --- |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`suite`) |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MariaDB / MySQL database (`iostart`) |
 | `IOSUITE_DB_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | the Shared ioSuite database (`iosuite`, on `DB_HOST` unless set): accounts, passwords, sessions, app passwords and roles, the suite-wide settings and the list of apps, shared with every io app |
 | `COOKIE_DOMAIN` | the domain the session cookie is shared on (`example.com`): signed in at `home.example.com`, signed in at `photos.example.com` too |
 | `HOST`, `PORT` | where the server listens (`0.0.0.0`, 8630; every app of the suite has its own port) |

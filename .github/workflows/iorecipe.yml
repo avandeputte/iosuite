@@ -66,7 +66,7 @@ jobs:
           # >>> own: checks
           # <<< own: checks
       - name: Tests
-        # scratch databases recipe_test and recipe_test_auth on the service (iosuite_shared.testing)
+        # scratch databases iorecipe_test and iorecipe_test_auth on the service (iosuite_shared.testing)
         env:
           IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
         run: python -m pytest -q -p no:cacheprovider tests

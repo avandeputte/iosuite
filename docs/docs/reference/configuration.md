@@ -14,8 +14,8 @@ container's, a service's) win over the file. `config.env` holds passwords: keep 
 # the app's own database
 DB_HOST=db.example.lan
 DB_PORT=3306
-DB_NAME=calendar
-DB_USER=calendar
+DB_NAME=iocalendar
+DB_USER=iocalendar
 DB_PASSWORD=…
 
 # the Shared ioSuite database (same server as DB_HOST / DB_PORT unless set)

@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -e . \
 ARG COMMIT=unknown
 RUN echo "$COMMIT" > COMMIT
 # the database settings come from the environment (docker-compose.yml): no password is baked into the image
-ENV DB_HOST=db DB_PORT=3306 DB_NAME=tasks DB_USER=tasks PORT=8670 PYTHONUNBUFFERED=1
+ENV DB_HOST=db DB_PORT=3306 DB_NAME=iotask DB_USER=iotask PORT=8670 PYTHONUNBUFFERED=1
 EXPOSE 8670
 USER iotask
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8670/api/status', timeout=4)" || exit 1
