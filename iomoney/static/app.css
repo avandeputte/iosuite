@@ -316,6 +316,10 @@ a.thing:hover { box-shadow: var(--shadow); }
 .thing .val { font-size: 26px; font-weight: 600; }
 .kvs { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: var(--fs-m); }
 .kvs > span:nth-child(odd) { color: var(--fg2); }
+.kvs.info > span { align-self: center; min-width: 0; overflow-wrap: anywhere; }
+.secret { display: inline-flex; align-items: center; gap: 2px; }
+.secret .iconbtn { width: 28px; height: 28px; }
+.pre { white-space: pre-line; }
 .linked { margin-top: 8px; }
 .note { padding: 10px 14px; border-radius: var(--r-m); background: var(--accent-bg); color: var(--accent); margin-bottom: 14px; font-size: var(--fs-m); }
 .note.bad { background: color-mix(in srgb, var(--danger) var(--mix), transparent); color: var(--danger); }

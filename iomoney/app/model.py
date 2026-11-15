@@ -53,6 +53,10 @@ CENT = Decimal("0.01")
 MAX_AMOUNT = Decimal("999999999999.99")
 DETAIL_FIELDS = {"address": 255, "year": 4, "make": 64, "model": 64, "vin": 32, "mileage": 12, "boughtOn": 10,
                  "boughtFor": 20, "yearlyRate": 8, "notes": 2000}
+# what is kept to deal with an account's bank (mny_account_info), and how long each may be
+INFO_FIELDS = {"accountNumber": 64, "routingNumber": 32, "iban": 42, "swift": 11, "phone": 40, "phoneAbroad": 40,
+               "website": 255, "email": 255, "address": 1000, "username": 128, "openedOn": 10, "notes": 4000}
+INFO_SECRET = ("accountNumber", "routingNumber", "iban")  # shown hidden until asked, and never to an MCP client
 TRANSFERS = ("transfers", "transfer")  # a category group (Monarch's "Transfers") that is not spending or income
 
 
@@ -414,6 +418,46 @@ def update_account(u: dict, a: dict, b: dict) -> dict:
     if "balance" in b and not monarch:
         set_balance(a["id"], dt.date.today(), money(b["balance"], "The balance"), "sync" if a["kind"] == "investment" else "manual")
     return account_row(a["id"])
+
+
+def account_info(u: dict, a: dict) -> dict:
+    """What the household keeps to deal with the account's bank (INFO_FIELDS), for whoever sees the account."""
+    _need(can_read(u, a))
+    r = db.one("SELECT info FROM mny_account_info WHERE account_id = %s", (a["id"],))
+    try:
+        info = json.loads(r["info"]) if r else {}
+    except ValueError:
+        info = {}
+    return {k: info[k] for k in INFO_FIELDS if info.get(k) not in (None, "")}
+
+
+def set_account_info(u: dict, a: dict, b: dict) -> dict:
+    """Change the fields given (empty: removed), the others stay; any account, one from Monarch Money too."""
+    _need(can_write(u, a))
+    if not isinstance(b, dict):
+        raise Invalid("An object is expected")
+    info = account_info(u, a)
+    for k, lim in INFO_FIELDS.items():
+        if k not in b:
+            continue
+        v = text(b[k], lim, k)
+        if k == "openedOn" and v:
+            try:
+                v = dt.date.fromisoformat(v).isoformat()
+            except ValueError:
+                raise Invalid("Opened on: a date like 2020-05-31") from None
+        if k == "website" and v and not re.match(r"^https?://", v, re.I):
+            v = "https://" + v
+        if v:
+            info[k] = v
+        else:
+            info.pop(k, None)
+    if info:
+        db.ex("INSERT INTO mny_account_info (account_id, info, updated_by) VALUES (%s, %s, %s) "
+              "ON DUPLICATE KEY UPDATE info = VALUES(info), updated_by = VALUES(updated_by)", (a["id"], json.dumps(info), u["id"]))
+    else:
+        db.ex("DELETE FROM mny_account_info WHERE account_id = %s", (a["id"],))
+    return info
 
 
 def delete_account(u: dict, a: dict) -> None:

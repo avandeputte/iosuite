@@ -45,6 +45,11 @@ def test_mcp_money(client, as_user):
             "add_transfer_rule", "delete_transfer_rule", "monarch_new_accounts", "resolve_new_account"} <= names
     a = call(client, auth, "add_account", name="Checking", kind="cash", balance=1200)
     assert a["name"] == "Checking" and a["youCanChange"] is True and a["household"] is True
+    from app import db
+    db.ex("INSERT INTO mny_account_info (account_id, info) VALUES (%s, %s)",
+          (a["id"], json.dumps({"accountNumber": "000123456789", "routingNumber": "043000096", "phone": "1-888-762-2265", "notes": "PIN 1234"})))
+    assert call(client, auth, "bank_contact", account="Checking") == {"phone": "1-888-762-2265"}  # never the numbers or the notes
+    assert "000123456789" not in json.dumps(call(client, auth, "overview"))
     car = call(client, auth, "add_account", name="Family car", kind="vehicle", balance=20000, yearly_rate=-15)
     assert car["details"]["yearlyRate"] == -15
     assert call(client, auth, "add_account", name="Car loan", kind="loan", balance=8000)["kind"] == "loan"

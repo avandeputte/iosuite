@@ -104,6 +104,22 @@ def delete_account(aid: int, request: Request):
     return {"ok": True}
 
 
+@router.get("/api/accounts/{aid}/info", dependencies=[access.signed_in])
+def get_account_info(aid: int, request: Request):
+    """What is kept to deal with the account's bank: accountNumber, routingNumber, iban, swift, phone, phoneAbroad,
+    website, email, address, username, openedOn, notes (those set only)."""
+    u = _u(request)
+    return model.account_info(u, model.account(u, aid))
+
+
+@router.put("/api/accounts/{aid}/info", dependencies=[access.signed_in])
+async def put_account_info(aid: int, request: Request):
+    """Change the fields given (an empty one is removed); for whoever may change the account."""
+    u = _u(request)
+    b = await json_body(request)
+    return await run_in_threadpool(lambda: model.set_account_info(u, model.account(u, aid), b))
+
+
 @router.get("/api/accounts/{aid}/history", dependencies=[access.signed_in])
 def account_history(aid: int, request: Request, days: int = 365):
     """The account's value day by day, in the household's currency (a liability as a negative number)."""

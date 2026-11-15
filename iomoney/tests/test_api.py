@@ -1,6 +1,7 @@
 """The REST API: accounts and who sees them, the net worth and its history, transactions and the spending, holdings
 and the portfolio (quotes from a stand-in for Yahoo Finance), house and car values with their loan, and the bills."""
 import datetime as dt
+import json
 
 import pytest
 
@@ -346,6 +347,30 @@ def test_link_transfers_over_everything(client, monkeypatch):
     learned = {(x["account"], x["pattern"]) for x in client.get("/api/transfer-rules").json()["items"]}
     assert ("PNC Checking", "online payment to") in learned and ("Ally Savings", "overdraft transfer to spending account") in learned
     assert not any(a == "PNC Checking" and "fid" in p for a, p in learned)
+
+
+def test_bank_details(client, as_user):
+    chk = add(client, name="PNC Checking", mask="4199")
+    assert client.get(f"/api/accounts/{chk['id']}/info").json() == {}
+    r = client.put(f"/api/accounts/{chk['id']}/info", json={"accountNumber": "  1234 5678 4199 ", "routingNumber": "043000096",
+                                                            "phone": "1-888-762-2265", "website": "pnc.com", "address": "PO Box 1\nPittsburgh PA",
+                                                            "openedOn": "2015-03-01", "pin": "not kept"})
+    assert r.status_code == 200, r.text
+    info = r.json()
+    assert info == {"accountNumber": "1234 5678 4199", "routingNumber": "043000096", "phone": "1-888-762-2265",
+                    "website": "https://pnc.com", "address": "PO Box 1\nPittsburgh PA", "openedOn": "2015-03-01"}
+    assert "accountNumber" not in json.dumps(client.get(f"/api/accounts/{chk['id']}").json())  # not with the account
+    assert "043000096" not in json.dumps(client.get("/api/summary").json())
+    info = client.put(f"/api/accounts/{chk['id']}/info", json={"phone": "", "notes": "Branch on Main St"}).json()
+    assert "phone" not in info and info["notes"] == "Branch on Main St" and info["routingNumber"] == "043000096"
+    assert client.put(f"/api/accounts/{chk['id']}/info", json={"openedOn": "March"}).status_code == 400
+    assert client.put(f"/api/accounts/{chk['id']}/info", json={"accountNumber": "9" * 65}).status_code == 400
+    mine = add(client, name="My own", household=False)
+    client.put(f"/api/accounts/{mine['id']}/info", json={"accountNumber": "555"})
+    as_user("viv", "viewer")
+    assert client.get(f"/api/accounts/{chk['id']}/info").json()["routingNumber"] == "043000096"  # whoever sees the account
+    assert client.put(f"/api/accounts/{chk['id']}/info", json={"phone": "x"}).status_code == 403
+    assert client.get(f"/api/accounts/{mine['id']}/info").status_code == 404  # someone else's private account
 
 
 def test_reconciled(client, as_user):

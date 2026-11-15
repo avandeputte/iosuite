@@ -223,6 +223,15 @@ SCHEMA = [
         at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT fk_mny_reconciled_tx FOREIGN KEY (transaction_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
     )""",
+    # what the household keeps about an account to deal with its bank (account and routing numbers, IBAN, customer
+    # service): a JSON object of known fields, apart from the account so that it goes into no list, summary or MCP tool
+    """CREATE TABLE IF NOT EXISTS mny_account_info (
+        account_id INT PRIMARY KEY,
+        info MEDIUMTEXT NOT NULL,
+        updated_by INT NULL,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        CONSTRAINT fk_mny_account_info_account FOREIGN KEY (account_id) REFERENCES mny_accounts(id) ON DELETE CASCADE
+    )""",
     # an account Monarch Money reports that ioMoney did not know, after the first sync: held until an admin says whether
     # it is new or the new id of an account here (one deleted and made again in Monarch when its bank link broke);
     # decision 'new' lets the next sync add it. Its transactions wait with it.
