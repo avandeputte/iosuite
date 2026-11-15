@@ -10,7 +10,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from iosuite_shared import pages, users as shared
+from iosuite_shared import chores, pages, users as shared
 from iosuite_shared.updates import setup_log
 
 from app import __version__, config, db, notify, upload, webapi
@@ -32,9 +32,11 @@ async def lifespan(_app):
     db.migrate()
     webapi.start_backfill()
     updater.start_daily()
+    week = chores.start(notify.weekly, every_s=60, first_s=20, name="weekly summary")  # Monday morning: last week next to the one before
     log.info("ioHealth started, writing to %s:%s/%s (%s)", db.params()["host"], db.params()["port"], db.params()["database"],
              "accounts exist" if shared.any_users() else "no accounts yet: create the first one from the sign-in screen, inside your network")
     yield
+    week.cancel()
 
 
 app = FastAPI(title="ioHealth", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json",

@@ -62,3 +62,48 @@ def test_today_is_the_persons_own_day(client, admin, sent):
     assert str(webapi.zone_of(admin["id"])) == "Europe/Brussels"
     client.post("/v1/sessions", json={"timeZone": "Mars/Olympus"}, headers={"Authorization": f"Bearer {pw}"})
     assert str(webapi.zone_of(admin["id"])) == "Europe/Brussels"
+
+
+def _workout(uuid, start, minutes):
+    end = start + timedelta(minutes=minutes)
+    return {"workout": {"_0": {"uuid": uuid, "activityType": "running", "activityTypeRaw": 37, "start": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                               "end": end.strftime("%Y-%m-%dT%H:%M:%SZ"), "duration": minutes * 60, "source": {"name": "Watch"},
+                               "statistics": [], "events": [], "activities": []}}}
+
+
+def _night(uuid, start, minutes):
+    return sample(uuid, "sleep_analysis", start, None, None, "category", minutes=minutes, text="core")
+
+
+def test_weekly_summary(client, admin, sent):
+    """Monday at the morning time (08:00, Brussels): steps, sleep and workouts of 9 to 15 Nov next to 2 to 8 Nov."""
+    pw = app_password(client)
+    day = datetime(2026, 11, 2, 10, 0, tzinfo=timezone.utc)
+    msgs = [sample(f"s{i}", "step_count", day + timedelta(days=i), 8000 if i < 7 else 10000) for i in range(14)]
+    msgs += [_night("n1", datetime(2026, 11, 4, 22, 0, tzinfo=timezone.utc), 390), _night("n2", datetime(2026, 11, 11, 22, 0, tzinfo=timezone.utc), 420),
+             _workout("w1", datetime(2026, 11, 3, 17, 0, tzinfo=timezone.utc), 30),
+             _workout("w2", datetime(2026, 11, 10, 17, 0, tzinfo=timezone.utc), 45), _workout("w3", datetime(2026, 11, 13, 17, 0, tzinfo=timezone.utc), 60)]
+    upload(client, pw, *msgs)
+    monday_early = datetime(2026, 11, 16, 6, 0, tzinfo=timezone.utc)  # 07:00 in Brussels: before the morning time
+    monday = datetime(2026, 11, 16, 7, 30, tzinfo=timezone.utc)       # 08:30
+    assert notify.weekly(monday) == 0, "no device yet"
+    _with_device(admin["id"])
+    assert notify.weekly(monday_early) == 0
+    assert notify.weekly(monday + timedelta(days=1)) == 0, "Mondays only"
+    loc = webapi.zone_of(admin["id"])
+    title, body = notify.summary(admin["id"], datetime(2026, 11, 16, tzinfo=loc), loc)
+    assert title == "Your week in health, 9 Nov to 15 Nov"
+    assert body.split("\n") == ["Steps: 10,000 a day, 25% more than the week before", "Sleep: 7 h 00 a night, 30 min more",
+                                "Workouts: 2, 1 h 45 (1 more than the week before)"]
+    assert notify.weekly(monday) == 1
+    assert notify.weekly(monday + timedelta(minutes=5)) == 0, "once"
+    assert len(sent) == 1
+    # turned off: nothing the next Monday
+    push.set_prefs(admin["id"], {"health_week": False})
+    assert notify.weekly(monday + timedelta(days=7)) == 0
+
+
+def test_weekly_summary_quiet_week(client, admin, sent):
+    _with_device(admin["id"])
+    assert notify.weekly(datetime(2026, 11, 16, 7, 30, tzinfo=timezone.utc)) == 0, "nothing last week: nothing to send"
+    assert sent == []
