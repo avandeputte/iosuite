@@ -4,7 +4,8 @@ the app searches and draws from), occurrences in a time range, search, import, a
 Calendars: the shared ones (owner_id NULL, Family first) that everyone sees, and each account's own private ones
 (Personal, made the first time a member uses ioCalendar). Viewers only read the shared calendars; members also keep
 their own private ones; editors change the shared ones too; admins also manage settings and users. A calendar of kind 'birthdays' is
-filled from ioContact, one of kind 'holidays' from the holiday rules (app/holiday.py); nobody changes either here.
+filled from ioContact, one of kind 'holidays' from the holiday rules (app/holiday.py), one of kind 'subscribed' from an
+outside calendar's web address (app/subscribe.py); nobody changes their events here.
 """
 import datetime as dt
 import re
@@ -18,11 +19,13 @@ from iosuite_shared.errors import Invalid
 PALETTE = ["#8e44d6", "#0b8a9e", "#1a73e8", "#e0426a", "#1e8e3e", "#e8710a", "#4b53c7", "#e8a100", "#5f6b7a", "#1294b8"]
 
 
-READ_ONLY_KINDS = ("birthdays", "holidays")  # filled by the server, never changed by hand
+READ_ONLY_KINDS = ("birthdays", "holidays", "subscribed")  # filled by the server, never changed by hand
+FREE_KINDS = ("birthdays", "holidays")  # all-day markers that never make anyone busy
 
 
 def read_only_reason(c: dict) -> str | None:
-    return {"birthdays": "it comes from ioContact", "holidays": "it is filled from the holiday settings"}.get((c or {}).get("kind"))
+    return {"birthdays": "it comes from ioContact", "holidays": "it is filled from the holiday settings",
+            "subscribed": "it is a subscription to an outside calendar"}.get((c or {}).get("kind"))
 
 
 class NotFound(Exception):
@@ -58,7 +61,7 @@ def ensure_personal(u: dict) -> None:
         return
     if not shared_users.is_member(u):
         return
-    if not db.one("SELECT id FROM cal_calendars WHERE owner_id = %s LIMIT 1", (u["id"],)):
+    if not db.one("SELECT id FROM cal_calendars WHERE owner_id = %s AND kind = 'events' LIMIT 1", (u["id"],)):
         who = u.get("displayName") or u.get("display_name") or u.get("name")
         create_calendar(u["id"], "Personal", f"{who}'s private calendar", "#0b8a9e")
 
@@ -70,7 +73,7 @@ def calendars_for(u: dict | None) -> list[dict]:
     ensure_personal(u)
     rows = db.q("SELECT c.*, (SELECT count(*) FROM cal_events e WHERE e.calendar_id = c.id AND e.deleted = 0) AS n FROM cal_calendars c "
                 "WHERE c.owner_id IS NULL OR c.owner_id = %s "
-                "ORDER BY c.owner_id IS NOT NULL, c.kind IN ('birthdays', 'holidays'), c.kind = 'holidays', c.position, c.slug <> 'family', c.slug <> 'personal', lower(c.name)",
+                "ORDER BY c.owner_id IS NOT NULL, c.kind <> 'events', c.kind IN ('birthdays', 'holidays'), c.kind = 'holidays', c.position, c.slug <> 'family', c.slug <> 'personal', lower(c.name)",
                 (u["id"],))
     return rows
 
@@ -78,7 +81,13 @@ def calendars_for(u: dict | None) -> list[dict]:
 def calendar_public(c: dict, u: dict) -> dict:
     return {"id": c["id"], "name": c["name"], "slug": c["slug"], "description": c.get("description"), "color": c.get("color") or PALETTE[0],
             "timezone": c.get("timezone"), "shared": c["owner_id"] is None, "kind": c.get("kind") or "events",
-            "writable": can_write(u, c), "count": c.get("n"), "mine": c["owner_id"] == (u or {}).get("id")}
+            "writable": can_write(u, c), "count": c.get("n"), "mine": c["owner_id"] == (u or {}).get("id"),
+            **({"subscription": _subscribe().public(c, u)} if c.get("kind") == "subscribed" else {})}
+
+
+def _subscribe():
+    from app import subscribe  # it builds on this module
+    return subscribe
 
 
 def by_slug(u: dict, slug: str) -> dict | None:

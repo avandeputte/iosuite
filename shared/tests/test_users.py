@@ -83,29 +83,28 @@ def test_app_passwords():
     assert apppasswords.authenticate("alex", pw, "iocontact") is None
 
 
-def test_a_hash_with_other_parameters_or_scrypt_is_upgraded_and_the_old_format_refused():
+def test_a_hash_with_other_parameters_is_upgraded_and_other_formats_refused():
     from argon2 import PasswordHasher
     from iosuite_shared import db
     from iosuite_shared.passwords import hash_password, needs_rehash
     import base64, hashlib, os
+    weaker = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1).hash("weakpass123")
+    db.ex("INSERT INTO ios_users (name, hash, created_at) VALUES ('weak', %s, 1)", (weaker,))
+    assert needs_rehash(weaker) and not needs_rehash(hash_password("x"))
+    assert users.authenticate("weak", "wrong-password") is None
+    u = users.authenticate("weak", "weakpass123")
+    stored = db.one("SELECT hash FROM ios_users WHERE id = %s", (u["id"],))["hash"]
+    assert stored.startswith("$argon2id$") and not needs_rehash(stored) and users.authenticate("weak", "weakpass123")
+    # scrypt hashes (0.28 and before, and before the suite) are not read
     salt = os.urandom(16)
     h = hashlib.scrypt(b"oldpass123", salt=salt, n=2 ** 13, r=8, p=1, dklen=32)
-    scrypt2 = f"scrypt2$8192$8$1${base64.b64encode(salt).decode()}${base64.b64encode(h).decode()}"
-    weaker = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1).hash("weakpass123")
-    db.ex("INSERT INTO ios_users (name, hash, created_at) VALUES ('old', %s, 1), ('weak', %s, 1)", (scrypt2, weaker))
-    assert needs_rehash(scrypt2) and needs_rehash(weaker) and not needs_rehash(hash_password("x"))
-    for name, pw in (("old", "oldpass123"), ("weak", "weakpass123")):
-        assert users.authenticate(name, "wrong-password") is None
-        u = users.authenticate(name, pw)
-        stored = db.one("SELECT hash FROM ios_users WHERE id = %s", (u["id"],))["hash"]
-        assert stored.startswith("$argon2id$") and not needs_rehash(stored) and users.authenticate(name, pw)
-    # the format from before the suite (scrypt$salt$hash) is not read
-    legacy = f"scrypt${base64.b64encode(salt).decode()}${base64.b64encode(h).decode()}"
-    db.ex("INSERT INTO ios_users (name, hash, created_at) VALUES ('older', %s, 1)", (legacy,))
-    assert users.authenticate("older", "oldpass123") is None
+    b64 = lambda v: base64.b64encode(v).decode()
+    db.ex("INSERT INTO ios_users (name, hash, created_at) VALUES ('old', %s, 1), ('older', %s, 1)",
+          (f"scrypt2$8192$8$1${b64(salt)}${b64(h)}", f"scrypt${b64(salt)}${b64(h)}"))
+    assert users.authenticate("old", "oldpass123") is None and users.authenticate("older", "oldpass123") is None
 
 
-def test_app_passwords_are_stored_as_sha256_and_scrypt_rows_move_over():
+def test_app_passwords_are_stored_as_sha256_and_scrypt_rows_refused():
     from iosuite_shared import db
     from iosuite_shared.passwords import token_hash
     import base64, hashlib, os
@@ -113,14 +112,12 @@ def test_app_passwords_are_stored_as_sha256_and_scrypt_rows_move_over():
     pw = apppasswords.create(u["id"], "iocontact", "Mac")
     assert db.one("SELECT hash FROM ios_app_passwords")["hash"] == token_hash(pw)
     assert apppasswords.authenticate(None, pw, "iocontact")["id"] == u["id"]
-    # a row from 0.24 (scrypt2) still signs in, and is rewritten to the SHA-256
+    # a row from 0.24 (scrypt2) no longer signs in
     salt = os.urandom(16)
     h = hashlib.scrypt(pw.encode(), salt=salt, n=2 ** 13, r=8, p=1, dklen=32)
     db.ex("UPDATE ios_app_passwords SET hash = %s", (f"scrypt2$8192$8$1${base64.b64encode(salt).decode()}${base64.b64encode(h).decode()}",))
     apppasswords.forget()
-    assert apppasswords.authenticate(None, pw[:-1] + ("x" if pw[-1] != "x" else "y"), "iocontact") is None
-    assert apppasswords.authenticate(None, pw, "iocontact")["id"] == u["id"]
-    assert db.one("SELECT hash FROM ios_app_passwords")["hash"] == token_hash(pw)
+    assert apppasswords.authenticate(None, pw, "iocontact") is None
 
 
 def test_sign_in_by_name_never_picks_another_account_by_its_email():

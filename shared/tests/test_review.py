@@ -71,8 +71,7 @@ def test_basic_and_bearer_are_throttled_before_any_hash(monkeypatch):
 def test_a_repeated_wrong_password_is_refused_from_a_short_memory(monkeypatch):
     users.create("alex", "secret123", "editor", "iocontact")
     calls = []
-    real = apppasswords.check_password
-    monkeypatch.setattr(apppasswords, "check_password", lambda p, h: calls.append(p) or real(p, h))
+    from iosuite_shared.passwords import check_password as real
     monkeypatch.setattr("iosuite_shared.users.check_password", lambda p, h: calls.append(p) or real(p, h))
     assert apppasswords.authenticate("alex", "nope", "iocontact") is None
     n = len(calls)

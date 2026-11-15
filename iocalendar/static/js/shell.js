@@ -1,4 +1,4 @@
-import { $, DOW, ICONS, LOCAL_TZ, S, addDays, addMonths, api, canOwn, canShared, dialog, fail, h, hue, icon, initials, isAuto, loadCals, memberBadge, memberColor, sameDay, startOfWeek, tasksOn, toast, toggleCal, toggleTasks, toggleWho, weekStart, writable, ymd } from './core.js';
+import { $, DOW, ICONS, LOCAL_TZ, REFRESH_HOURS, S, addDays, addMonths, api, canOwn, canShared, dialog, fail, h, hue, icon, initials, isAuto, loadCals, memberBadge, memberColor, sameDay, startOfWeek, tasksOn, toast, toggleCal, toggleTasks, toggleWho, weekStart, writable, ymd } from './core.js';
 import { go, route } from './main.js';
 import { drawView } from './views.js';
 
@@ -205,10 +205,29 @@ export function colorPicker(value, onPick) {
 export async function newCalendar(shared) {
   const name = h('input', { class: 't', placeholder: shared ? 'Name, e.g. Soccer or School' : 'Name, e.g. Work' });
   const col = colorPicker(SWATCHES[S.cals.length % SWATCHES.length]);
+  // or an outside calendar: its web address (school, sports club, bin collection), fetched again on a schedule
+  const url = h('input', { class: 't', type: 'url', inputmode: 'url', autocomplete: 'off', spellcheck: 'false', placeholder: 'https://… or webcal://… (optional)' });
+  const every = h('select', { class: 't' }, REFRESH_HOURS.map(([n, l]) => h('option', { value: n, selected: n === 6 ? true : null }, l)));
+  const subRow = h('div', { style: { display: 'grid', gap: '6px' }, hidden: true },
+    h('label', { class: 'field' }, h('span', null, 'Fetch it again'), every),
+    h('p', { class: 'muted small', style: { margin: 0 } }, 'Read-only here: its events change only at the address. Leave the name empty to use the calendar\'s own.'));
+  url.oninput = () => { subRow.hidden = !url.value.trim(); name.placeholder = url.value.trim() ? 'Name (optional)' : shared ? 'Name, e.g. Soccer or School' : 'Name, e.g. Work'; };
   const body = h('div', { style: { display: 'grid', gap: '12px' } }, name, col,
+    h('label', { class: 'field' }, h('span', null, 'Subscribe to an outside calendar by its web address'), url), subRow,
     h('p', { class: 'muted small', style: { margin: 0 } }, shared ? 'Everyone in the family sees it; editors change it.' : 'Only you see it.'));
-  if (!await dialog(shared ? 'New shared calendar' : 'New private calendar', body, [{ label: 'Cancel', value: false }, { label: 'Create', value: true, primary: true }])) return;
-  try { await api('api/calendars', { method: 'POST', json: { name: name.value, shared, color: col.get(), timezone: LOCAL_TZ } }); await loadCals(); drawView(); } catch (e) { fail(e); }
+  for (;;) {  // a wrong address keeps the dialog's answers for another try
+    if (!await dialog(shared ? 'New shared calendar' : 'New private calendar', body, [{ label: 'Cancel', value: false }, { label: 'Create', value: true, primary: true }])) return;
+    try {
+      if (url.value.trim()) {
+        toast('Reading the calendar…');
+        const r = await api('api/subscriptions', { method: 'POST', json: { url: url.value.trim(), name: name.value, shared, color: col.get(), refreshHours: Number(every.value) } });
+        toast(`${r.calendar.name}: ${r.calendar.count || 0} events`);
+      } else {
+        await api('api/calendars', { method: 'POST', json: { name: name.value, shared, color: col.get(), timezone: LOCAL_TZ } });
+      }
+      await loadCals(); drawView(); return;
+    } catch (e) { fail(e); }
+  }
 }
 
 // ------------------------------------------------------------------ sign-in
