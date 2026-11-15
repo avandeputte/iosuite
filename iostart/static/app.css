@@ -123,7 +123,12 @@ body.home #main { top: env(safe-area-inset-top); }
 .dateline .menu { left: 0; right: auto; top: 32px; }
 /* the tiles: a column per app with a widget, and a column of three low tiles for the apps without (--cols is set by the page) */
 .apps { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 16px; }
-.stack { display: grid; grid-template-rows: repeat(3, 1fr); gap: 8px; min-width: 0; }
+.stack { display: grid; grid-template-rows: repeat(var(--n, 3), minmax(0, 1fr)); gap: 8px; min-width: 0; }
+/* more than three low tiles in the column: thinner tiles, a smaller icon and name, so they all fit beside the tall ones */
+.stack.dense { gap: 6px; }
+.stack.dense .app.small { padding-top: 2px; padding-bottom: 2px; min-height: 0; overflow: hidden; }
+.stack.dense .app.small > img { width: 22px; height: 22px; }
+.stack.dense .app.small .nm { font-size: var(--fs-base); }
 .app { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "img who" "more more"; align-items: center; align-content: start; column-gap: 12px; row-gap: 4px;
   padding: 12px 14px; border-radius: var(--r-l); border: 1px solid var(--line); text-align: left; min-width: 0;
   transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
@@ -425,6 +430,11 @@ table.t td .dot { display: inline-block; width: 10px; height: 10px; border-radiu
   .top .weather { order: 2; flex: 1 1 100%; flex-wrap: wrap; margin-left: 0; }
   .top .search { order: 3; flex: 1 1 100%; }
   .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* the column of low tiles takes the whole row instead, two across, at their usual size */
+  .stack.dense { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; grid-auto-rows: auto; gap: 8px 16px; }
+  .stack.dense .app.small { padding-top: 6px; padding-bottom: 6px; }
+  .stack.dense .app.small > img { width: 28px; height: 28px; }
+  .stack.dense .app.small .nm { font-size: var(--fs-l); }
 }
 /* ---- phones */
 @media (max-width: 600px) {
