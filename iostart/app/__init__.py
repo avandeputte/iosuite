@@ -1,4 +1,4 @@
-"""ioStart: the start page of the ioThing suite (ioPix, ioHealth, ioCalendar, ioTask, ioRecipe, ioHome, ioContact, ioNote)."""
+"""ioStart: the start page of the ioThing suite (ioPix, ioHealth, ioCalendar, ioTask, ioRecipe, ioThings, ioContact, ioNote)."""
 from iosuite_shared import __version__  # the suite's version: one number for every app
 
 __all__ = ["__version__"]

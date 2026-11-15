@@ -59,20 +59,20 @@ def test_plan_shares_the_answers(tmp_path):
     assert pix["args"][pix["args"].index("--data") + 1] == str(tmp_path / "opt" / "iopix" / "data")
 
 
-def test_iohome_is_one_of_the_apps(tmp_path):
-    """ioHome installs like the others: its own "home" database on the same server, its port, the suite's sign-in."""
+def test_iothings_is_one_of_the_apps(tmp_path):
+    """ioThings installs like the others: its own "things" database on the same server, its port, the suite's sign-in."""
     app = tmp_path / "opt" / "iostart" / "app"
     app.mkdir(parents=True)
     (app / "config.env").write_text(CFG)
     cfg = install.read_env_file(app / "config.env")
-    assert "iohome" in install.parse_apps("all")
-    [e] = install.plan(["iohome"], cfg, install.base_dir(app), admin="alex", service=True, from_app="iostart")
-    assert e["target"] == tmp_path / "opt" / "iohome" / "app"
-    assert e["env"]["IOHOME_DB"] == "db.lan:3307/home:suite:s3cret"
-    assert e["env"]["IOHOME_SUITE_DB"] == "db.lan:3307/iostart:iostart:sh4red"
-    assert e["env"]["IOHOME_ADMIN"].startswith("alex:")
+    assert "iothings" in install.parse_apps("all")
+    [e] = install.plan(["iothings"], cfg, install.base_dir(app), admin="alex", service=True, from_app="iostart")
+    assert e["target"] == tmp_path / "opt" / "iothings" / "app"
+    assert e["env"]["IOTHINGS_DB"] == "db.lan:3307/things:suite:s3cret"
+    assert e["env"]["IOTHINGS_SUITE_DB"] == "db.lan:3307/iostart:iostart:sh4red"
+    assert e["env"]["IOTHINGS_ADMIN"].startswith("alex:")
     from iosuite_shared import suite
-    assert suite.PORTS["iohome"] == 8700 and suite.FOLDERS["iohome"] == "home"
+    assert suite.PORTS["iothings"] == 8700 and suite.FOLDERS["iothings"] == "things"
 
 
 def test_plan_without_an_app_database_lends_the_shared_one(tmp_path):

@@ -1,4 +1,4 @@
-/* The look the single-page io apps share (ioBackup, ioCalendar, ioContact, ioDNS, ioHome, ioRecipe, ioTask): the reset, icons
+/* The look the single-page io apps share (ioBackup, ioCalendar, ioContact, ioDNS, ioThings, ioRecipe, ioTask): the reset, icons
    and buttons, the top bar and the suite menu, the sidebar, page headings, form fields, tables, boxes, dialogs and the
    sign-in screen. Served by iosuite-shared at <app>/api/auth/base.css and linked before the app's own static/app.css,
    which keeps its colours (the --tokens these rules use), its layout and everything of its own.

@@ -22,7 +22,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
-SIMPLE = ["iostart", "iocalendar", "iocontact", "iohealth", "iotask", "iodns", "iobackup", "iorecipe", "iohome"]
+SIMPLE = ["iostart", "iocalendar", "iocontact", "iohealth", "iotask", "iodns", "iobackup", "iorecipe", "iothings"]
 EVERY = SIMPLE + ["ionote", "iopix"]
 # template -> (the file it makes, relative to the repository, and the apps that have one made from it); ioNote and
 # ioPix keep their own setup.sh and workflow (a data folder and text recognition; digiKam and the photo folders)

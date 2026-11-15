@@ -81,4 +81,4 @@ whether the start page serves the whole suite on one address (Settings › Globa
 | ioTask | 8670 |
 | ioBackup | 8680 |
 | ioRecipe | 8690 |
-| ioHome | 8700 |
+| ioThings | 8700 |

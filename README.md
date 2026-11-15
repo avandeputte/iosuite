@@ -16,7 +16,7 @@ Shared ioSuite database) through the library in [`shared/`](shared/).
 | [`iohealth/`](iohealth/) | ioHealth | health data from the iPhone | 8650 |
 | [`iotask/`](iotask/) | ioTask | task lists, CalDAV for reminders apps | 8670 |
 | [`iorecipe/`](iorecipe/) | ioRecipe | recipes | 8690 |
-| [`iohome/`](iohome/) | ioHome | the things in the house: where they are, warranties, manuals, receipts, upkeep; imports Homebox | 8700 |
+| [`iothings/`](iothings/) | ioThings | everything you own: where it is, warranties, manuals, receipts, upkeep; imports Homebox | 8700 |
 | [`iodns/`](iodns/) | ioDNS | admin tool: the DNS console | 8660 |
 | [`iobackup/`](iobackup/) | ioBackup | admin tool: database backups | 8680 |
 | [`shared/`](shared/) | iosuite-shared | the library every app uses: accounts, sign-in, roles, updates, the installer | |

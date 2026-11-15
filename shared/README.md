@@ -71,7 +71,7 @@ TZ=Europe/Brussels  LOG_FILE=…  UPDATE_CHECK=0  MCP=1
 
 Default ports, different for every app so that all of them can run on one host (`suite.PORTS`):
 
-| ioPix | ioNote | ioCalendar | ioSuite | ioContact | ioHealth | ioDNS | ioTask | ioBackup | ioRecipe | ioHome |
+| ioPix | ioNote | ioCalendar | ioSuite | ioContact | ioHealth | ioDNS | ioTask | ioBackup | ioRecipe | ioThings |
 |-------|---------|------------|---------|------------|----------|-------|---------|----------|----------|--------|
 | 8600  | 8610    | 8620       | 8630    | 8640 (LDAP 3890) | 8650 | 8660 | 8670 | 8680 | 8690 | 8700 |
 

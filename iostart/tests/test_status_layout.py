@@ -213,7 +213,7 @@ def test_events_tasks_recipes_and_notes_for_the_search_box(client, monkeypatch):
                            {"id": "ab-3", "title": "Image", "text": "", "pinned": False, "updated": 0.5}], "more": True}
     assert ("ionote", "/api/notes", {"q": "dentist", "limit": 5}) in asked
     assert client.get("/api/widgets/ionote").status_code == 404
-    d = client.get("/api/widgets/iohome?q=dentist").json()
+    d = client.get("/api/widgets/iothings?q=dentist").json()
     assert d == {"items": [{"id": 2, "name": "Dentist chair", "photo": 9, "where": "House / Attic"}], "more": False}
-    assert client.get("/api/widgets/iohome/photo/2/9").content == b"jpg"
-    assert client.get("/api/widgets/iohome").status_code == 404
+    assert client.get("/api/widgets/iothings/photo/2/9").content == b"jpg"
+    assert client.get("/api/widgets/iothings").status_code == 404

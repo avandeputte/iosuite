@@ -54,7 +54,7 @@ KINDS = [
     {"kind": "tasks", "app": "iotask", "label": "Tasks", "hint": "A task’s alert when it goes off, and in the morning what is due today"},
     {"kind": "events", "app": "iocalendar", "label": "Event reminders", "hint": "The reminders set on events"},
     {"kind": "birthdays", "app": "iocontact", "label": "Birthdays", "hint": "In the morning, whose birthday or anniversary it is"},
-    {"kind": "home", "app": "iohome", "label": "Home upkeep and warranties", "hint": "In the morning, the upkeep that is due and the warranties about to end"},
+    {"kind": "things", "app": "iothings", "label": "Upkeep and warranties", "hint": "In the morning, the upkeep that is due and the warranties about to end"},
     {"kind": "health", "app": "iohealth", "label": "Health goals", "hint": "When you reach one of your daily goals"},
     {"kind": "backups", "app": "iobackup", "label": "Failed backups", "hint": "When a backup does not finish", "admin": True},
     {"kind": "updates", "app": None, "label": "New version", "hint": "When a newer version of the suite is out", "admin": True},

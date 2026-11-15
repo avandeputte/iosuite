@@ -1,7 +1,7 @@
 """Linked items: an event linked to its meeting notes, a task to a recipe, a note to a contact, across the apps.
 
 A link joins two items of the suite, each named by its kind and its id in its app (KINDS: event, task, note, contact,
-recipe, photo, item: a thing in ioHome). It is one row of ios_related in the Shared ioSuite database and works both ways: the task shows the
+recipe, photo, item: a thing in ioThings). It is one row of ios_related in the Shared ioSuite database and works both ways: the task shows the
 recipe and the recipe shows the task. Nothing about the items is kept with it; what a link shows (the title, the date,
 the small picture) is asked of the item's own app every time, with the viewer's own sign-in, so a link shows only to
 someone who may see both of its items, and always as the item is now. A note is its owner's alone: an event linked to
@@ -48,7 +48,7 @@ KINDS = {
     "contact": {"app": "iocontact", "label": "Contact", "plural": "Contacts"},
     "recipe": {"app": "iorecipe", "label": "Recipe", "plural": "Recipes"},
     "photo": {"app": "iopix", "label": "Photo", "plural": "Photos"},
-    "item": {"app": "iohome", "label": "Thing", "plural": "Things in the house"},
+    "item": {"app": "iothings", "label": "Thing", "plural": "Things"},
 }
 MAX_LINKS = 200  # links per item
 TIMEOUT = 5      # seconds, per request to an app
