@@ -111,7 +111,7 @@ def test_the_name_iopix_is_written_in_two_colours(page, server):
 def test_filter_pane_steps_aside_on_pages_it_does_not_apply_to(page, server):
     page.set_viewport_size({"width": 1400, "height": 900})
     page.goto(server + "/#/photos")
-    page.wait_for_selector("#filterbtn", timeout=10000)
+    page.wait_for_selector("#grid .tile", timeout=20000)  # booted: the button is wired and a remembered open pane is restored
     if page.locator("#filters").is_hidden():
         page.locator("#filterbtn").click()
     page.wait_for_selector("#filters:not([hidden])", timeout=5000)
