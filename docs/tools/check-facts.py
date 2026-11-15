@@ -27,7 +27,7 @@ SRC = HERE.parent
 OWNER = "avandeputte"
 REPO = "iosuite"
 LABELS = {"ioPix": "iopix", "ioNote": "ionote", "ioCalendar": "iocalendar", "ioStart": "iostart", "ioContact": "iocontact",
-          "ioHealth": "iohealth", "ioTask": "iotask", "ioRecipe": "iorecipe", "ioDNS": "iodns", "ioBackup": "iobackup"}
+          "ioHealth": "iohealth", "ioTask": "iotask", "ioRecipe": "iorecipe", "ioThings": "iothings", "ioDNS": "iodns", "ioBackup": "iobackup"}
 
 problems = []
 
@@ -67,7 +67,7 @@ def main():
 
         # 2. default ports next to an app's name
         ports = app_ports(src)
-        near = re.compile(r"\b(ioPix|ioNote|ioCalendar|ioStart|ioContact|ioHealth|ioTask|ioRecipe|ioDNS|ioBackup)\b(?:[^\n\d]{0,14}?)\b(8\d\d0)\b")
+        near = re.compile(r"\b(ioPix|ioNote|ioCalendar|ioStart|ioContact|ioHealth|ioTask|ioRecipe|ioThings|ioDNS|ioBackup)\b(?:[^\n\d]{0,14}?)\b(8\d\d0)\b")
         js = re.compile(r'name:"(io\w+)",\s*port:(\d+)')
         for p, text in pages():
             for m in list(near.finditer(text)) + list(js.finditer(text)):

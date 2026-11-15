@@ -17,6 +17,7 @@ Small self-hosted apps for the family, each one a complete product on its own:
 | [ioHealth](apps/iohealth.md) | Apple Health data in your own database, with a fitness web app | 8650 | [iohealth](https://github.com/avandeputte/iosuite/tree/main/iohealth) |
 | [ioTask](apps/iotask.md) | The family's task lists, in Apple Reminders and every tasks app over CalDAV | 8670 | [iotask](https://github.com/avandeputte/iosuite/tree/main/iotask) |
 | [ioRecipe](apps/iorecipe.md) | The family's recipes, with photos and import from the web | 8690 | [iorecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe) |
+| [ioThings](apps/iothings.md) | Everything you own: manuals, warranties, upkeep; imports Homebox | 8700 | [iothings](https://github.com/avandeputte/iosuite/tree/main/iothings) |
 
 Two **admin tools** come with the suite, for the person who runs the servers. Only suite admins see them:
 
@@ -44,7 +45,7 @@ Every app is built the same way, so what you learn in one holds in the others:
 - **The same Settings**: Account and Display for everyone; Server (version, log, restart) for admins;
   Security and Global settings for suite admins.
 - **One version, one update**: a daily check, then one **Update** button for every app under Settings › Global settings › Updates. See [Updates](run/updates.md).
-- **An MCP server** at `/mcp` in ioPix, ioNote, ioCalendar, ioTask, ioRecipe and ioContact, so an AI assistant such as Claude can
+- **An MCP server** at `/mcp` in ioPix, ioNote, ioCalendar, ioTask, ioRecipe, ioThings and ioContact, so an AI assistant such as Claude can
   work with them as you, with an app password. See [AI assistants](run/assistants.md).
 - **Free and open source**, GPL-3.0-or-later.
 

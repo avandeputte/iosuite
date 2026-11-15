@@ -386,6 +386,7 @@ footer p{margin:16px 0 0;max-width:52em}
           <div class="mix-app" data-app="iocalendar"><img src="img/iocalendar.svg" alt="" width="46" height="46"><b>ioCalendar</b><small>calendar</small></div>
           <div class="mix-app" data-app="iotask"><img src="img/iotask.svg" alt="" width="46" height="46"><b>ioTask</b><small>tasks</small></div>
           <div class="mix-app" data-app="iorecipe"><img src="img/iorecipe.svg" alt="" width="46" height="46"><b>ioRecipe</b><small>recipes</small></div>
+          <div class="mix-app" data-app="iothings"><img src="img/iothings.svg" alt="" width="46" height="46"><b>ioThings</b><small>inventory</small></div>
           <div class="mix-app" data-app="iocontact"><img src="img/iocontact.svg" alt="" width="46" height="46"><b>ioContact</b><small>contacts</small></div>
           <div class="mix-app" data-app="iohealth"><img src="img/iohealth.svg" alt="" width="46" height="46"><b>ioHealth</b><small>health</small></div>
           <div class="mix-app" data-app="iostart"><img src="img/iostart.svg" alt="" width="46" height="46"><b>ioStart</b><small>start page</small></div>
@@ -454,6 +455,16 @@ footer p{margin:16px 0 0;max-width:52em}
           </ul>
           <p class="alone"><b>On its own:</b> the family's recipe book, on every screen in the kitchen.</p>
           <div class="links"><a href="/docs/apps/iorecipe/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iorecipe" rel="noopener">GitHub</a><span class="port">:8690</span></div>
+        </article>
+        <article class="app" style="--c:#2a6f97">
+          <div class="app-top"><img src="img/iothings.svg" alt="" width="44" height="44"><h3>ioThings<span class="tag">Everything you own</span></h3></div>
+          <ul>
+            <li>Places, labels, photos, manuals, receipts and warranties</li>
+            <li>Upkeep with a maintenance log, as repeating tasks in ioTask</li>
+            <li>Brings a Homebox inventory over, and exports it back</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> where everything is, what it cost, and when the boiler needs its service.</p>
+          <div class="links"><a href="/docs/apps/iothings/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iothings" rel="noopener">GitHub</a><span class="port">:8700</span></div>
         </article>
         <article class="app" style="--c:#4f2f7d">
           <div class="app-top"><img src="img/iocontact.svg" alt="" width="44" height="44"><h3>ioContact<span class="tag">Contacts for the family</span></h3></div>
@@ -608,6 +619,7 @@ footer p{margin:16px 0 0;max-width:52em}
         <label><input type="checkbox" value="iocalendar"><img src="img/iocalendar.svg" alt="" width="38" height="38"><b>ioCalendar</b><small>calendar</small></label>
         <label><input type="checkbox" value="iotask"><img src="img/iotask.svg" alt="" width="38" height="38"><b>ioTask</b><small>tasks</small></label>
         <label><input type="checkbox" value="iorecipe"><img src="img/iorecipe.svg" alt="" width="38" height="38"><b>ioRecipe</b><small>recipes</small></label>
+        <label><input type="checkbox" value="iothings"><img src="img/iothings.svg" alt="" width="38" height="38"><b>ioThings</b><small>inventory</small></label>
         <label><input type="checkbox" value="iocontact"><img src="img/iocontact.svg" alt="" width="38" height="38"><b>ioContact</b><small>contacts</small></label>
         <label><input type="checkbox" value="iohealth"><img src="img/iohealth.svg" alt="" width="38" height="38"><b>ioHealth</b><small>health</small></label>
         <label><input type="checkbox" value="iostart"><img src="img/iostart.svg" alt="" width="38" height="38"><b>ioStart</b><small>start page</small></label>
@@ -684,6 +696,7 @@ footer p{margin:16px 0 0;max-width:52em}
         <a href="https://github.com/avandeputte/iosuite/tree/main/iocalendar" rel="noopener">ioCalendar</a>
         <a href="https://github.com/avandeputte/iosuite/tree/main/iotask" rel="noopener">ioTask</a>
         <a href="https://github.com/avandeputte/iosuite/tree/main/iorecipe" rel="noopener">ioRecipe</a>
+        <a href="https://github.com/avandeputte/iosuite/tree/main/iothings" rel="noopener">ioThings</a>
         <a href="https://github.com/avandeputte/iosuite/tree/main/iocontact" rel="noopener">ioContact</a>
         <a href="https://github.com/avandeputte/iosuite/tree/main/iohealth" rel="noopener">ioHealth</a>
         <a href="https://github.com/avandeputte/iosuite/tree/main/iodns" rel="noopener">ioDNS</a>
@@ -715,9 +728,10 @@ footer p{margin:16px 0 0;max-width:52em}
     iocontact: {name:"ioContact", port:8640, docker:"iocontact"},
     iohealth:   {name:"ioHealth",   port:8650, docker:"iohealth"},
     iotask:    {name:"ioTask",    port:8670, docker:"iotask"},
-    iorecipe:   {name:"ioRecipe",   port:8690, docker:"iorecipe"}
+    iorecipe:   {name:"ioRecipe",   port:8690, docker:"iorecipe"},
+    iothings:     {name:"ioThings",     port:8700, docker:"iothings"}
   };
-  var ORDER = ["iopix","ionote","iocalendar","iotask","iorecipe","iocontact","iohealth","iostart"];
+  var ORDER = ["iopix","ionote","iocalendar","iotask","iorecipe","iothings","iocontact","iohealth","iostart"];
   var RAW = "https://raw.githubusercontent.com/avandeputte/iosuite/main/";
 
   function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }

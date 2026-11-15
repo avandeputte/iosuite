@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iothings"
+version = "0.0.0"  # not this app's version: the suite has one, iosuite_shared.__version__ (shared/iosuite_shared/__init__.py)
+description = "Self-hosted home inventory for the family: things, places, warranties, manuals and receipts, upkeep as ioTask tasks, Homebox import, REST, MCP"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = [
+  "iosuite-shared",   # the suite's shared library (shared/ of this repository): setup.sh, update.sh and the Dockerfile install it from there, at the same commit
+  "fastapi<1",
+  "uvicorn<1",
+  "pymysql<2",
+  "python-multipart<1",
+  "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
+  "mcp<3",                        # the MCP server at /mcp
+  "pillow>=10,<13",               # the small pictures of the photos
+]
+
+[project.optional-dependencies]
+test = ["pytest<10", "httpx<1", "pyflakes<4"]
+
+[project.urls]
+Homepage = "https://github.com/avandeputte/iosuite/tree/main/iothings"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

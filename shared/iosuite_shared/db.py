@@ -195,7 +195,7 @@ SCHEMA = [
         INDEX idx_ios_push_sent_at (sent_at),
         FOREIGN KEY (user_id) REFERENCES ios_users(id) ON DELETE CASCADE
     )""",
-    # linked items (iosuite_shared.related): two items of the suite, each a kind (event, task, note, contact, recipe,
+    # linked items (iosuite_shared.related): two items of the suite, each a kind (event, task, note, contact, recipe, item,
     # photo) and its id in its app; one row for both ways, the smaller end first
     """CREATE TABLE IF NOT EXISTS ios_related (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,

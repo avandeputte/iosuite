@@ -7,6 +7,7 @@ const api = client(document.baseURI, { signIn: () => showSignIn() });
 // ------------------------------------------------------------------ helpers
 const $ = (s, el = document) => el.querySelector(s);
 const ICONS = {
+  box: 'M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V4c0-1.1-1-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4l16-.02V7z',
   add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
   person: 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
   people: 'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z',
@@ -299,15 +300,15 @@ const cardOrder = (L) => [...(L.cards || []), ...CARDS.filter((k) => !(L.cards |
 
 // ------------------------------------------------------------------ the search box (⌘K / Ctrl-K)
 /* Type, and the box lists the bookmarks that match, what the apps find for this viewer (ioContact's people,
-   ioCalendar's events, ioTask's tasks, ioRecipe's recipes, ioNote's notes, Home Assistant's things), and a row per app that searches
+   ioCalendar's events, ioTask's tasks, ioRecipe's recipes, ioNote's notes, ioThings' things, Home Assistant's things), and a row per app that searches
    itself (each opens on its own results). Arrows pick a row, Enter opens it, Escape clears. */
 // Lower case without accents, so "celia" finds "Célia" (and "Celia" finds "célia"); a few letters NFD does not split.
 const FOLD = { ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', ł: 'l', đ: 'd', ð: 'd', þ: 'th', ı: 'i' };
 const fold = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[ßæœøłđðþı]/g, (c) => FOLD[c]);
 const APP_SEARCH = { iopix: (q) => `#/photos?q=${encodeURIComponent(q)}`, iocalendar: (q) => `#/search/${encodeURIComponent(q)}`, iotask: (q) => `#/search/${encodeURIComponent(q)}`,
-  iorecipe: (q) => `#/search/${encodeURIComponent(q)}`, ionote: (q) => `#/notes?q=${encodeURIComponent(q)}` };
+  iorecipe: (q) => `#/search/${encodeURIComponent(q)}`, ionote: (q) => `#/notes?q=${encodeURIComponent(q)}`, iothings: (q) => `#/search/${encodeURIComponent(q)}` };
 // what the apps find, in the order their sections come under the bookmarks
-const FINDERS = ['iocontact', 'iocalendar', 'iotask', 'iorecipe', 'ionote'];
+const FINDERS = ['iocontact', 'iocalendar', 'iotask', 'iorecipe', 'ionote', 'iothings'];
 /** "Today 19:00", "Tomorrow", "Fri 21 Nov", "12 Mar 2024": when a found event or task is, short. */
 function whenShort(iso, allDay) {
   if (!iso) return '';
@@ -329,11 +330,14 @@ const FOUND = {
   iorecipe: { head: 'Recipes', href: (a, x) => `${a.url}/#/recipe/${x.id}`,
     kids: (x) => [x.photo ? h('span', { class: 'bmic pic' }, h('img', { src: `api/widgets/iorecipe/photo/${x.id}/${x.photo}`, alt: '', onerror: (e) => e.target.replaceWith(icon('recipe', 's')) })) : h('span', { class: 'bmic hit' }, icon('recipe', 's')),
       h('span', { class: 'qname' }, x.title), h('span', { class: 'muted small' }, x.minutes ? hm(x.minutes) : x.tags.join(', '))] },
+  iothings: { head: 'Things', href: (a, x) => `${a.url}/#/item/${x.id}`,
+    kids: (x) => [x.photo ? h('span', { class: 'bmic pic' }, h('img', { src: `api/widgets/iothings/photo/${x.id}/${x.photo}`, alt: '', onerror: (e) => e.target.replaceWith(icon('box', 's')) })) : h('span', { class: 'bmic hit' }, icon('box', 's')),
+      h('span', { class: 'qname' }, x.name), h('span', { class: 'muted small rest' }, x.where || '')] },
   ionote: { head: 'Notes', href: (a, x) => `${a.url}/#/note/${x.id}`,
     kids: (x) => [h('span', { class: 'bmic hit' }, icon('note', 's')), h('span', { class: 'qname' }, x.title), h('span', { class: 'muted small rest' }, x.text || '')] },
 };
 function searchBox() {
-  const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search, or add an event', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, people, events, tasks, recipes, notes and the web, or add an event' });
+  const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search, or add an event', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, people, events, tasks, recipes, notes, things in the house and the web, or add an event' });
   const list = h('div', { class: 'qlist', hidden: true });
   const box = h('div', { class: 'search' }, icon('search', 's'), inp, h('kbd', null, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'), list);
   let rows = [], sel = 0, timer = null, things = { q: '', items: [] };
