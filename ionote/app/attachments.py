@@ -1,7 +1,7 @@
 """Files attached to a note beside its picture: PDFs, more pictures, documents (nts_attachments).
 
 The bytes are kept as sent, in the database like the pictures. What search needs is pulled out as the file arrives:
-a PDF's text (pypdf), a text file's text; a picture gets a small JPEG for the lists and, when RapidOCR is installed,
+a PDF's text (pypdf), a text file's text; a picture gets a small JPEG for the lists and
 its text read in the background (app/ocr.py). Each change gives the note a new rev, and the note lists its
 attachments (notes.with_attachments), so the devices learn of them with the note itself and fetch the bytes when
 they are wanted.

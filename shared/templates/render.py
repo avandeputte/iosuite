@@ -23,11 +23,12 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 SIMPLE = ["iostart", "iocalendar", "iocontact", "iohealth", "iotask", "iodns", "iobackup", "iorecipe", "iothings", "iomoney"]
-EVERY = SIMPLE + ["ionote", "iopix"]
-# template -> (the file it makes, relative to the repository, and the apps that have one made from it); ioNote and
-# ioPix keep their own setup.sh and workflow (a data folder and text recognition; digiKam and the photo folders)
+SETUP = SIMPLE + ["ionote"]
+EVERY = SETUP + ["iopix"]
+# template -> (the file it makes, relative to the repository, and the apps that have one made from it); ioPix keeps
+# its own setup.sh (digiKam and the photo folders), ioNote and ioPix their own workflow (the web app's scripts)
 KINDS = {
-    "setup.sh": ("{app}/setup.sh", SIMPLE),
+    "setup.sh": ("{app}/setup.sh", SETUP),
     "run.sh": ("{app}/run.sh", EVERY),
     "workflow.yml": (".github/workflows/{app}.yml", SIMPLE),
 }

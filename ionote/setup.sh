@@ -1,22 +1,21 @@
 #!/bin/sh
-# ionote setup: asks where the MariaDB/MySQL database is (and tests it), where the Shared ioSuite database is
-# (the accounts and suite-wide settings shared by the ioThing apps), the port, an admin account, whether
-# pictures added in the web app should have their text read (RapidOCR), and whether to start ionote at login;
-# then creates the Python environment, installs the packages, writes config.env, creates the tables and the
-# admin, and starts the service (launchd on macOS, systemd on Linux). Run it again at any time; it keeps what
-# is there.
+# ioNote setup: asks a few questions (or takes flags), then installs the Python packages, writes the settings,
+# creates the tables and the admin account and installs and starts the service (systemd on Linux, run as root; a
+# login item on a Mac).
 #
-#   ./setup.sh                       ask everything
-#   ./setup.sh --yes --db db.example.lan:3306/ionote:ionote:secret --admin alex:secret
+#   ./setup.sh                 ask the questions
+#   ./setup.sh --yes ...       no questions: what config.env already holds, the flags below, and the defaults
+#
 # Flags (the same in every app of the suite):
-#   --db HOST:PORT/DB:USER:PASSWORD        the database (IONOTE_DB in the environment does the same, off the command line)
-#   --suite-db HOST:PORT/DB:USER:PASSWORD  the Shared ioSuite database (IONOTE_SUITE_DB does the same; default
-#                                          database and user: iosuite); kept as it is in config.env when not given
-#   --admin NAME:PASS (or IONOTE_ADMIN) | --no-admin   --port 8610   --public-url URL   --cookie-domain DOMAIN
-#   --service | --no-service   --python PATH   --system-deps | --no-system-deps   --yes
-#   --db-admin USER:PASSWORD      a MariaDB / MySQL administrator (root...): the databases and users above are created
-#                                 for you, with the passwords you answered (IONOTE_DB_ADMIN does the same; empty: they exist)
-#   --also APP,APP | all        add other apps of the suite to this server, beside this one: each asks its own
+#        --db HOST:PORT/DATABASE:USER:PASSWORD        (MariaDB / MySQL; default 127.0.0.1:3306/ionote:ionote:ionote)
+#        --suite-db HOST:PORT/DATABASE:USER:PASSWORD  (the Shared ioSuite database: accounts and suite-wide settings;
+#                                                      default: the same server, iosuite:iosuite)
+#        --admin NAME:PASSWORD | --no-admin   --port N (8610)   --public-url URL   --cookie-domain DOMAIN
+#        --service | --no-service   --system-deps | --no-system-deps   --python PATH
+#   --db-admin USER[:PASSWORD]    a MariaDB / MySQL administrator (root...): the databases and users above are created
+#                                 for you, with the passwords you answered (IONOTE_DB_ADMIN does the same; empty: they
+#                                 exist). Without :PASSWORD, the password is read from DB_ADMIN_PASSWORD
+#   --also APP,APP | all          add other apps of the suite to this server, beside this one: each asks its own
 #                                 questions, these answers as the defaults (its own database, named after it, on
 #                                 the same server; the same Shared ioSuite database, sign-in domain and admin); with
 #                                 --yes it takes them without asking (IONOTE_ALSO does the same)
@@ -26,24 +25,42 @@
 #                                 answers as the defaults (each app's own setup.sh)
 #   --apps                        only that: show the apps that are here; tick or untick them, or pick one to
 #                                 reconfigure (no other question). Without --yes, every run ends with this list
-# ioNote's own: --data DIR   --features ocr|none
+# >>> own: help
+#        ioNote's own: --data DIR (its own files: session secret, log; default data/)
+# <<< own: help
+# Secrets can stay off the command line: IONOTE_DB, IONOTE_SUITE_DB, IONOTE_ADMIN and
+# IONOTE_DB_ADMIN in the environment do what --db, --suite-db, --admin and --db-admin do.
+# Run it again at any time: it keeps config.env and only changes what you answer.
+#
+# Made from shared/templates/setup.sh (shared/templates/render.py): only the "own:" blocks are this app's.
 set -e
 cd "$(dirname "$0")"
 APP="$(pwd)"
-OS="$(uname -s)"
+# >>> own: app
+WHAT="notes"           # what the app database holds, as the questions name it
+EXAMPLE=notes.example.com  # the public address the question gives as an example
+# <<< own: app
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-YES=0; MYSQL=""; SUITE=""; FEATURES=""; PORT=""; PUBURL=""; COOKIE=""; ADMIN=""; NO_ADMIN=0; SERVICE=""; DATA=""; PY=""; SYSDEPS=""; ALSO=""; DBADMIN=""; REMOVE=""; REDO=""; APPSONLY=0; NOAPPS=0
+YES=0; DBS=""; ADBS=""; ADMIN=""; NO_ADMIN=0; PORT=""; PUBURL=""; COOKIE=""; SERVICE=""; SYSDEPS=""; PY=""; ALSO=""; DBADMIN=""; REMOVE=""; REDO=""; APPSONLY=0; NOAPPS=0; NOTE=""
+# >>> own: vars
+DATA=""
+# <<< own: vars
 while [ $# -gt 0 ]; do
   case "$1" in
-    --yes) YES=1; shift;; --db) MYSQL="$2"; shift 2;; --suite-db) SUITE="$2"; shift 2;;
-    --features) FEATURES="$2"; shift 2;; --port) PORT="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;; --cookie-domain) COOKIE="$2"; shift 2;;
-    --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;; --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;;
-    --data) DATA="$2"; shift 2;; --python) PY="$2"; shift 2;; --also) ALSO="$2"; shift 2;; --remove) REMOVE="$2"; shift 2;; --reconfigure) REDO="$2"; shift 2;; --apps) APPSONLY=1; shift;; --db-admin) DBADMIN="$2"; shift 2;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
-    -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --yes) YES=1; shift;; --db) DBS="$2"; shift 2;; --suite-db) ADBS="$2"; shift 2;; --admin) ADMIN="$2"; shift 2;; --no-admin) NO_ADMIN=1; shift;;
+    --port) PORT="$2"; shift 2;; --public-url) PUBURL="$2"; shift 2;; --cookie-domain) COOKIE="$2"; shift 2;;
+    --service) SERVICE=1; shift;; --no-service) SERVICE=0; shift;; --system-deps) SYSDEPS=1; shift;; --no-system-deps) SYSDEPS=0; shift;;
+    --python) PY="$2"; shift 2;; --also) ALSO="$2"; shift 2;; --remove) REMOVE="$2"; shift 2;; --reconfigure) REDO="$2"; shift 2;; --apps) APPSONLY=1; shift;; --db-admin) DBADMIN="$2"; shift 2;;
+# >>> own: options
+    --data) DATA="$2"; shift 2;;
+# <<< own: options
+    -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); if ($0 !~ /^(>>>|<<<) own:/) print; next } NR > 1 { exit }' "$0"; exit 0;;
     *) die "unknown option $1 (try --help)";;
   esac
 done
+[ -n "$DBS" ] || DBS="${IONOTE_DB:-}"
+[ -n "$ADBS" ] || ADBS="${IONOTE_SUITE_DB:-}"
 [ -n "$ADMIN" ] || ADMIN="${IONOTE_ADMIN:-}"
 [ -n "$ALSO" ] || ALSO="${IONOTE_ALSO:-}"
 [ -n "$REMOVE" ] || REMOVE="${IONOTE_REMOVE:-}"
@@ -53,263 +70,191 @@ if [ "$APPSONLY" = 1 ]; then  # the apps on this server: what is here, tick and 
 fi
 [ -n "$DBADMIN" ] || DBADMIN="${IONOTE_DB_ADMIN:-}"
 case "$DBADMIN" in ''|*:*) ;; *) DBADMIN="$DBADMIN:${DB_ADMIN_PASSWORD:-}";; esac  # the name only: the password comes from the environment
-# a first install whose database check failed left its answers in config.env.failed: they are the defaults now
-FRESH=0; [ -f "$APP/config.env" ] || FRESH=1
-[ "$FRESH" = 0 ] || [ ! -f "$APP/config.env.failed" ] || mv "$APP/config.env.failed" "$APP/config.env"
-getenv() { [ -f "$APP/config.env" ] && sed -n "s/^$1=//p" "$APP/config.env" | tail -n 1; true; }
-failed() { [ "$FRESH" = 0 ] || [ ! -f "$APP/config.env" ] || mv "$APP/config.env" "$APP/config.env.failed"; die "$*"; }
-[ -n "$MYSQL" ] || MYSQL="${IONOTE_DB:-}"
-[ -n "$SUITE" ] || SUITE="${IONOTE_SUITE_DB:-}"
-if [ "$YES" = 1 ]; then TTY=""; else TTY=/dev/stdin; fi
-ask() {  # ask VAR "question" "default"
-  _v="$1"; _q="$2"; _d="$3"
-  if [ "$YES" = 1 ] || [ -z "$TTY" ]; then eval "$_v=\"\$_d\""; return; fi
-  printf '%s [%s]: ' "$_q" "$_d"; read -r _a < "$TTY" || _a=""
-  [ -n "$_a" ] && eval "$_v=\"\$_a\"" || eval "$_v=\"\$_d\""
-}
-yesno() {  # yesno "question" y|n -> returns 0 for yes
-  _d="$2"
-  if [ "$YES" = 1 ] || [ -z "$TTY" ]; then [ "$_d" = y ]; return; fi
-  printf '%s [%s]: ' "$1" "$([ "$_d" = y ] && echo Y/n || echo y/N)"; read -r _a < "$TTY" || _a=""
-  case "${_a:-$_d}" in y|Y|yes|YES) return 0;; *) return 1;; esac
-}
-secret() {  # secret VAR "question"
-  if [ -z "$TTY" ]; then eval "$1=\"\""; return; fi
-  printf '%s: ' "$2"; stty -echo 2>/dev/null < "$TTY" || true; read -r _a < "$TTY" || _a=""; stty echo 2>/dev/null < "$TTY" || true; echo; eval "$1=\"\$_a\""
-}
+ask() { _v="$1"; _q="$2"; _d="$3"
+  if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=\"\$_d\""; return; fi
+  printf '%s [%s]: ' "$_q" "$_d"; read -r _a || _a=""; [ -n "$_a" ] && eval "$_v=\"\$_a\"" || eval "$_v=\"\$_d\""; }
+asksecret() { _v="$1"; _q="$2"
+  if [ "$YES" = 1 ] || [ ! -t 0 ]; then eval "$_v=''"; return; fi
+  printf '%s: ' "$_q"; stty -echo 2>/dev/null; read -r _a || _a=""; stty echo 2>/dev/null; printf '\n'; eval "$_v=\"\$_a\""; }
+# a first install whose database check failed left its answers in config.env.failed: they are the defaults now, and
+# until the check passes this is still a first install (config.env is what makes an app "here" for the installer)
+FRESH=0; [ -f config.env ] || FRESH=1
+[ "$FRESH" = 0 ] || [ ! -f config.env.failed ] || mv config.env.failed config.env
+getenv() { [ -f config.env ] && sed -n "s/^$1=//p" config.env | tail -n 1; true; }
+newpw() { head -c 18 /dev/urandom | base64 | tr -d '/+=\n'; }  # a database password nobody guesses (there is no default)
+NEWPW=""
+getsuite() { getenv "IOSUITE_DB_$1"; }
+split() { # HOST:PORT/DATABASE:USER:PASSWORD into $1_HOST, $1_PORT, $1_NAME, $1_USER, $1_PASSWORD
+  _p="$1"; _s="$2"; _h="${_s%%:*}"; _r="${_s#*:}"; _o="${_r%%/*}"; _r="${_r#*/}"; _n="${_r%%:*}"; _r="${_r#*:}"; _u="${_r%%:*}"; _w="${_r#*:}"
+  eval "${_p}_HOST=\"\$_h\"; ${_p}_PORT=\"\$_o\"; ${_p}_NAME=\"\$_n\"; ${_p}_USER=\"\$_u\"; ${_p}_PASSWORD=\"\$_w\""; }
+# a failed first install is not an install: its answers are kept aside (config.env.failed) for the next run
+failed() { [ "$FRESH" = 0 ] || [ ! -f config.env ] || mv config.env config.env.failed; die "$*"; }
 
-say "ionote setup"
-echo "This asks a few questions, installs the Python packages, writes the settings, creates the tables in your"
-echo "database and starts ionote as a service."
+# ---- system packages (Python 3.10+ with venv; git fetches the other apps of the suite when they are added too)
+if [ "$SYSDEPS" != 0 ] && { ! python3 -c 'import sys, venv, ensurepip; assert sys.version_info >= (3, 10)' 2>/dev/null || ! command -v git >/dev/null; }; then
+  say "Installing Python and git"
+  if command -v apt-get >/dev/null; then apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip git >/dev/null
+  elif command -v dnf >/dev/null; then dnf install -y -q python3 python3-pip git
+  elif command -v brew >/dev/null; then brew install python git
+  else die "install Python 3.10 or newer with venv, and git, then run this again"; fi
+fi
+PY="${PY:-python3}"
+# >>> own: sysdeps
+# libheif: HEIC pictures from iPhones (pillow-heif); GLib: RapidOCR's OpenCV. The app runs without them
+if [ "$SYSDEPS" != 0 ] && command -v apt-get >/dev/null && ! { dpkg -s libheif1 && dpkg -s libglib2.0-0; } >/dev/null 2>&1; then
+  say "Installing libheif and GLib (iPhone pictures, text in pictures)"
+  apt-get install -y -qq --no-install-recommends libheif1 libglib2.0-0 >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq --no-install-recommends libheif1 libglib2.0-0 >/dev/null 2>&1; } || true
+elif [ "$SYSDEPS" != 0 ] && command -v dnf >/dev/null && ! rpm -q libheif glib2 >/dev/null 2>&1; then
+  dnf install -y -q libheif glib2 >/dev/null 2>&1 || true
+fi
+# <<< own: sysdeps
 
-pyok() { [ -n "$1" ] && "$1" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; }
-findpy() { for c in python3.13 python3.12 python3.11 python3.10 python3; do p="$(command -v $c 2>/dev/null || true)"; pyok "$p" && { echo "$p"; return 0; }; done; return 0; }
-[ -n "$PY" ] || PY="$(findpy)"
-if ! pyok "$PY"; then
-  say "System packages"
-  echo "Missing: python3 (3.10 or newer)"
-  if [ -z "$SYSDEPS" ]; then yesno "Install it now?" y && SYSDEPS=1 || SYSDEPS=0; fi
-  if [ "$SYSDEPS" = 1 ]; then
-    SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo"
-    case "$OS" in
-      Darwin) command -v brew >/dev/null 2>&1 || die "install Homebrew (https://brew.sh) or Python 3.10+ yourself, then run setup again"
-              brew install python@3.12; PY=/opt/homebrew/opt/python@3.12/bin/python3.12; pyok "$PY" || PY="$(findpy)";;
-      *) if command -v apt-get >/dev/null 2>&1; then $SUDO env DEBIAN_FRONTEND=noninteractive sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 python3-venv python3-pip libheif1 libglib2.0-0 >/dev/null'
-         elif command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y -q python3 python3-pip libheif glib2 >/dev/null
-         elif command -v zypper >/dev/null 2>&1; then $SUDO zypper -n -q install python3 python3-pip libheif1 >/dev/null
-         elif command -v pacman >/dev/null 2>&1; then $SUDO pacman -Sy --noconfirm --needed python python-pip libheif >/dev/null
-         else die "no known package manager; install python3 (3.10+) yourself, then run setup again"; fi
-         PY="$(findpy)";;
-    esac
-  fi
+# ---- the answers (what config.env holds is the default)
+if [ -z "$DBS" ]; then
+  say "The $WHAT database (MariaDB / MySQL)"
+  H="$(getenv DB_HOST)"; P="$(getenv DB_PORT)"; D="$(getenv DB_NAME)"; U="$(getenv DB_USER)"
+  ask H "Host" "${H:-127.0.0.1}"; ask P "Port" "${P:-3306}"; ask D "Database" "${D:-ionote}"; ask U "User" "${U:-ionote}"
+  asksecret W "Password (empty: keep the current one, or a new random one)"; [ -n "$W" ] || W="$(getenv DB_PASSWORD)"; [ -n "$W" ] || { W="$(newpw)"; NEWPW="$NEWPW $U"; }
+  DBS="$H:$P/$D:$U:$W"
 fi
-pyok "$PY" || die "python3 (3.10 or newer) is needed (found ${PY:-none})"
-"$PY" -c 'import venv' 2>/dev/null || die "the python3 venv module is missing (Debian/Ubuntu: apt install python3-venv)"
-
-say "Database"
-[ -n "$DATA" ] || DATA="$(getenv DATA_DIR)"
-ask DATA "Folder for ioNote's own files (session secret, log)" "${DATA:-$APP/data}"
-if [ -z "$MYSQL" ]; then
-  # what config.env names stays, unless asked to change it
-  if [ -n "$(getenv DB_HOST)" ] && ! yesno "config.env already names a database ($(getenv DB_HOST)/$(getenv DB_NAME)); change it?" n; then
-    MYSQL="keep"
-  else
-    MH="$(getenv DB_HOST)"; MP="$(getenv DB_PORT)"; MD="$(getenv DB_NAME)"; MU="$(getenv DB_USER)"
-    ask MH "MariaDB host" "${MH:-127.0.0.1}"; ask MP "port" "${MP:-3306}"; ask MD "database (created if the user may)" "${MD:-notes}"; ask MU "user" "${MU:-notes}"
-    secret MW "password (empty: keep the current one)"; [ -n "$MW" ] || MW="$(getenv DB_PASSWORD)"
-    MYSQL="$MH:$MP/$MD:$MU:$MW"
-  fi
+split DB "$DBS"
+if [ -z "$ADBS" ]; then
+  say "The Shared ioSuite database: accounts and suite-wide settings, shared by every app of the suite"
+  H="$(getsuite HOST)"; P="$(getsuite PORT)"; D="$(getsuite NAME)"; U="$(getsuite USER)"
+  ask H "Host" "${H:-$DB_HOST}"; ask P "Port" "${P:-$DB_PORT}"; ask D "Database" "${D:-iosuite}"; ask U "User" "${U:-iosuite}"
+  asksecret W "Password (empty: keep the current one, or a new random one; if the user exists, the one in another app's config.env)"; [ -n "$W" ] || W="$(getsuite PASSWORD)"; [ -n "$W" ] || { W="$(newpw)"; NEWPW="$NEWPW $U"; }
+  ADBS="$H:$P/$D:$U:$W"
 fi
-say "Shared ioSuite database"
-echo "Accounts, sessions and the suite-wide settings live in the Shared ioSuite database (MariaDB), shared with"
-echo "every app of the suite, so one sign-in serves them all."
-SUITE_SET=0; [ -f "$APP/config.env" ] && grep -qE '^IOSUITE_DB_' "$APP/config.env" && SUITE_SET=1
-if [ -z "$SUITE" ]; then
-  if [ "$SUITE_SET" = 1 ] && ! yesno "config.env already names the Shared ioSuite database; change it?" n; then
-    SUITE="keep"
-  elif [ "$YES" = 1 ] || [ -z "$TTY" ]; then
-    SUITE="keep"; [ "$SUITE_SET" = 1 ] || echo "not named: ionote uses the defaults (the notes' server, database and user iosuite); set IOSUITE_DB_* in config.env"
-  else
-    case "$MYSQL" in ''|keep) SH="$(grep -E '^DB_HOST=' "$APP/config.env" 2>/dev/null | head -1 | cut -d= -f2-)"; SH="${SH:-127.0.0.1}";; *) SH="${MYSQL%%:*}"; SH="${SH%%/*}";; esac
-    SP="$(getenv IOSUITE_DB_PORT)"; SD="$(getenv IOSUITE_DB_NAME)"; SU="$(getenv IOSUITE_DB_USER)"
-    ask SH "Shared ioSuite database host" "$(getenv IOSUITE_DB_HOST | grep . || echo "$SH")"; ask SP "port" "${SP:-3306}"; ask SD "database (created if the user may)" "${SD:-iosuite}"; ask SU "user" "${SU:-iosuite}"
-    secret SW "password (empty: keep the current one)"; [ -n "$SW" ] || SW="$(getenv IOSUITE_DB_PASSWORD)"
-    SUITE="$SH:$SP/$SD:$SU:$SW"
-  fi
-fi
-ask PORT "Port" "${PORT:-$(getenv PORT | grep . || echo 8610)}"
-[ -n "$PUBURL" ] || ask PUBURL "Public address, e.g. https://notes.example.com (empty: as reached)" "$(getenv PUBLIC_URL)"
-[ -n "$COOKIE" ] || ask COOKIE "Domain the sign-in is shared on, e.g. example.com (empty: this host only)" "$(getenv COOKIE_DOMAIN)"
-if [ -z "$FEATURES" ]; then
-  case "$(getenv OCR)" in 0) OCRD=n;; *) OCRD=y;; esac  # what config.env says, else on
-  yesno "Read the text in pictures added in the web app (RapidOCR, ~60 MB; the Mac and iPhone apps read it themselves)?" "$OCRD" && FEATURES=ocr || FEATURES=none
-fi
-if [ -z "$ADMIN" ] && [ "$NO_ADMIN" = 0 ]; then
-  if yesno "Create an admin account now (until one exists, anyone who can reach ionote can read and change the notes)?" y; then
-    ask AN "Admin user name" "admin"; secret AW "Admin password (8 characters or more)"
-    [ -n "$AW" ] && ADMIN="$AN:$AW" || echo "no password given; skipping the admin account (the web app can create it later)"
-  fi
+split SUITE "$ADBS"
+[ -n "$PORT" ] || { P="$(getenv PORT)"; ask PORT "Web port" "${P:-8610}"; }
+# >>> own: questions
+[ -n "$DATA" ] || DATA="$(getenv DATA_DIR)"; [ -n "$DATA" ] || DATA="$APP/data"  # not asked, as in the other apps (--data sets it)
+# <<< own: questions
+[ -n "$PUBURL" ] || { U2="$(getenv PUBLIC_URL)"; ask PUBURL "Public address, e.g. https://$EXAMPLE (empty: as reached)" "$U2"; }
+[ -n "$COOKIE" ] || { C2="$(getenv COOKIE_DOMAIN)"; ask COOKIE "Domain the sign-in is shared on, e.g. example.com (empty: this host only)" "$C2"; }
+if [ -z "$ADMIN" ] && [ "$NO_ADMIN" = 0 ] && [ "$YES" = 0 ] && [ -t 0 ]; then
+  ask AN "Admin user name (empty: an account from another io app, or make it in the browser on the first visit)" "admin"
+  if [ -n "$AN" ]; then asksecret AW "Admin password (8 or more; empty for an existing account)"; [ -n "$AW" ] && ADMIN="$AN:$AW"; fi
 fi
 if [ -z "$DBADMIN" ] && [ "$YES" = 0 ]; then
   ask DAU "MariaDB administrator who may create the databases and users above, e.g. root (empty: they exist already)" ""
-  if [ -n "$DAU" ]; then secret DAW "Password of $DAU"; DBADMIN="$DAU:$DAW"; fi
+  if [ -n "$DAU" ]; then asksecret DAW "Password of $DAU"; DBADMIN="$DAU:$DAW"; fi
 fi
-if [ -z "$SERVICE" ]; then
-  case "$OS" in Darwin) SVC="a launchd login item";; *) SVC="a systemd service";; esac
-  yesno "Start ionote at login as $SVC?" y && SERVICE=1 || SERVICE=0
-fi
+[ -z "$NEWPW" ] || [ -n "$DBADMIN" ] || say "A new random password was made for the database user(s)$NEWPW; it goes in config.env. Create the user(s) with it on the server, or run this again with --db-admin"
 
-say "Python environment"
-VENV="$APP/.venv"
-[ -x "$VENV/bin/python" ] || "$PY" -m venv "$VENV"
-VPY="$VENV/bin/python"
-pipi() { if command -v uv >/dev/null 2>&1; then uv pip install -q -p "$VPY" "$@"; else "$VPY" -m pip install -q "$@"; fi; }
-"$VPY" -m pip --version >/dev/null 2>&1 || command -v uv >/dev/null 2>&1 || "$VPY" -m ensurepip -q
+# ---- Python environment
+say "Installing the Python packages"
+[ -x .venv/bin/python ] || "$PY" -m venv .venv
+.venv/bin/python -m pip install -q --disable-pip-version-check --upgrade pip
 # the suite's shared library, from the same commit: shared/ inside an installed copy, beside this folder in a checkout of the repository
-SHARED="$APP/shared"; [ -f "$SHARED/pyproject.toml" ] || SHARED="$APP/../shared"
+SHARED=shared; [ -f shared/pyproject.toml ] || SHARED=../shared
 [ -f "$SHARED/pyproject.toml" ] || die "the suite's shared library is missing: this folder is part of the suite's repository (github.com/avandeputte/iosuite) and needs its shared/ folder beside it"
-pipi -e "$SHARED"
-if [ "$FEATURES" = ocr ]; then echo "installing the packages (with RapidOCR)"; pipi -e ".[ocr]"; else echo "installing the packages"; pipi -e .; fi
+.venv/bin/python -m pip install -q --disable-pip-version-check -e "$SHARED"
+.venv/bin/python -m pip install -q --disable-pip-version-check -e .
+# >>> own: packages
+# <<< own: packages
 
-say "Settings"
-ENVF="$APP/config.env"
-umask 077  # the settings file holds the database password: private from the first byte
-OLD=""; [ -f "$ENVF" ] && OLD="$(grep -vE '^(#|DATA_DIR=|PORT=|OCR=|PUBLIC_URL=|COOKIE_DOMAIN=|$)' "$ENVF" || true)"
-{
-  echo "# ionote settings, written by setup.sh (config.env.example lists them all). Edit and restart the service."
-  echo "DATA_DIR=$DATA"
-  echo "PORT=$PORT"
-  echo "PUBLIC_URL=$PUBURL"
-  echo "COOKIE_DOMAIN=$COOKIE"
-  echo "OCR=$([ "$FEATURES" = ocr ] && echo 1 || echo 0)"
-  KEEP="$OLD"; [ "$SUITE" != keep ] && [ -n "$SUITE" ] && KEEP="$(echo "$OLD" | grep -vE '^IOSUITE_DB_' || true)"
-  if [ "$MYSQL" = keep ]; then
-    echo "$KEEP"
-  else
-    echo "$KEEP" | grep -vE '^DB_' | grep -v '^$' || true
-    if [ -n "$MYSQL" ]; then
-      hp=${MYSQL%%/*}; rest=${MYSQL#*/}; db=${rest%%:*}; rest=${rest#*:}; us=${rest%%:*}; pw=${rest#*:}
-      echo "DB_HOST=${hp%%:*}"; echo "DB_PORT=${hp##*:}"; echo "DB_NAME=$db"; echo "DB_USER=$us"; echo "DB_PASSWORD=$pw"
-    fi
-  fi
-  if [ "$SUITE" != keep ] && [ -n "$SUITE" ]; then
-    # the Shared ioSuite database
-    hp=${SUITE%%/*}; rest=${SUITE#*/}; db=${rest%%:*}; rest=${rest#*:}; us=${rest%%:*}; pw=${rest#*:}
-    echo "IOSUITE_DB_HOST=${hp%%:*}"; echo "IOSUITE_DB_PORT=${hp##*:}"; echo "IOSUITE_DB_NAME=$db"; echo "IOSUITE_DB_USER=$us"; echo "IOSUITE_DB_PASSWORD=$pw"
-  fi
-} > "$ENVF"
-chmod 600 "$ENVF"
+# ---- settings (kept between runs; passwords readable by the owner only)
+say "Writing config.env"
+# config.env and its temporary copy hold passwords: made readable by the owner only from the first byte (umask 077)
+(umask 077; touch config.env); chmod 600 config.env
+setenv() { (umask 077; grep -v "^$1=" config.env > config.env.tmp || true; printf '%s=%s\n' "$1" "$2" >> config.env.tmp; mv config.env.tmp config.env); }
+setenv DB_HOST "$DB_HOST"; setenv DB_PORT "$DB_PORT"; setenv DB_NAME "$DB_NAME"; setenv DB_USER "$DB_USER"; setenv DB_PASSWORD "$DB_PASSWORD"
+setenv IOSUITE_DB_HOST "$SUITE_HOST"; setenv IOSUITE_DB_PORT "$SUITE_PORT"; setenv IOSUITE_DB_NAME "$SUITE_NAME"
+setenv IOSUITE_DB_USER "$SUITE_USER"; setenv IOSUITE_DB_PASSWORD "$SUITE_PASSWORD"
+setenv PORT "$PORT"; setenv PUBLIC_URL "$PUBURL"; setenv COOKIE_DOMAIN "$COOKIE"
+# >>> own: settings
+setenv DATA_DIR "$DATA"
+(umask 077; grep -v '^OCR=' config.env > config.env.tmp || true; mv config.env.tmp config.env)  # text in pictures is always on now
 mkdir -p "$DATA"
-while IFS= read -r line; do k="${line%%=*}"; case "$line" in ''|'#'*) ;; *=*) case "$k" in ''|*[!A-Za-z0-9_]*) ;; *) export "$line";; esac;; esac; done < "$ENVF"
-echo "wrote $ENVF"
+# <<< own: settings
 
+say "Checking the databases ($DB_HOST:$DB_PORT/$DB_NAME and $SUITE_HOST:$SUITE_PORT/$SUITE_NAME)"
 if [ -n "$DBADMIN" ]; then
   say "Creating the databases and users as ${DBADMIN%%:*}"
-  DB_ADMIN_PASSWORD="${DBADMIN#*:}" "$VENV/bin"/iosuite-shared --config "$APP" provision --admin "${DBADMIN%%:*}" || failed "could not create the databases and users (see above): check the administrator's name and password"
+  DB_ADMIN_PASSWORD="${DBADMIN#*:}" .venv/bin/iosuite-shared --config "$APP" provision --admin "${DBADMIN%%:*}" || failed "could not create the databases and users (see above): check the administrator's name and password"
 fi
-echo "testing the database, creating it if needed"
-"$VPY" - <<'PYEOF' || failed "could not use that MariaDB/MySQL database (see above); run setup.sh again"
-import os
-from app import db
-c = db.settings()
-r = db.test({})
-if not r["ok"] and ("1049" in r["error"] or "Unknown database" in r["error"]):
-    import pymysql  # the database is not there yet: create it, if this user may
-    con = pymysql.connect(host=c["host"], port=c["port"], user=c["user"], password=c["password"], connect_timeout=8)
-    try:
-        con.cursor().execute(f"CREATE DATABASE IF NOT EXISTS `{c['database']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-        print(f"  created the database {c['database']}")
-    except Exception as e:
-        raise SystemExit(f"  the database {c['database']} does not exist and {c['user']} may not create it ({e}); create it, then run setup.sh again")
-    finally:
-        con.close()
-    r = db.test({})
-if not r["ok"]:
-    raise SystemExit("  " + r["error"])
-db.init()
-print(f"  OK: {r['version']} at {c['host']}:{c['port']}/{c['database']}; tables are in place")
-if r.get("warning"):
-    print("  note: " + r["warning"])
-PYEOF
-
-echo "testing the Shared ioSuite database, creating it if needed"
-"$VPY" - <<'PYEOF' || printf '\033[1;33mwarning:\033[0m could not use the Shared ioSuite database (see above); ionote needs it for sign-in. Run setup.sh again with --suite-db HOST:PORT/DB:USER:PASSWORD\n' >&2
-import os
-import pymysql
-from iosuite_shared import config as sc  # the Shared ioSuite database's settings (IOSUITE_DB_*, or the defaults)
-c = dict(host=sc.DB_HOST, port=sc.DB_PORT, user=sc.DB_USER, password=sc.DB_PASSWORD, connect_timeout=8)
-name = sc.DB_NAME
-try:
-    pymysql.connect(database=name, **c).close()
-except pymysql.err.OperationalError as x:
-    if x.args[0] != 1049:
-        raise SystemExit(f"  {c['user']}@{c['host']}:{c['port']}/{name}: {x}")
-    con = pymysql.connect(**c)  # the database is not there yet: create it, if this user may
-    try:
-        con.cursor().execute(f"CREATE DATABASE IF NOT EXISTS `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-        print(f"  created the database {name}")
-    except Exception as x2:
-        raise SystemExit(f"  the database {name} does not exist and {c['user']} may not create it ({x2}); create it, then run setup.sh again")
-    finally:
-        con.close()
-print(f"  OK: {c['user']}@{c['host']}:{c['port']}/{name}")
-PYEOF
-
+if [ -f app/cli.py ]; then
+  .venv/bin/python -m app.cli check || failed "could not reach a database: check the host, port, user and password (and that the user may connect from this machine)"
+else  # the app makes its own tables as it starts: the Shared ioSuite database is checked now
+  .venv/bin/iosuite-shared --config "$APP" check || failed "the Shared ioSuite database does not answer with those settings (IOSUITE_DB_* in config.env)"
+fi
 if [ -n "$ADMIN" ]; then
-  say "Admin account"
-  ADMIN_PASSWORD="${ADMIN#*:}" "$VENV/bin/iosuite-shared" --config "$APP" admin "${ADMIN%%:*}" --app ionote
+  ADMIN_PASSWORD="${ADMIN#*:}" .venv/bin/iosuite-shared --config "$APP" admin "${ADMIN%%:*}" --app ionote || die "could not create the admin account"
 fi
 
-say "Service"
-if [ "$SERVICE" = 1 ] && [ "$OS" = Darwin ]; then
-  PL="$HOME/Library/LaunchAgents/net.iothing.ionote.server.plist"
-  "$VPY" - "$PL" "$APP" "$VPY" "$DATA" <<'PYEOF'
-import plistlib, sys, os
-pl, app, vpy, data = sys.argv[1:5]
-# the settings stay in config.env, which the app reads itself: the login item only starts `python -m app`. Its output
-# goes nowhere: the app keeps its own log (data/ionote.log, at most 4 files of 5 MB); ./run.sh shows why it will not start
-d = {"Label": "net.iothing.ionote.server", "ProgramArguments": [vpy, "-m", "app"],
-     "WorkingDirectory": app, "RunAtLoad": True, "KeepAlive": True, "ThrottleInterval": 10,
-     "EnvironmentVariables": {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"},
-     "StandardOutPath": "/dev/null", "StandardErrorPath": "/dev/null"}
-os.makedirs(os.path.dirname(pl), exist_ok=True)
-with open(pl, "wb") as f: plistlib.dump(d, f)
-print("  wrote", pl)
-PYEOF
-  launchctl bootout "gui/$(id -u)/net.iothing.ionote.server" 2>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$PL" || die "launchctl could not start the login item (see above)"
-  echo "  started (login item)"
-elif [ "$SERVICE" = 1 ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-  UNIT=/etc/systemd/system/ionote.service
-  if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
-  $SUDO sh -c "cat > $UNIT" <<UEOF
+# ---- the service
+MAC=0; [ "$(uname -s)" != Darwin ] || MAC=1
+if [ -z "$SERVICE" ]; then
+  if [ "$MAC" = 1 ] || { command -v systemctl >/dev/null && [ -d /run/systemd/system ] && [ "$(id -u)" = 0 ]; }; then SERVICE=1; else SERVICE=0; fi
+fi
+if [ "$SERVICE" = 1 ] && [ "$MAC" = 1 ]; then
+  # a Mac: a login item (launchd) that starts the app and starts it again when it stops. The settings stay in
+  # config.env, which the app reads itself; its output goes nowhere, as the app keeps its own log (DATA_DIR)
+  say "Installing the ionote login item"
+  LABEL=net.iothing.ionote.server
+  PL="$HOME/Library/LaunchAgents/$LABEL.plist"
+  mkdir -p "$HOME/Library/LaunchAgents"
+  cat > "$PL" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key><array><string>$APP/.venv/bin/python</string><string>-m</string><string>app</string></array>
+  <key>WorkingDirectory</key><string>$APP</string>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/dev/null</string>
+  <key>StandardErrorPath</key><string>/dev/null</string>
+</dict>
+</plist>
+PLIST
+  launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$PL" || die "launchctl could not start the login item $PL (see above)"
+  say "ioNote runs on port $PORT (a login item: it starts with your session)"
+elif [ "$SERVICE" = 1 ]; then
+  say "Installing the ionote service"
+  OWNER="$(stat -c %U "$APP" 2>/dev/null || echo root)"
+  # run as root in a folder somebody else owns: what was made here is theirs, as the service that runs as them reads it
+  # and its updater writes it
+  [ "$OWNER" = root ] || chown -R "$OWNER" config.env .venv
+# >>> own: service
+  [ "$OWNER" = root ] || chown -R "$OWNER" "$DATA"
+# <<< own: service
+  cat > /etc/systemd/system/ionote.service <<UNIT
 [Unit]
-Description=ionote
-After=network.target
+Description=ioNote
+After=network-online.target mariadb.service
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=$(id -un)
-EnvironmentFile=$ENVF
+User=$OWNER
+EnvironmentFile=$APP/config.env
 WorkingDirectory=$APP
-ExecStart="$VPY" -m app
+ExecStart=$APP/.venv/bin/python -m app
 Restart=always
 RestartSec=5
+# >>> own: unit
+# <<< own: unit
 
 [Install]
 WantedBy=multi-user.target
-UEOF
-  $SUDO systemctl daemon-reload || die "systemctl daemon-reload failed"
-  $SUDO systemctl enable -q ionote || die "the ionote service could not be enabled (see above)"
-  $SUDO systemctl restart ionote || die "the ionote service could not be started (see above; journalctl -u ionote)"  # restart: a running one reads the new settings
+UNIT
+  systemctl daemon-reload
+  systemctl enable -q ionote
+  systemctl restart ionote
   sleep 2
-  $SUDO systemctl is-active -q ionote || die "the service did not start: journalctl -u ionote -n 50"
-  echo "  started (systemd)"
+  systemctl is-active -q ionote || die "the service did not start: journalctl -u ionote -n 50"
+# >>> own: started
+# <<< own: started
+  say "ioNote runs on port $PORT$NOTE"
 else
-  echo "  not installed as a service. Start ionote with:"
-  echo "    cd \"$APP\" && ./run.sh"
+  say "Done. Start it with ./run.sh (port $PORT)"
 fi
-say "Done: http://localhost:$PORT   settings: $ENVF"
 
 # ---- the other apps of the suite on this server (iosuite-shared apps): --also adds, --remove removes, --reconfigure
 # asks an app's questions again; with none of them and somebody at the keyboard, the list of what is here, to tick and untick
