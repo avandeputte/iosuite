@@ -47,14 +47,15 @@ def net_worth_history(days: int = 365, kind: Optional[str] = None, account: Opti
 @server.tool(annotations=READ_ONLY)
 def search_transactions(query: Optional[str] = None, account: Optional[str] = None, category: Optional[str] = None,
                         start: Optional[str] = None, end: Optional[str] = None, flow: Optional[Literal["in", "out"]] = None,
-                        limit: int = 50) -> dict:
+                        reconciled: Optional[bool] = None, limit: int = 50) -> dict:
     """Transactions, the newest first: query (words in the payee, the bank's text, the category, the notes),
-    account (id or name), category (exact name), start and end (YYYY-MM-DD), flow (out: money out; in: money in).
-    With how many match and their sum."""
+    account (id or name), category (exact name), start and end (YYYY-MM-DD), flow (out: money out; in: money in),
+    reconciled (true: only those reconciled; false: only those not). With how many match and their sum."""
     u = who()
     _need_role(u)
     aid = find_account(u, account)["id"] if account else None
-    r = guard(model.find_transactions, u, query or "", aid, category, start, end, flow, clamp(limit, 1, 500))
+    rec = None if reconciled is None else ("yes" if reconciled else "no")
+    r = guard(model.find_transactions, u, query or "", aid, category, start, end, flow, clamp(limit, 1, 500), 0, False, rec)
     for t in r["items"]:
         for k in ("writable", "edited", "source"):
             t.pop(k, None)
@@ -91,11 +92,12 @@ def categories() -> list:
 
 @server.tool(annotations=WRITES)
 def update_transaction(transaction_id: int, category: Optional[str] = None, notes: Optional[str] = None,
-                       hidden: Optional[bool] = None, merchant: Optional[str] = None) -> dict:
-    """Change a transaction: its category, notes, payee name, or hidden (left out of the sums). Kept as changed
-    here, also by the next Monarch sync (Monarch itself is not changed)."""
+                       hidden: Optional[bool] = None, merchant: Optional[str] = None, reconciled: Optional[bool] = None) -> dict:
+    """Change a transaction: its category, notes, payee name, hidden (left out of the sums) or reconciled (checked
+    against the statement). Kept as changed here, also by the next Monarch sync (Monarch itself is not changed)."""
     u = who()
-    b = {k: v for k, v in {"category": category, "notes": notes, "hidden": hidden, "merchant": merchant}.items() if v is not None}
+    b = {k: v for k, v in {"category": category, "notes": notes, "hidden": hidden, "merchant": merchant,
+                           "reconciled": reconciled}.items() if v is not None}
     t = guard(model.update_transaction, u, guard(model.transaction, u, transaction_id), b)
     return model.tx_public(t)
 
@@ -191,9 +193,24 @@ def apply_rules() -> dict:
 def link_transfers() -> dict:
     """Find the transfers between the household's own accounts among the transactions not linked yet (the same
     amount out of one and into another a few days apart, with a transfer category, a payee naming the other account,
-    or a transfer rule) and link them, so they are neither spending nor income (editors). How many were linked."""
+    or a transfer rule, or a payee like "Payment - thank you" or "Online transfer") and link them, so they are neither
+    spending nor income (editors). How many were linked and the pairs left unsure (as likely as another): link one with
+    link_transaction."""
     u = who()
-    return {"linked": guard(transfers.link_all, u)}
+    r = guard(transfers.link_all, u)
+    if isinstance(r, dict) and "possible" in r:
+        r["possibleCount"], r["possible"] = len(r["possible"]), r["possible"][:50]
+    return r
+
+
+@server.tool(annotations=READ_ONLY)
+def possible_transfers(limit: int = 50) -> list[dict]:
+    """Debits and credits of the same amount in two of the household's accounts, at most two weeks apart, that are
+    not linked as a transfer: each {out, in, why} (why it was not linked by itself), the nearest days first. Link
+    one with link_transaction."""
+    u = who()
+    _need_role(u)
+    return transfers.possible(u, limit=clamp(limit, 1, 200))
 
 
 @server.tool(annotations=WRITES)

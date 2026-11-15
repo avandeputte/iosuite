@@ -42,11 +42,19 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
 - **Transfers**: money that leaves one of the household's accounts and arrives in another (to savings, a card's payment,
   a loan's payment) is one transfer: its two halves are linked, shown as "To Savings" / "From Checking", and left out
   of the spending and the cash flow. Two transactions are linked when they are the same amount out and in, in two
-  accounts, at most five days apart, and the payee names the other account or the category is a transfer; when two
+  accounts, at most seven days apart, and something says it is a transfer: the payee names the other account, the
+  category is a transfer or a card's payment, or the payee reads like one ("Payment - thank you", "autopay", "online
+  transfer", "ACH", "loan", "mortgage"); money from a bank account into a card or a loan counts for more. When two
   candidates are equally good, neither is taken. A transfer rule (in this account, a payee like this is a transfer
   with that account, up to N days apart) links them by itself; each transfer found teaches one (Learned, ten days).
   A transaction's dialog links one by hand among the candidates, or unlinks it (never linked again by itself); the
-  Rules page lists, adds and changes the transfer rules and has **Link transfers now**.
+  Rules page lists, adds and changes the transfer rules. **Link transfers** (the maintenance in Settings › Money, and
+  on the Rules page) goes through every transaction, links what it can, and then lists what still looks like a
+  transfer (the same amount out of one account and into another within two weeks) with why it was not linked
+  (as likely as another, nothing says it is a transfer, too many days apart), each with **Link**.
+- **Reconciled**: each transaction can be ticked as reconciled with the bank's statement (the tick at the end of its
+  row, or its dialog); the list filters on it, and **Mark these reconciled** ticks every one shown. The sync leaves it
+  as it is, and it does not count as a change to the transaction.
 - **Rules**: the household's rules rename the payee, set the category or hide a transaction when the payee or the
   bank's own text contains, is or starts with some words (optionally only in one account, money out or in, between two
   amounts). They run over what each sync brings and over a transaction added by hand; **Apply now** runs them over the
@@ -166,7 +174,8 @@ Updates, releases, the reverse proxy and Cloudflare Access work as in every app 
 | Accounts: list, one, add, change, delete (by hand), history, values | `/api/accounts`, `/api/accounts/{id}`, `/api/accounts/{id}/history`, `/api/accounts/{id}/values` |
 | Transactions: search, add (by hand), change, delete | `GET /api/transactions?q=&account=&category=&month=&flow=`, `POST /api/accounts/{id}/transactions`, `/api/transactions/{id}` |
 | Spending and cash flow | `GET /api/spending?month=2026-11`, `GET /api/cashflow?months=12`, `GET /api/categories` |
-| Transfers: one transaction's other half and candidates, link, unlink; link all | `GET/PUT/DELETE /api/transactions/{id}/transfer`, `POST /api/transfers/link` |
+| Transfers: one transaction's other half and candidates, link, unlink; link all; what is left | `GET/PUT/DELETE /api/transactions/{id}/transfer`, `POST /api/transfers/link`, `GET /api/transfers/possible` |
+| Reconciled: filter, mark | `GET /api/transactions?reconciled=yes\|no`, `PATCH /api/transactions/{id}` (`reconciled`), `POST /api/transactions/reconcile` (`{ids, reconciled}`) |
 | Transfer rules: list, add, change, delete | `/api/transfer-rules`, `/api/transfer-rules/{id}` |
 | Rules: list, add, try, apply, order, change, delete | `/api/rules`, `POST /api/rules/test`, `POST /api/rules/apply`, `PUT /api/rules/order`, `/api/rules/{id}` |
 | The portfolio and quotes | `GET /api/portfolio`, `POST /api/accounts/{id}/holdings`, `/api/holdings/{id}`, `GET /api/quotes/{symbol}`, `POST /api/quotes/refresh` |
@@ -188,7 +197,7 @@ curl -u alex:APP-PASSWORD -X PATCH -H 'Content-Type: application/json' -d '{"cat
 
 Off until an admin turns it on in **Settings › Server**. The tools: `overview`, `net_worth_history`,
 `search_transactions`, `spending`, `cash_flow`, `categories`, `update_transaction`, `add_transaction`, `rules`, `add_rule`,
-`test_rule`, `update_rule`, `delete_rule`, `apply_rules`, `link_transfers`, `link_transaction`, `unlink_transaction`,
+`test_rule`, `update_rule`, `delete_rule`, `apply_rules`, `link_transfers`, `possible_transfers`, `link_transaction`, `unlink_transaction`,
 `transfer_rules`, `add_transfer_rule`, `delete_transfer_rule`, `portfolio`,
 `get_quote`, `add_holding`, `update_holding`, `delete_holding`, `add_account`, `update_account`, `add_valuation`,
 `bills`, `sync_monarch`; and for admins `diagnostics`, `monarch_new_accounts`, `resolve_new_account`.
@@ -206,8 +215,9 @@ python -m pytest tests     # on a test MariaDB of its own: a Docker container it
 
 Covered: roles (none, viewer, member, editor), private and household accounts, the net worth and its history,
 accounts followed by their value or their transactions and the five groups, transactions and their search, rules (tried,
-kept, ordered, applied, run by the sync), transfers (found by a named payee or a transfer category, not without
-evidence, a tie left for a person, learned and typed rules, unlinked for good, linked by hand), spending and cash flow without transfers, the portfolio with a holding in another
+kept, ordered, applied, run by the sync), transfers (found by a named payee, a transfer category or a payment's payee, a card's and a loan's
+payment, not without evidence, a tie left for a person, learned and typed rules, unlinked for good, linked by hand, the
+maintenance's list of what is left and why), reconciled (marked, filtered, in bulk, not by a viewer), spending and cash flow without transfers, the portfolio with a holding in another
 currency, a house's estimate and its equity after the mortgage, bills, the Monarch sync against a stand-in for the
 library (first sync, later syncs keeping local changes, a session Monarch no longer takes, a wrong sign-in, a code by
 hand, an account made again in Monarch matched with its transactions none twice, a new one held until said), the MCP server and a person's data deleted.

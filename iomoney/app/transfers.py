@@ -22,7 +22,7 @@ from iosuite_shared.errors import Invalid
 
 from app import db, model
 
-DAYS = 5  # how many days apart the two halves can be, without a rule
+DAYS = 7  # how many days apart the two halves can be, without a rule (a transfer to another bank takes days)
 MAX_DAYS = 31
 LEARN_DAYS = 10  # the window of a learned rule: a known transfer may take longer to arrive
 STOP = {"bank", "the", "and", "of", "na", "inc", "llc", "co", "corp", "financial", "account", "accounts", "checking",
@@ -30,6 +30,10 @@ STOP = {"bank", "the", "and", "of", "na", "inc", "llc", "co", "corp", "financial
         "pymt", "pmt", "ach", "from", "to", "xfer", "web", "id", "ppd", "des", "co.", "my", "joint", "visa", "mastercard",
         "amex", "loan", "mortgage", "deposit", "withdrawal", "auto", "autopay", "epay", "us", "usa", "fund", "funds"}
 TRANSFERISH = re.compile(r"transfer|credit card payment|payment|xfer|autopay|deposit to|withdrawal to", re.I)
+# a payee or bank's text that says money moved between accounts: a card's payment ("Payment - thank you", "Chase
+# autopay"), a loan's or mortgage's payment, a transfer ("Online transfer to", "XFER", "ACH")
+PAYEE_HINT = re.compile(r"\b(transfer|xfer|trnsfr|payment|pymt|pmt|autopay|auto pay|auto-pay|e-?pay|thank you|"
+                        r"online banking|bill ?pay|loan|mortgage|ach (?:debit|credit|pmt)|crcardpmt|card ?pmt)\b", re.I)
 
 
 def _words(*texts) -> set:
@@ -44,6 +48,29 @@ def _words(*texts) -> set:
 def _is_transferish(t: dict) -> bool:
     grp = (t.get("category_group") or "").lower()
     return grp in model.TRANSFERS or bool(TRANSFERISH.search(t.get("category") or ""))
+
+
+def _hinted(t: dict) -> bool:
+    return any(PAYEE_HINT.search(x or "") for x in (t.get("merchant"), t.get("description")))
+
+
+PAYS_INTO = ("credit", "loan", "other_liability")  # money in there is (nearly always) a payment
+PAYS_FROM = ("cash", "investment")
+
+
+LOANISH = re.compile(r"mortgage|loan|auto payment|car payment|student", re.I)
+
+
+def _no_spending(t: dict) -> bool:
+    """t has no category, or one a payment has (a transfer, a card's or a loan's payment): not a purchase or a refund."""
+    return not t.get("category") or _is_transferish(t) or bool(LOANISH.search(t.get("category") or ""))
+
+
+def _pays(o: dict, i: dict, accts: dict) -> bool:
+    """Money out of a bank account and into a card or a loan, neither half a purchase or a refund by its category:
+    a payment, the way a card's or a loan's is."""
+    return ((accts.get(o["account_id"]) or {}).get("kind") in PAYS_FROM and (accts.get(i["account_id"]) or {}).get("kind") in PAYS_INTO
+            and _no_spending(o) and _no_spending(i))
 
 
 def _names(t: dict, other: dict) -> bool:
@@ -87,12 +114,14 @@ def _score(o: dict, i: dict, accts: dict, rules: list, nots: set) -> tuple[int, 
         return 100 - gap, "rule"
     named = _names(o, accts[i["account_id"]]) or _names(i, accts[o["account_id"]])
     transferish = _is_transferish(o) or _is_transferish(i)
-    if not (named or transferish):
+    hinted = _hinted(o) or _hinted(i)
+    pays = _pays(o, i, accts)
+    if not (named or transferish or hinted):  # money into a card or a loan alone is not enough: a refund is too
         return None
-    return 50 + (20 if named else 0) + (10 if transferish else 0) - 3 * gap, "auto"
+    return 50 + (20 if named else 0) + (10 if transferish else 0) + (5 if hinted else 0) + (10 if pays else 0) - 3 * gap, "auto"
 
 
-def link(where: str = "1 = 1", args=(), learn: bool = True) -> int:
+def link(where: str = "1 = 1", args=(), learn: bool = True, unsure: list = None) -> int:
     """Find the transfers among the transactions not linked yet (those that match where may pair with any other) and
     link them; how many were linked."""
     news = {t["id"]: t for t in _rows(where, args)}
@@ -100,7 +129,7 @@ def link(where: str = "1 = 1", args=(), learn: bool = True) -> int:
         return 0
     pool = {t["id"]: t for t in _rows()}
     pool.update(news)
-    accts = {a["id"]: a for a in db.q("SELECT id, name, institution FROM mny_accounts")}
+    accts = {a["id"]: a for a in db.q("SELECT id, name, institution, kind FROM mny_accounts")}
     rules = db.q("SELECT * FROM mny_transfer_rules")
     nots = {(r["out_id"], r["in_id"]) for r in db.q("SELECT out_id, in_id FROM mny_transfer_nots")}
     by_amount: dict = {}
@@ -129,6 +158,8 @@ def link(where: str = "1 = 1", args=(), learn: bool = True) -> int:
         if o["id"] in used or i["id"] in used:
             continue
         if sorted(best[o["id"]], reverse=True)[1:2] == [score] or sorted(best[i["id"]], reverse=True)[1:2] == [score]:
+            if unsure is not None:
+                unsure.append((o, i))
             continue  # as likely as another: not a guess to make
         db.ex("INSERT IGNORE INTO mny_transfers (out_id, in_id, how) VALUES (%s, %s, %s)", (o["id"], i["id"], how))
         used.update((o["id"], i["id"]))
@@ -211,10 +242,59 @@ def disconnect(u: dict, t: dict) -> None:
     db.ex("INSERT IGNORE INTO mny_transfer_nots (out_id, in_id) VALUES (%s, %s)", (p["out_id"], p["in_id"]))
 
 
-def link_all(u: dict) -> int:
-    """Find the transfers among every transaction not linked yet (Link transfers now)."""
+LOOK_DAYS = 14  # how far apart the maintenance still shows a debit and a credit of the same amount as a possible transfer
+
+
+def link_all(u: dict) -> dict:
+    """Go through every transaction not linked yet and link the transfers (Link transfers now, the maintenance in
+    Settings › Money): {linked, learned (transfer rules), possible: what is still not linked though it could be a
+    transfer (the same amount out of one account and into another, at most LOOK_DAYS apart), each {out, in, why}, the
+    nearest days first; why: as likely as another, nothing says it is a transfer, too many days apart}."""
     model._need(shared_users.can_write(u), "Only editors link the household's transfers")
-    return link()
+    rules_before = db.one("SELECT COUNT(*) AS n FROM mny_transfer_rules")["n"]
+    ties: list = []
+    n = link(unsure=ties)
+    tied = {(o["id"], i["id"]) for o, i in ties}
+    return {"linked": n, "learned": db.one("SELECT COUNT(*) AS n FROM mny_transfer_rules")["n"] - rules_before,
+            "possible": possible(u, tied)}
+
+
+def possible(u: dict, tied: set = frozenset(), limit: int = 200) -> list[dict]:
+    """The debits and credits of the same amount in two accounts, at most LOOK_DAYS apart, neither linked yet nor
+    unlinked by a person: what a person may want to link, with why it was not linked by itself."""
+    rows = [t for t in _rows() if model.can_read(u, t)]
+    accts = {a["id"]: a for a in db.q("SELECT id, name, institution, kind FROM mny_accounts")}
+    rules = db.q("SELECT * FROM mny_transfer_rules")
+    nots = {(r["out_id"], r["in_id"]) for r in db.q("SELECT out_id, in_id FROM mny_transfer_nots")}
+    ins: dict = {}
+    for t in rows:
+        if Decimal(t["amount"]) > 0:
+            ins.setdefault(Decimal(t["amount"]), []).append(t)
+    found = []
+    for o in rows:
+        amt = -Decimal(o["amount"])
+        if amt <= 0:
+            continue
+        for i in ins.get(amt, []):
+            gap = abs((o["day"] - i["day"]).days)
+            if i["account_id"] == o["account_id"] or gap > LOOK_DAYS or (o["id"], i["id"]) in nots:
+                continue
+            if (o["id"], i["id"]) in tied:
+                why = "as likely as another transaction of the same amount"
+            elif gap > DAYS and not _score(o, i, accts, rules, nots):
+                why = f"{gap} days apart"
+            elif not _score(o, i, accts, rules, nots):
+                why = "nothing says it is a transfer"
+            else:
+                why = "as likely as another transaction of the same amount"
+            found.append((gap, -amt, o, i, why))
+    found.sort(key=lambda f: (f[0], f[1]))
+    out = []
+    for _gap, _a, o, i, why in found[:limit]:
+        a, b = model.tx_row(o["id"]), model.tx_row(i["id"])
+        if a and b:
+            out.append({"out": model.tx_public(a, u), "in": model.tx_public(b, u), "why": why})
+    return out
 
 
 # ---- transfer rules
