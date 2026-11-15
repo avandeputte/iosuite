@@ -41,7 +41,8 @@ def test_mcp_money(client, as_user):
     assert {"overview", "net_worth_history", "search_transactions", "spending", "cash_flow", "categories", "update_transaction",
             "add_transaction", "portfolio", "get_quote", "add_holding", "update_holding", "delete_holding", "add_account",
             "update_account", "add_valuation", "bills", "sync_monarch", "diagnostics", "rules", "add_rule", "test_rule", "update_rule",
-            "delete_rule", "apply_rules"} <= names
+            "delete_rule", "apply_rules", "link_transfers", "link_transaction", "unlink_transaction", "transfer_rules",
+            "add_transfer_rule", "delete_transfer_rule", "monarch_new_accounts", "resolve_new_account"} <= names
     a = call(client, auth, "add_account", name="Checking", kind="cash", balance=1200)
     assert a["name"] == "Checking" and a["youCanChange"] is True and a["household"] is True
     car = call(client, auth, "add_account", name="Family car", kind="vehicle", balance=20000, yearly_rate=-15)
@@ -86,6 +87,8 @@ def test_mcp_money(client, as_user):
     assert "error" in call(client, auth, "update_account", account="nothing like it", name="x")
     assert call(client, auth, "diagnostics")["database"]["accounts"] == 4
     assert "error" in call(client, auth, "sync_monarch") or call(client, auth, "sync_monarch")["ok"] is False
+    assert call(client, auth, "monarch_new_accounts") == []
+    assert "error" in call(client, auth, "resolve_new_account", external_id="nope", is_new=True)
     # a viewer reads and changes nothing
     from conftest import sign_in
     sign_in(client, "alex")
@@ -95,4 +98,5 @@ def test_mcp_money(client, as_user):
     assert call(client, vauth, "overview")["netWorth"]["netWorth"] == 1200 - 35 + 11000
     assert "error" in call(client, vauth, "add_account", name="Mine", kind="cash")
     assert "error" in call(client, vauth, "sync_monarch")
+    assert "error" in call(client, vauth, "monarch_new_accounts")
     quotes.fetcher = None

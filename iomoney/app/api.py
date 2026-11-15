@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
 
-from app import access, db, model, monarch, quotes
+from app import access, db, model, monarch, quotes, transfers
 
 router = APIRouter()
 
@@ -48,7 +48,8 @@ def summary(request: Request):
                        "track": model.TRACK_DEFAULT.get(k, "value")} for k, v in model.KINDS.items()],
             "groups": [{"group": g, "label": name, "kinds": list(kinds)} for g, name, kinds in model.GROUPS],
             "holdingKinds": list(model.HOLDING_KINDS),
-            "monarch": {"configured": monarch.configured(), "lastGood": monarch.status()["lastGood"]} if model.role_rank(u) else None,
+            "monarch": {"configured": monarch.configured(), "lastGood": monarch.status()["lastGood"], "running": monarch.running(),
+                        "newAccounts": monarch.held_count() if model.is_admin(u) else 0} if model.role_rank(u) else None,
             "may": {"read": model.role_rank(u) >= 1, "own": model.may_add(u, False), "household": model.may_add(u, True),
                     "admin": model.is_admin(u)}}
 
@@ -165,7 +166,7 @@ async def add_transaction(aid: int, request: Request):
     u = _u(request)
     b = await json_body(request)
     t = await run_in_threadpool(lambda: model.create_transaction(u, model.account(u, aid), b))
-    return JSONResponse(model.tx_public(t, u), status_code=201)
+    return JSONResponse(model.with_transfers([model.tx_public(t, u)], u)[0], status_code=201)
 
 
 @router.patch("/api/transactions/{tid}", dependencies=[access.signed_in])
@@ -175,7 +176,7 @@ async def change_transaction(tid: int, request: Request):
     u = _u(request)
     b = await json_body(request)
     t = await run_in_threadpool(lambda: model.update_transaction(u, model.transaction(u, tid), b))
-    return model.tx_public(t, u)
+    return model.with_transfers([model.tx_public(t, u)], u)[0]
 
 
 @router.delete("/api/transactions/{tid}", dependencies=[access.signed_in])
@@ -188,6 +189,75 @@ def delete_transaction(tid: int, request: Request):
 @router.get("/api/categories", dependencies=[access.signed_in])
 def list_categories(request: Request):
     return {"items": model.categories(_u(request))}
+
+
+# ------------------------------------------------------------------ transfers between the household's own accounts
+
+@router.get("/api/transactions/{tid}/transfer", dependencies=[access.signed_in])
+def transaction_transfer(tid: int, request: Request):
+    """The other half of this transaction's transfer (other: {id, accountId, account, day, how}, or null), and the
+    transactions you see that could be it (the same amount the other way, in another account, within two weeks)."""
+    u = _u(request)
+    t = model.transaction(u, tid)
+    other = transfers.other_half(u, t)
+    return {"other": other, "candidates": [] if other else transfers.candidates(u, t)}
+
+
+@router.put("/api/transactions/{tid}/transfer", dependencies=[access.signed_in])
+async def link_transfer(tid: int, request: Request):
+    """{with: the other half's id}: link the two as one transfer, by hand."""
+    u = _u(request)
+    b = await json_body(request)
+    await run_in_threadpool(lambda: transfers.connect(u, model.transaction(u, tid), b.get("with")))
+    return {"other": transfers.other_half(u, model.transaction(u, tid))}
+
+
+@router.delete("/api/transactions/{tid}/transfer", dependencies=[access.signed_in])
+def unlink_transfer(tid: int, request: Request):
+    """Unlink this transaction's transfer: the two are not linked again by themselves."""
+    u = _u(request)
+    transfers.disconnect(u, model.transaction(u, tid))
+    return {"ok": True}
+
+
+@router.post("/api/transfers/link", dependencies=[access.signed_in])
+async def link_transfers(request: Request):
+    """Find the transfers among every transaction not linked yet (editors): how many were linked."""
+    u = _u(request)
+    return {"linked": await run_in_threadpool(transfers.link_all, u)}
+
+
+@router.get("/api/transfer-rules", dependencies=[access.signed_in])
+def list_transfer_rules(request: Request):
+    """The transfer rules: in an account, a payee (or bank's text) with these words is a transfer with that account.
+    source learned: made when a transfer was found by itself."""
+    u = _u(request)
+    return {"items": [transfers.rule_public(r, u) for r in transfers.rules(u)], "writable": model.may_add(u, True)}
+
+
+@router.post("/api/transfer-rules", dependencies=[access.signed_in])
+async def add_transfer_rule(request: Request):
+    """{accountId, pattern, otherId, days? (5)} (editors)."""
+    u = _u(request)
+    b = await json_body(request)
+    r = await run_in_threadpool(transfers.create_rule, u, b)
+    linked = await run_in_threadpool(transfers.link)
+    return JSONResponse({**transfers.rule_public(r, u), "linked": linked}, status_code=201)
+
+
+@router.patch("/api/transfer-rules/{rid}", dependencies=[access.signed_in])
+async def change_transfer_rule(rid: int, request: Request):
+    u = _u(request)
+    b = await json_body(request)
+    r = await run_in_threadpool(lambda: transfers.update_rule(u, transfers.rule(u, rid), b))
+    return {**transfers.rule_public(r, u), "linked": await run_in_threadpool(transfers.link)}
+
+
+@router.delete("/api/transfer-rules/{rid}", dependencies=[access.signed_in])
+def delete_transfer_rule(rid: int, request: Request):
+    u = _u(request)
+    transfers.delete_rule(u, transfers.rule(u, rid))
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------ rules
@@ -367,10 +437,33 @@ def monarch_status():
 
 @router.post("/api/monarch/sync", dependencies=[access.admin])
 async def monarch_sync(request: Request):
-    """{full?: true (the past two years of transactions again)}: copy Monarch Money in now, and say how it went."""
+    """{full?: true (the past two years of transactions again), wait?: seconds (10 as left out, at most 60)}: start
+    copying Monarch Money in, in the background. When it ends within wait: how it went ({ok, message, ...}); else
+    {running: true, progress: {stage, count, started}}, and GET /api/monarch says how it goes and, at the end, how
+    it went (last)."""
     b = await json_body(request) if (request.headers.get("content-length") or "0") != "0" else {}
-    got = await run_in_threadpool(monarch.sync, _u(request)["id"], bool(b.get("full")))
-    return got
+    wait = max(0.0, min(float(b.get("wait", 10) or 0), 60.0))
+    return await run_in_threadpool(monarch.start, _u(request)["id"], bool(b.get("full")), wait)
+
+
+@router.get("/api/monarch/new", dependencies=[access.admin])
+def monarch_new():
+    """The accounts Monarch Money reported that ioMoney did not know (after the first sync): they wait, with their
+    transactions, until an admin says whether each is new or an account here made again in Monarch under a new id.
+    Each comes with the accounts here it could be, likeliest first (candidates; likely: the id of a sure one)."""
+    return {"items": monarch.held()}
+
+
+@router.post("/api/monarch/new/{ext}", dependencies=[access.admin])
+async def monarch_new_decide(ext: str, request: Request):
+    """{as: 'new'} or {as: 'existing', accountId}, wait?: seconds: what a waiting account is. A sync starts right away
+    (its result as it ends within wait, as for POST /api/monarch/sync): a new account comes in with its history; an
+    existing one takes the new id, and its transactions are matched with those kept, so none is there twice."""
+    b = await json_body(request)
+    r = monarch.decide(ext, str(b.get("as") or ""), b.get("accountId"), _u(request)["id"])
+    wait = max(0.0, min(float(b.get("wait", 0) or 0), 60.0))
+    r["sync"] = await run_in_threadpool(monarch.start, _u(request)["id"], False, wait)
+    return r
 
 
 @router.post("/api/monarch/code", dependencies=[access.admin])

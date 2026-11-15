@@ -17,6 +17,7 @@ class FakeMM:
     logins = 0
     valid = {"tok-1"}
     transactions = []
+    accounts = []
 
     def __init__(self, token=None):
         self.token = token
@@ -44,22 +45,16 @@ class FakeMM:
 
     async def get_accounts(self):
         self._check()
-        acct = lambda i, name, typ, bal, asset=True, **kw: {"id": i, "displayName": name, "type": {"name": typ}, "subtype": {"display": typ.title()},  # noqa: E731
-                                                            "isAsset": asset, "currentBalance": bal, "includeInNetWorth": True,
-                                                            "institution": {"name": "Bank"}, "mask": "1234", **kw}
-        return {"accounts": [acct("101", "Checking", "depository", 5000), acct("102", "Visa", "credit", -300, asset=False),
-                             acct("103", "Brokerage", "brokerage", 12000, holdingsCount=2),
-                             acct("104", "1 Main St", "real_estate", 650000, dataProvider="zillow"),
-                             acct("105", "Mortgage", "loan", -400000, asset=False),
-                             acct("106", "Honda", "vehicle", 21000)]}
+        return {"accounts": FakeMM.accounts}
 
     async def get_account_history(self, account_id):
         return [{"date": D(30), "signedBalance": 4000 if account_id == 101 else 600000 if account_id == 104 else -1},
                 {"date": D(10), "signedBalance": 4500 if account_id == 101 else 640000 if account_id == 104 else -1}]
 
-    async def get_transactions(self, limit, offset, start_date, end_date):
+    async def get_transactions(self, limit, offset, start_date, end_date, account_ids=()):
         self._check()
-        rows = [t for t in FakeMM.transactions if start_date <= t["date"] <= end_date]
+        rows = [t for t in FakeMM.transactions if start_date <= t["date"] <= end_date
+                and (not account_ids or t["account"]["id"] in account_ids)]
         return {"allTransactions": {"totalCount": len(rows), "results": rows[offset:offset + limit]}}
 
     async def get_account_holdings(self, account_id):
@@ -76,6 +71,17 @@ class FakeMM:
              "category": {"name": "Utilities"}, "account": {"id": "101"}}]}
 
 
+def acct(i, name, typ, bal, asset=True, **kw):
+    return {"id": i, "displayName": name, "type": {"name": typ}, "subtype": {"display": typ.title()}, "isAsset": asset,
+            "currentBalance": bal, "includeInNetWorth": True, "institution": {"name": "Bank"}, "mask": "1234", **kw}
+
+
+ACCOUNTS = [acct("101", "Checking", "depository", 5000), acct("102", "Visa", "credit", -300, asset=False, mask="9876"),
+            acct("103", "Brokerage", "brokerage", 12000, holdingsCount=2, mask=None),
+            acct("104", "1 Main St", "real_estate", 650000, dataProvider="zillow", mask=None),
+            acct("105", "Mortgage", "loan", -400000, asset=False, mask="5555"), acct("106", "Honda", "vehicle", 21000, mask=None)]
+
+
 def tx(i, days_ago, amount, merchant, cat="c1", **kw):
     return {"id": i, "date": D(days_ago), "amount": amount, "merchant": {"name": merchant}, "plaidName": merchant.upper(),
             "category": {"id": cat, "name": {"c1": "Groceries", "c2": "Transfer"}[cat]}, "account": {"id": "101"},
@@ -88,6 +94,7 @@ def mm(monkeypatch, client):
     monkeypatch.setattr(monarch, "_errors", lambda: (KeyError, LookupError, IndexError))
     monkeypatch.setattr(quotes, "fetcher", lambda sym, rng: {"chart": {"result": None, "error": {"description": "offline"}}})
     FakeMM.logins, FakeMM.valid = 0, set()
+    FakeMM.accounts = list(ACCOUNTS)
     FakeMM.transactions = [tx("t1", 3, -54.2, "Grocer"), tx("t2", 2, -1000, "To savings", cat="c2"), tx("t3", 1, -12, "Pending cafe", pending=True)]
     monarch.declare()
     credentials.forget()
@@ -196,3 +203,46 @@ def test_rules_run_over_what_monarch_sends(client, mm):
     assert client.post("/api/monarch/sync").json()["ok"]
     assert client.get(f"/api/accounts/{accts['Checking']['id']}").json()["track"] == "value"
     assert client.get("/api/transactions").json()["total"] == 0
+
+
+def test_an_account_made_again_in_monarch_is_not_there_twice(client, mm):
+    put_keys()
+    assert client.post("/api/monarch/sync").json()["ok"]
+    chk = next(a for a in client.get("/api/accounts").json()["items"] if a["name"] == "Checking")
+    t1 = grocer(client)
+    client.patch(f"/api/transactions/{t1['id']}", json={"category": "Party"})
+    # the bank link broke: Checking deleted in Monarch and made again (new ids for it and its transactions, a day off
+    # here and there, older history too); and a new account, an HSA
+    FakeMM.accounts = [a for a in ACCOUNTS if a["id"] != "101"] + [acct("201", "Checking", "depository", 4900),
+                                                                    acct("301", "HSA", "depository", 800, mask="4444")]
+    new = lambda i, d, amount, m, **kw: tx(i, d, amount, m, account={"id": "201"}, **kw)  # noqa: E731
+    FakeMM.transactions = [new("n1", 2, -54.2, "Grocer"), new("n2", 2, -1000, "To savings", cat="c2"), new("n3", 1, -8, "Bakery"),
+                           new("n0", 40, -70, "Hardware")]
+    r = client.post("/api/monarch/sync").json()
+    assert r["ok"] and r["held"] == 2 and "2 new accounts wait" in r["message"]
+    assert client.get("/api/transactions").json()["total"] == 3  # the old Checking's are kept meanwhile
+    assert client.get("/api/summary").json()["monarch"]["newAccounts"] == 2
+    held = {x["externalId"]: x for x in client.get("/api/monarch/new").json()["items"]}
+    assert set(held) == {"201", "301"}
+    assert held["201"]["likely"] == chk["id"] and held["201"]["candidates"][0]["gone"] is True
+    assert held["301"]["likely"] is None and held["301"]["balance"] == 800
+    # not an account Monarch still lists; not one that does not wait
+    visa = next(a for a in client.get("/api/accounts").json()["items"] if a["name"] == "Visa")
+    assert client.post("/api/monarch/new/201", json={"as": "existing", "accountId": visa["id"]}).status_code == 400
+    assert client.post("/api/monarch/new/999", json={"as": "new"}).status_code == 404
+    # the HSA is new: it comes in with the next sync
+    r = client.post("/api/monarch/new/301", json={"as": "new", "wait": 30}).json()
+    assert r["sync"]["ok"] and r["sync"]["held"] == 1
+    assert any(a["name"] == "HSA" for a in client.get("/api/accounts").json()["items"])
+    # the new Checking is the old one: same account, its transactions matched, none twice, the change kept
+    r = client.post("/api/monarch/new/201", json={"as": "existing", "accountId": chk["id"], "wait": 30}).json()
+    assert r["accountId"] == chk["id"] and r["sync"]["ok"] and r["sync"]["held"] == 0
+    items = client.get(f"/api/transactions?account={chk['id']}").json()["items"]
+    assert sorted(t["merchant"] for t in items) == ["Bakery", "Grocer", "Hardware", "To savings"]
+    g = next(t for t in items if t["merchant"] == "Grocer")
+    assert g["id"] == t1["id"] and g["category"] == "Party"
+    assert client.get(f"/api/accounts/{chk['id']}").json()["balance"] == 4900
+    assert db.one("SELECT matched FROM mny_monarch_moves WHERE account_id = %s", (chk["id"],))["matched"] == 2
+    assert client.get("/api/monarch/new").json()["items"] == []
+    assert client.post("/api/monarch/sync").json()["ok"]
+    assert client.get("/api/transactions").json()["total"] == 4

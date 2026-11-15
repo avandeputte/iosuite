@@ -5,7 +5,7 @@ from typing import Literal, Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import __version__, config, model, monarch, quotes
+from app import __version__, config, model, monarch, quotes, transfers
 from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, clamp, find_account, guard, link, need_admin, server, who
 
 
@@ -187,6 +187,64 @@ def apply_rules() -> dict:
     return {"changed": guard(model.apply_all_rules, u)}
 
 
+@server.tool(annotations=WRITES)
+def link_transfers() -> dict:
+    """Find the transfers between the household's own accounts among the transactions not linked yet (the same
+    amount out of one and into another a few days apart, with a transfer category, a payee naming the other account,
+    or a transfer rule) and link them, so they are neither spending nor income (editors). How many were linked."""
+    u = who()
+    return {"linked": guard(transfers.link_all, u)}
+
+
+@server.tool(annotations=WRITES)
+def link_transaction(transaction_id: int, with_transaction_id: Optional[int] = None) -> dict:
+    """Link a transaction to the other half of its transfer (with_transaction_id: the same amount the other way, in
+    another account), or, without with_transaction_id, show its transfer and the candidates. unlink_transaction
+    takes a link away."""
+    u = who()
+    t = guard(model.transaction, u, transaction_id)
+    if with_transaction_id is not None:
+        guard(transfers.connect, u, t, with_transaction_id)
+    other = transfers.other_half(u, t)
+    return {"other": other, "candidates": [] if other else transfers.candidates(u, t)}
+
+
+@server.tool(annotations=WRITES)
+def unlink_transaction(transaction_id: int) -> dict:
+    """Unlink a transaction's transfer, for good (the two are not linked again by themselves)."""
+    u = who()
+    guard(transfers.disconnect, u, guard(model.transaction, u, transaction_id))
+    return {"unlinked": transaction_id}
+
+
+@server.tool(annotations=READ_ONLY)
+def transfer_rules() -> dict:
+    """The transfer rules: in an account, a payee or bank's text with these words is a transfer with another account
+    (source learned: made when such a transfer was found by itself)."""
+    u = who()
+    _need_role(u)
+    return {"items": [transfers.rule_public(r, u) for r in transfers.rules(u)]}
+
+
+@server.tool(annotations=ADDS)
+def add_transfer_rule(account: str, pattern: str, other_account: str, days: int = 5) -> dict:
+    """A transfer rule (editors): in account (id or name), a transaction whose payee or bank's text contains pattern
+    is a transfer with other_account, its other half the same amount the other way within days. Links what it finds."""
+    u = who()
+    b = {"accountId": find_account(u, account)["id"], "otherId": find_account(u, other_account)["id"], "pattern": pattern, "days": days}
+    r = guard(transfers.create_rule, u, b)
+    return {**transfers.rule_public(r, u), "linked": transfers.link()}
+
+
+@server.tool(annotations=DELETES)
+def delete_transfer_rule(rule_id: int) -> dict:
+    """Remove a transfer rule (its id, from transfer_rules). Transfers already linked stay linked. Ask first."""
+    u = who()
+    r = guard(transfers.rule, u, rule_id)
+    guard(transfers.delete_rule, u, r)
+    return {"deleted": r["pattern"]}
+
+
 @server.tool(annotations=READ_ONLY)
 def portfolio(account: Optional[str] = None) -> dict:
     """Every holding, priced with the latest quote: shares, price, value, the day's change, the gain over the cost
@@ -308,7 +366,31 @@ def bills(start: Optional[str] = None, end: Optional[str] = None) -> list:
 
 @server.tool(annotations=WRITES)
 def sync_monarch() -> dict:
-    """Admins: copy Monarch Money in now (accounts, balances, transactions, holdings, bills) and say how it went."""
+    """Admins: copy Monarch Money in now (accounts, balances, transactions, holdings, bills) and say how it went. A
+    long one (the first, with two years of transactions) goes on in the background: then running is true, and
+    diagnostics or this tool again says how it goes."""
     u = who()
     need_admin()
-    return monarch.sync(u["id"])
+    return monarch.start(u["id"], wait=45)
+
+
+@server.tool(annotations=READ_ONLY)
+def monarch_new_accounts() -> list[dict]:
+    """Admins: the accounts Monarch Money reported that ioMoney did not know. Each waits, with its transactions, until
+    an admin says whether it is new or an account here made again in Monarch under a new id (when its bank link broke);
+    candidates are the accounts here it could be, likeliest first."""
+    who()
+    need_admin()
+    return monarch.held()
+
+
+@server.tool(annotations=WRITES)
+def resolve_new_account(external_id: str, is_new: bool, account_id: int | None = None) -> dict:
+    """Admins: say what a waiting Monarch account is (external_id from monarch_new_accounts): is_new true (it comes in
+    as a new account), or false with account_id, the account here it is (that account takes the new id and its
+    transactions are matched, so none is there twice). A sync starts right away."""
+    u = who()
+    need_admin()
+    r = monarch.decide(external_id, "new" if is_new else "existing", account_id, u["id"])
+    r["sync"] = monarch.start(u["id"], wait=45)
+    return r

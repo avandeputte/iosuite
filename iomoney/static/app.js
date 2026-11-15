@@ -375,9 +375,79 @@ function acctRow(a) {
 function syncNote() {
   const m = S.sum && S.sum.monarch;
   if (!m || !m.configured) return null;
-  const stale = m.lastGood && (Date.now() - new Date(m.lastGood).getTime()) > 2 * 86400e3;
-  return h('p', { class: `muted small ${stale ? 'warn' : ''}`, style: { margin: '-8px 0 12px' } }, icon('sync', 'xs'), ` Monarch Money synced ${ago(m.lastGood)}`,
-    S.user.role === 'admin' ? [' · ', h('a', { class: 'lnk', href: '#/settings/money' }, 'Settings')] : null);
+  const admin = S.user.role === 'admin';
+  const out = [];
+  if (m.newAccounts && admin) {
+    out.push(h('div', { class: 'note warnnote' }, icon('warning', 's'),
+      h('span', { class: 'grow' }, m.newAccounts === 1 ? 'Monarch Money reports an account ioMoney does not know. Is it new, or one you have that was made again in Monarch?'
+        : `Monarch Money reports ${m.newAccounts} accounts ioMoney does not know. Are they new, or ones you have that were made again in Monarch?`),
+      h('button', { class: 'pillbtn primary', onclick: () => newAccountsDialog() }, 'Review')));
+  }
+  if (m.running) {
+    if (admin) watchSync();
+    out.push(h('p', { class: 'muted small syncing', style: { margin: '-8px 0 12px' } }, h('span', { class: 'spin' }), ' Syncing with Monarch Money: ', h('span', { 'data-syncstage': '' }, 'under way')));
+  } else {
+    const stale = m.lastGood && (Date.now() - new Date(m.lastGood).getTime()) > 2 * 86400e3;
+    out.push(h('p', { class: `muted small ${stale ? 'warn' : ''}`, style: { margin: '-8px 0 12px' } }, icon('sync', 'xs'), ` Monarch Money synced ${ago(m.lastGood)}`,
+      admin ? [' · ', h('a', { class: 'lnk', href: '#/settings/money' }, 'Settings')] : null));
+  }
+  return out;
+}
+
+// ------------------------------------------------------------------ the Monarch sync: in the background, followed here
+let syncPoll = null;
+const syncLabel = (p) => (p && p.stage ? `${p.stage}${p.count ? ` (${p.count.toLocaleString()})` : ''}` : 'under way');
+/** Follow a running sync (admins): its stage on the page every two seconds, and how it went at the end. A first sync
+    of two years takes minutes, longer than a request waits, so it runs on in the server and is followed from here. */
+function watchSync() {
+  if (syncPoll) return;
+  const tick = async () => {
+    let st;
+    try { st = await api('api/monarch'); } catch { syncPoll = setTimeout(tick, 5000); return; }
+    document.querySelectorAll('[data-syncstage]').forEach((el) => { el.textContent = syncLabel(st.progress); });
+    if (st.running) { syncPoll = setTimeout(tick, 2000); return; }
+    syncPoll = null;
+    if (st.last) toast(st.last.ok ? `Synced: ${st.last.message}` : `The sync did not work: ${st.last.message}`);
+    await refreshSummary();
+    if (!document.querySelector('.dialog-back')) onRoute();
+  };
+  syncPoll = setTimeout(tick, 1500);
+}
+async function startSync(full, btn) {
+  if (btn) { btn.disabled = true; btn.lastChild.textContent = 'Starting…'; }
+  try {
+    const r = await api('api/monarch/sync', { method: 'POST', json: { full, wait: 5 } });
+    if (r.running) toast('Syncing in the background: this page shows how it goes');
+    else toast(r.ok ? `Synced: ${r.message}` : r.message);
+  } catch (e) { fail(e); }
+  await refreshSummary(); onRoute();
+}
+
+/** The accounts Monarch reported that ioMoney did not know: one at a time, new or an account here (the likeliest
+    chosen); "Later" leaves the rest waiting. */
+async function newAccountsDialog() {
+  let items;
+  try { items = (await api('api/monarch/new')).items || []; } catch (e) { fail(e); return; }
+  for (const [i, x] of items.entries()) {
+    const name = `pick-${x.externalId}`;
+    const radio = (value, checked, ...label) => h('label', { class: 'pick' }, h('input', { type: 'radio', name, value, checked: checked ? true : null }), h('span', null, ...label));
+    const desc = (a) => [a.institution, a.kind ? kindLabel(a.kind) : null, a.mask ? `…${a.mask}` : null].filter(Boolean).join(' · ');
+    const body = h('div', { class: 'newacct' },
+      h('div', { class: 'box', style: { margin: '0 0 14px' } }, h('b', null, x.name), h('div', { class: 'muted small' }, desc(x), x.closed ? ' · closed in Monarch' : ''),
+        h('div', { class: 'num' }, money(x.balance))),
+      h('p', { class: 'muted small' }, 'When a bank’s link breaks, an account is often deleted and made again in Monarch Money, with a new id. Say which it is, so its account and transactions are not here twice. Its transactions wait until then.'),
+      h('div', { class: 'picks' }, radio('new', !x.likely, h('b', null, 'A new account'), h('small', null, 'Added here with its history and transactions')),
+        x.candidates.map((c) => radio(String(c.id), c.id === x.likely, h('b', null, c.name), h('small', null, [desc(c), money(c.balance), c.gone ? 'no longer in Monarch' : c.source === 'manual' ? 'added by hand' : null].filter(Boolean).join(' · '))))));
+    const ok = await dialog(items.length > 1 ? `New in Monarch Money (${i + 1} of ${items.length})` : 'New in Monarch Money', body,
+      [{ label: 'Later', value: false }, { label: 'Save', value: true, primary: true }], 'wide');
+    if (!ok) break;
+    const v = body.querySelector(`input[name="${name}"]:checked`).value;
+    try {
+      await api(`api/monarch/new/${encodeURIComponent(x.externalId)}`, { method: 'POST', json: v === 'new' ? { as: 'new' } : { as: 'existing', accountId: +v } });
+      toast(v === 'new' ? `${x.name} comes in with this sync` : 'Its transactions are matched with this sync, none twice');
+    } catch (e) { fail(e); break; }
+  }
+  await refreshSummary(); onRoute();
 }
 
 // ------------------------------------------------------------------ one account
@@ -389,7 +459,8 @@ async function showAccount(page, r) {
   const valued = thing || (!tx && a.kind !== 'investment');  // a value now and then, not transactions
   const shown = a.estimate != null ? a.estimate : a.balance;
   const menu = h('button', { class: 'iconbtn', title: 'More', 'aria-label': 'More', onclick: (e) => popMenu(e.currentTarget, [
-    a.writable ? ['edit', 'Edit', () => accountDialog(a)] : null,
+    a.writable ? ['edit', 'Rename', () => renameAccount(a)] : null,
+    a.writable ? ['tune', 'Edit', () => accountDialog(a)] : null,
     a.writable && a.source === 'manual' && valued ? ['add', 'Add a value', () => valueDialog(a)] : null,
     a.writable && a.source === 'manual' && a.kind === 'investment' ? ['add', 'Add a holding', () => holdingDialog(null, a.id)] : null,
     a.writable && a.source === 'manual' && tx ? ['add', 'Add a transaction', () => txDialog(null, a)] : null,
@@ -397,7 +468,7 @@ async function showAccount(page, r) {
     a.writable && a.source === 'manual' ? ['delete', 'Delete', () => removeAccount(a)] : null,
   ]) }, icon('more'));
   put(page, h('div', { class: 'pagehead' }, h('span', { class: 'sic', style: { '--hue': `var(${KIND_LOOK[a.kind][1]})`, color: 'var(--hue)' } }, icon(KIND_LOOK[a.kind][0])),
-    h('h1', null, a.name), !a.household ? h('span', { class: 'tag priv' }, 'Private') : null, a.hidden ? h('span', { class: 'tag' }, 'Hidden') : null,
+    h('h1', null, a.name), a.writable ? h('button', { class: 'iconbtn rename', title: 'Rename', 'aria-label': 'Rename', onclick: () => renameAccount(a) }, icon('edit', 's')) : null, !a.household ? h('span', { class: 'tag priv' }, 'Private') : null, a.hidden ? h('span', { class: 'tag' }, 'Hidden') : null,
     a.closed ? h('span', { class: 'tag' }, 'Closed') : null,
     !tx && !thing ? h('span', { class: 'tag', title: 'Its value alone is followed, not its transactions (Edit to change)' }, 'Value only') : null,
     h('span', { class: 'grow' }), menu));
@@ -437,6 +508,15 @@ async function showAccount(page, r) {
 }
 let linkUi = null;
 /** "Linked" under a house or a car: the events, tasks, notes, contacts and photos of the other apps linked to it. */
+/** A new name for an account (one from Monarch Money too: the name here stays through the syncs). */
+async function renameAccount(a) {
+  const name = inp(a.name, { maxlength: 255 });
+  const body = h('div', null, fld('Name', name, true), a.source === 'monarch' ? h('p', { class: 'muted small' }, 'Monarch Money keeps its own name; this one stays here through the syncs.') : null);
+  setTimeout(() => { name.focus(); name.select(); }, 50);
+  name.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); name.closest('.dialog')?.querySelector('button.primary')?.click(); } });
+  if (!await dialog('Rename the account', body, [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }])) return;
+  try { await api(`api/accounts/${a.id}`, { method: 'PATCH', json: { name: name.value } }); await refreshSummary(); toast('Renamed'); onRoute(); } catch (e) { fail(e); }
+}
 function linkedBox(id) {
   const el = h('div', { class: 'linked' });
   (async () => {
@@ -538,18 +618,27 @@ async function categories() {
   if (!S.cats.length) { try { S.cats = (await api('api/categories')).items || []; } catch { S.cats = []; } }
   return S.cats;
 }
+/** The transactions, one row each: date, payee, notes, category (or where a transfer went) and amount (and the
+    account, where the list mixes them). On a phone the notes and the account give way, the category goes under the payee. */
+const fmtTxDay = (s) => { const d = dateOf(s); return d.toLocaleDateString(undefined, d.getFullYear() === new Date().getFullYear() ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: '2-digit' }); };
+function txCat(t) {
+  if (t.transfer) return h('span', { class: 'xfer', title: `A transfer ${t.amount < 0 ? 'to' : 'from'} ${t.transfer.account}${t.transfer.how === 'hand' ? ' (linked by hand)' : ''}` }, icon('link', 'xs'), `${t.amount < 0 ? 'To' : 'From'} ${t.transfer.account}`);
+  return t.category ? h('span', null, t.category) : h('span', { class: 'muted' }, 'Uncategorized');
+}
 function txList(items, showAccount = true) {
   if (!items.length) return h('p', { class: 'muted' }, 'No transactions.');
-  const out = h('div');
-  let day = null, ul = null;
-  for (const t of items) {
-    if (t.day !== day) { day = t.day; put(out, h('div', { class: 'dayhead' }, fmtDay(t.day, true))); ul = h('ul', { class: 'rows flat' }); put(out, ul); }
-    put(ul, h('li', { class: t.hidden ? 'off' : null }, h('button', { class: 'r', onclick: () => txDialog(t) },
-      h('span', { class: 'main' }, h('b', null, t.merchant || t.description || '(no payee)'),
-        h('small', null, [t.category || 'Uncategorized', showAccount ? t.account : null, t.pending ? 'pending' : null, t.notes].filter(Boolean).join(' · '))),
-      h('span', { class: 'end' }, amt(t.amount, t.currency)))));
-  }
-  return out;
+  const cls = `rows flat txs ${showAccount ? 'withacct' : ''}`;
+  return h('ul', { class: cls },
+    h('li', { class: 'txhead', 'aria-hidden': 'true' }, h('div', { class: 'r tx' }, h('span', { class: 'd' }, 'Date'), h('span', { class: 'p' }, 'Payee'),
+      h('span', { class: 'n' }, 'Notes'), h('span', { class: 'c' }, 'Category'), showAccount ? h('span', { class: 'a' }, 'Account') : null, h('span', { class: 'm' }, 'Amount'))),
+    items.map((t) => h('li', { class: t.hidden ? 'off' : null }, h('button', { class: 'r tx', onclick: () => txDialog(t) },
+      h('span', { class: 'd' }, fmtTxDay(t.day)),
+      h('span', { class: 'p' }, h('b', null, t.merchant || t.description || '(no payee)'), t.pending ? h('span', { class: 'tag' }, 'Pending') : null,
+        h('small', { class: 'cs' }, txCat(t))),
+      h('span', { class: 'n', title: t.notes || null }, t.notes || ''),
+      h('span', { class: 'c' }, txCat(t)),
+      showAccount ? h('span', { class: 'a' }, t.account) : null,
+      h('span', { class: 'm' }, amt(t.amount, t.currency))))));
 }
 async function showTransactions(page, r) {
   const q = r.q || {};
@@ -590,8 +679,11 @@ async function txDialog(t, account) {
     notes: h('textarea', { class: 't', rows: 2, disabled: ro ? true : null }, t.notes || ''), hidden: h('input', { type: 'checkbox', checked: t.hidden ? true : null, disabled: ro ? true : null }),
     day: inp(t.day, { type: 'date', disabled: ro || !manual ? true : null }), amount: inp(t.amount, { inputmode: 'decimal', placeholder: '-12.50 out, 100 in', disabled: ro || !manual ? true : null }),
     account: h('select', { class: 't', disabled: !isNew ? true : null }, (isNew ? manualAccts : S.accounts).map((a) => h('option', { value: a.id, selected: a.id === t.accountId ? true : null }, a.name))) };
+  const xbox = isNew ? null : h('div', { class: 'xferbox' });
+  let moved = false;
+  if (xbox) drawTransfer(xbox, t, () => { moved = true; });
   const body = h('div', null, dl, h('div', { class: 'grid' }, fld('Payee', f.merchant, true), fld('Amount', f.amount), fld('Date', f.day), fld('Category', f.category), fld('Account', f.account), fld('Notes', f.notes, true)),
-    h('label', { class: 'check', style: { marginTop: '10px' } }, f.hidden, 'Hidden: left out of the sums'),
+    h('label', { class: 'check', style: { marginTop: '10px' } }, f.hidden, 'Hidden: left out of the sums'), xbox,
     t.description && t.description !== t.merchant ? h('p', { class: 'muted small' }, 'At the bank: ', t.description) : null,
     t.source === 'monarch' ? h('p', { class: 'muted small' }, 'From Monarch Money. A change here stays here: Monarch itself is not changed.') : null);
   const btns = ro ? [{ label: 'Close', value: false }] : [
@@ -605,13 +697,38 @@ async function txDialog(t, account) {
       setMerchant: f.merchant.value.trim() !== name ? f.merchant.value.trim() : null, setCategory: f.category.value.trim() || t.category });
     return;
   }
-  if (!ok) return;
+  if (!ok) { if (moved) onRoute(); return; }
   const b = { merchant: f.merchant.value, category: f.category.value, notes: f.notes.value, hidden: f.hidden.checked };
   if (manual) Object.assign(b, { day: f.day.value, amount: f.amount.value });
   try {
     await api(isNew ? `api/accounts/${f.account.value}/transactions` : `api/transactions/${t.id}`, { method: isNew ? 'POST' : 'PATCH', json: b });
     S.cats = []; toast(isNew ? 'Added' : 'Saved'); onRoute();
   } catch (e) { fail(e); }
+}
+
+/** In a transaction's dialog: the other half of its transfer (with Unlink), or the transactions that could be it
+    (the same amount the other way in another account, within two weeks), each with Link. */
+async function drawTransfer(box, t, changed) {
+  let d;
+  try { d = await api(`api/transactions/${t.id}/transfer`); } catch { return; }
+  const w = t.writable;
+  const act = async (fn) => { try { await fn(); changed(); drawTransfer(box, t, changed); } catch (e) { fail(e); } };
+  if (d.other) {
+    const o = d.other;
+    fill(box, h('h3', { class: 'sub' }, icon('link', 's'), 'Transfer'),
+      h('div', { class: 'xferline' }, h('span', { class: 'grow' }, `${t.amount < 0 ? 'To' : 'From'} `, h('b', null, o.account || 'an account you do not see'), ` on ${fmtDay(o.day, true)}`,
+        h('small', { class: 'muted' }, o.how === 'hand' ? ' · linked by hand' : o.how === 'rule' ? ' · linked by a transfer rule' : ' · found by ioMoney')),
+        w ? h('button', { class: 'pillbtn', onclick: () => act(() => api(`api/transactions/${t.id}/transfer`, { method: 'DELETE' })) }, 'Unlink') : null),
+      h('p', { class: 'muted small' }, 'A transfer between your own accounts is left out of the spending and the cash flow.'));
+    return;
+  }
+  if (!d.candidates.length || !w) { fill(box); return; }
+  fill(box, h('h3', { class: 'sub' }, icon('link', 's'), 'Is it a transfer?'),
+    h('p', { class: 'muted small' }, 'These are the same amount the other way, in another account. Link the one that is the other half:'),
+    h('ul', { class: 'rows flat' }, d.candidates.map((c) => h('li', null, h('div', { class: 'r' }, h('span', { class: 'day' }, fmtDay(c.day)),
+      h('span', { class: 'main' }, h('b', null, c.account), h('small', null, [c.merchant || c.description, c.category].filter(Boolean).join(' · '))),
+      h('span', { class: 'end' }, amt(c.amount, c.currency)),
+      h('button', { class: 'pillbtn', onclick: () => act(() => api(`api/transactions/${t.id}/transfer`, { method: 'PUT', json: { with: c.id } })) }, 'Link'))))));
 }
 
 // ------------------------------------------------------------------ rules: rename and categorize as they come in
@@ -643,7 +760,6 @@ async function showRules(page) {
   if (!items.length) {
     put(page, h('div', { class: 'empty' }, icon('tune'), h('p', null, 'No rules yet.'),
       h('p', { class: 'muted' }, w ? 'Add one here, or open a transaction and choose Make a rule.' : 'Editors add them.')));
-    return;
   }
   const move = async (i, by) => {
     const ids = items.map((x) => x.id); const [x] = ids.splice(i, 1); ids.splice(i + by, 0, x);
@@ -657,6 +773,45 @@ async function showRules(page) {
       h('button', { class: 'iconbtn', title: 'Tried earlier', disabled: i === 0 ? true : null, onclick: () => move(i, -1) }, icon('prev', 's up')),
       h('button', { class: 'iconbtn', title: 'Tried later', disabled: i === items.length - 1 ? true : null, onclick: () => move(i, 1) }, icon('next', 's down')),
       h('button', { class: 'iconbtn', title: 'Edit', onclick: () => ruleDialog(x) }, icon('edit', 's'))) : null)))));
+  await drawTransferRules(page);
+}
+/** The transfer rules: in this account, a payee like this is a transfer with that account. ioMoney learns one each
+    time it finds a transfer by itself; editors add, change and delete them. */
+async function drawTransferRules(page) {
+  const d = await api('api/transfer-rules');
+  const items = d.items || [];
+  const w = d.writable;
+  const linkNow = async () => { try { const r = await api('api/transfers/link', { method: 'POST' }); toast(`${r.linked} transfer${r.linked === 1 ? '' : 's'} linked`); } catch (e) { fail(e); } };
+  put(page, h('div', { class: 'pagehead', style: { marginTop: '28px' } }, h('h2', { class: 'h1ish' }, icon('link'), 'Transfers'), h('span', { class: 'grow' }),
+    w ? h('button', { class: 'pillbtn', onclick: linkNow, title: 'Look for transfers among every transaction not linked yet' }, icon('sync'), h('span', null, 'Link transfers now')) : null,
+    w ? h('button', { class: 'pillbtn', onclick: () => transferRuleDialog() }, icon('add'), h('span', null, 'Transfer rule')) : null));
+  put(page, h('p', { class: 'muted' }, 'Money that leaves one of your accounts and arrives in another (to savings, a card’s payment, a loan’s payment) is one transfer, linked and left out of the spending. ',
+    'ioMoney links the two halves when the amounts match, the days are close and the payee or category says it is a transfer; each one it finds teaches it a rule, so the next is found even a few days later. ',
+    'Open a transaction to link or unlink it by hand.'));
+  if (!items.length) { put(page, h('p', { class: 'muted small' }, 'No transfer rules yet.')); return; }
+  put(page, h('ul', { class: 'rows rules' }, items.map((x) => h('li', null, h('div', { class: 'r' },
+    h('span', { class: 'main' }, h('b', null, `${x.account || '?'} ⇄ ${x.other || '?'}`),
+      h('small', null, `In ${x.account || '?'}, the payee “${x.pattern}”, up to ${x.days} day${x.days === 1 ? '' : 's'} apart`)),
+    x.source === 'learned' ? h('span', { class: 'tag', title: 'Learned from a transfer ioMoney found' }, 'Learned') : null,
+    w ? h('span', { class: 'end acts' }, h('button', { class: 'iconbtn', title: 'Edit', onclick: () => transferRuleDialog(x) }, icon('edit', 's'))) : null)))));
+}
+async function transferRuleDialog(x) {
+  const isNew = !x;
+  x = x || { days: 5 };
+  const acctSel = (v) => h('select', { class: 't' }, h('option', { value: '' }, 'Choose…'), S.accounts.filter(followsTx).map((a) => h('option', { value: a.id, selected: a.id === v ? true : null }, a.name)));
+  const f = { account: acctSel(x.accountId), pattern: inp(x.pattern, { placeholder: 'ally bank, payment thank you' }), other: acctSel(x.otherId),
+    days: inp(x.days, { type: 'number', min: 0, max: 31, style: { width: '90px' } }) };
+  const body = h('div', null, h('div', { class: 'grid' }, fld('In the account', f.account), fld('A payee or bank’s text with', f.pattern),
+    fld('Is a transfer with', f.other), fld('At most this many days apart', f.days)));
+  const btns = [!isNew ? { label: 'Delete', value: 'delete', danger: true } : null, { label: 'Cancel', value: false }, { label: isNew ? 'Add' : 'Save', value: true, primary: true }].filter(Boolean);
+  const ok = await dialog(isNew ? 'Add a transfer rule' : 'Edit the transfer rule', body, btns, 'wide');
+  if (ok === 'delete') { try { await api(`api/transfer-rules/${x.id}`, { method: 'DELETE' }); toast('Deleted'); onRoute(); } catch (e) { fail(e); } return; }
+  if (!ok) return;
+  const b = { accountId: +f.account.value || null, pattern: f.pattern.value, otherId: +f.other.value || null, days: f.days.value };
+  try {
+    const r = await api(isNew ? 'api/transfer-rules' : `api/transfer-rules/${x.id}`, { method: isNew ? 'POST' : 'PATCH', json: b });
+    toast(`${isNew ? 'Added' : 'Saved'}${r.linked ? `: ${r.linked} transfer${r.linked === 1 ? '' : 's'} linked` : ''}`); onRoute();
+  } catch (e) { fail(e); }
 }
 /** Add a rule, or change one. As it is typed, the transactions it matches are counted, with the newest few. */
 async function ruleDialog(x, preset) {
@@ -865,19 +1020,20 @@ async function setMoney(el) {
   const last = st.last;
   const code = inp('', { inputmode: 'numeric', maxlength: 6, placeholder: '123456', style: { width: '110px' } });
   const auto = h('input', { type: 'checkbox', checked: set.monarchAuto ? true : null, onchange: async (e) => { try { await api('api/settings', { method: 'PUT', json: { monarchAuto: e.target.checked } }); toast('Saved'); } catch (x) { fail(x); } } });
-  const sync = async (full) => {
-    toast(full ? 'Syncing two years of transactions…' : 'Syncing with Monarch Money…');
-    try { const r = await api('api/monarch/sync', { method: 'POST', json: { full } }); toast(r.ok ? `Synced: ${r.message}` : r.message); await refreshSummary(); onRoute(); } catch (e) { fail(e); }
-  };
+  if (st.running) watchSync();
   put(el, h('div', { class: 'box' }, h('h2', null, icon('sync'), 'Monarch Money'),
     h('p', { class: 'muted' }, 'ioMoney copies in Monarch Money’s accounts, balances, transactions, holdings and bills (houses from Zillow and vehicles included) every ', st.every, ' hours. It only reads: nothing is changed in Monarch. The sign-in is kept with the suite’s keys and tokens, in ', keysLink, ':'),
     h('ul', { class: 'keylist' }, keyRow('monarch_email', 'Monarch Money email'), keyRow('monarch_password', 'Monarch Money password'),
       keyRow('monarch_mfa_secret', 'Monarch Money authenticator key (the text under the QR code when you set up the authenticator app in Monarch)'),
       h('li', null, icon(K.monarch_token ? 'check' : 'close', K.monarch_token ? 'ok' : 'muted'), K.monarch_token ? 'Signed in (a session is kept)' : 'Not signed in yet')),
-    last ? h('p', { class: `note ${last.ok ? '' : 'bad'}` }, last.ok ? `Last sync ${ago(last.finished || last.started)}: ${last.message}` : `The last sync (${ago(last.started)}) did not work: ${last.message}`) : null,
+    st.running ? h('p', { class: 'note syncing' }, h('span', { class: 'spin' }), ' Syncing: ', h('span', { 'data-syncstage': '' }, syncLabel(st.progress)),
+      h('small', null, ` · started ${ago(st.progress && st.progress.started)}. It goes on if you leave this page.`))
+      : last ? h('p', { class: `note ${last.ok ? '' : 'bad'}` }, last.ok ? `Last sync ${ago(last.finished || last.started)}: ${last.message}` : `The last sync (${ago(last.started)}) did not work: ${last.message}`) : null,
+    S.sum.monarch && S.sum.monarch.newAccounts ? h('p', { class: 'note warnnote' }, icon('warning', 's'), h('span', { class: 'grow' }, `${S.sum.monarch.newAccounts} account${S.sum.monarch.newAccounts === 1 ? '' : 's'} from Monarch wait${S.sum.monarch.newAccounts === 1 ? 's' : ''} for you to say whether ${S.sum.monarch.newAccounts === 1 ? 'it is' : 'they are'} new.`),
+      h('button', { class: 'pillbtn primary', onclick: () => newAccountsDialog() }, 'Review')) : null,
     h('div', { class: 'chiprow' },
-      h('button', { class: 'pillbtn primary', disabled: st.running || !st.configured ? true : null, onclick: () => sync(false) }, icon('sync'), h('span', null, st.running ? 'Syncing…' : 'Sync now')),
-      h('button', { class: 'pillbtn', disabled: st.running || !st.configured ? true : null, onclick: () => sync(true) }, 'Sync two years again'),
+      h('button', { class: 'pillbtn primary', disabled: st.running || !st.configured ? true : null, onclick: (e) => startSync(false, e.currentTarget) }, icon('sync'), h('span', null, st.running ? 'Syncing…' : 'Sync now')),
+      h('button', { class: 'pillbtn', disabled: st.running || !st.configured ? true : null, onclick: (e) => startSync(true, e.currentTarget) }, h('span', null, 'Sync two years again')),
       K.monarch_token ? h('button', { class: 'pillbtn', onclick: async () => { await api('api/monarch/session', { method: 'DELETE' }); toast('The next sync signs in again'); onRoute(); } }, 'Sign in again') : null),
     h('label', { class: 'check', style: { marginTop: '12px' } }, auto, `Sync every ${st.every} hours on its own`),
     !K.monarch_mfa_secret && K.monarch_email ? h('div', { style: { marginTop: '14px' } }, h('p', { class: 'muted small' }, 'No authenticator key kept: sign in once with the code your authenticator app shows now.'),

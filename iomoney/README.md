@@ -14,7 +14,15 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   investment accounts and the coming bills, copied in every six hours and on **Sync now**. ioMoney only reads: nothing
   is changed in Monarch. Monarch has no public API; ioMoney uses the community's Python library
   ([`monarchmoneycommunity`](https://pypi.org/project/monarchmoneycommunity/)), which speaks to the API Monarch's web
-  app uses.
+  app uses. A sync runs in the background: Sync now waits a few seconds, then the page follows it (its stage and count
+  every two seconds) and says how it went at the end, so a long first sync is no longer reported as failed.
+- **A new account in Monarch**: after the first sync, an account Monarch reports that ioMoney does not know is held,
+  with its transactions, until an admin says (on the overview's banner or in Settings › Money) whether it is new or an
+  account here that was deleted and made again in Monarch, as is often needed when a bank's link breaks. The
+  likeliest account is picked (no longer in Monarch, the same last digits or a like name). An existing one takes the
+  new Monarch id; the next sync matches the transactions Monarch sends under it with those kept (the same amount, at
+  most three days apart, the same payee first), so none is there twice and what was changed here stays. An account
+  typed in by hand can be picked too.
 - **Accounts by hand** beside Monarch's: a savings account elsewhere, an investment account with what it holds, a car
   with its value. A house or a car typed in can follow a yearly change (3 % up for a house, 15 % down for a car)
   between the values you give it, marked as an estimate.
@@ -24,11 +32,21 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   then or as Monarch has it, and the account's transactions stay out of the lists and the spending. Changed in the
   account's Edit, also for Monarch's accounts, and kept through the syncs.
 - **Five groups**: the accounts are shown, added up and listed in the sidebar as Cash (bank accounts), Investments,
-  Credit cards, Loans, and Assets (real estate, vehicles and other things of value).
+  Credit cards, Loans, and Assets (real estate, vehicles and other things of value). The sidebar lists them close
+  together in a smaller type. **Rename** (the pencil by the account's name) works for Monarch's accounts too.
 - **The net worth**: what the household owns less what it owes, now and day by day (a month, three, a year, five),
   by kind of account. An account or a holding in another currency is converted at the day's rate.
-- **Transactions**: searched by words, account, category, month and direction; a category, a payee, notes or hidden
-  changed here stays as changed through later syncs (Monarch itself is not changed).
+- **Transactions**: one row each (date, payee, notes, category or where a transfer went, account, amount; on a phone the
+  category goes under the payee), searched by words, account, category, month and direction; a category, a payee,
+  notes or hidden changed here stays as changed through later syncs (Monarch itself is not changed).
+- **Transfers**: money that leaves one of the household's accounts and arrives in another (to savings, a card's payment,
+  a loan's payment) is one transfer: its two halves are linked, shown as "To Savings" / "From Checking", and left out
+  of the spending and the cash flow. Two transactions are linked when they are the same amount out and in, in two
+  accounts, at most five days apart, and the payee names the other account or the category is a transfer; when two
+  candidates are equally good, neither is taken. A transfer rule (in this account, a payee like this is a transfer
+  with that account, up to N days apart) links them by itself; each transfer found teaches one (Learned, ten days).
+  A transaction's dialog links one by hand among the candidates, or unlinks it (never linked again by itself); the
+  Rules page lists, adds and changes the transfer rules and has **Link transfers now**.
 - **Rules**: the household's rules rename the payee, set the category or hide a transaction when the payee or the
   bank's own text contains, is or starts with some words (optionally only in one account, money out or in, between two
   amounts). They run over what each sync brings and over a transaction added by hand; **Apply now** runs them over the
@@ -148,10 +166,13 @@ Updates, releases, the reverse proxy and Cloudflare Access work as in every app 
 | Accounts: list, one, add, change, delete (by hand), history, values | `/api/accounts`, `/api/accounts/{id}`, `/api/accounts/{id}/history`, `/api/accounts/{id}/values` |
 | Transactions: search, add (by hand), change, delete | `GET /api/transactions?q=&account=&category=&month=&flow=`, `POST /api/accounts/{id}/transactions`, `/api/transactions/{id}` |
 | Spending and cash flow | `GET /api/spending?month=2026-11`, `GET /api/cashflow?months=12`, `GET /api/categories` |
+| Transfers: one transaction's other half and candidates, link, unlink; link all | `GET/PUT/DELETE /api/transactions/{id}/transfer`, `POST /api/transfers/link` |
+| Transfer rules: list, add, change, delete | `/api/transfer-rules`, `/api/transfer-rules/{id}` |
 | Rules: list, add, try, apply, order, change, delete | `/api/rules`, `POST /api/rules/test`, `POST /api/rules/apply`, `PUT /api/rules/order`, `/api/rules/{id}` |
 | The portfolio and quotes | `GET /api/portfolio`, `POST /api/accounts/{id}/holdings`, `/api/holdings/{id}`, `GET /api/quotes/{symbol}`, `POST /api/quotes/refresh` |
 | Bills (Monarch's recurring transactions) | `GET /api/bills?start=&end=` |
-| Monarch Money (admins) | `GET /api/monarch`, `POST /api/monarch/sync`, `POST /api/monarch/code`, `DELETE /api/monarch/session` |
+| Monarch Money (admins) | `GET /api/monarch` (with the running sync's progress), `POST /api/monarch/sync` (`{full, wait}`), `POST /api/monarch/code`, `DELETE /api/monarch/session` |
+| Accounts Monarch reports as new (admins) | `GET /api/monarch/new`, `POST /api/monarch/new/{monarch id}` (`{as: "new"}` or `{as: "existing", accountId}`) |
 | The household's currency, the automatic sync | `GET /api/settings`, `PUT /api/settings` (admins) |
 
 Amounts are signed as Monarch signs them: money out is negative. Settings › Account makes **app passwords** for the
@@ -167,9 +188,10 @@ curl -u alex:APP-PASSWORD -X PATCH -H 'Content-Type: application/json' -d '{"cat
 
 Off until an admin turns it on in **Settings › Server**. The tools: `overview`, `net_worth_history`,
 `search_transactions`, `spending`, `cash_flow`, `categories`, `update_transaction`, `add_transaction`, `rules`, `add_rule`,
-`test_rule`, `update_rule`, `delete_rule`, `apply_rules`, `portfolio`,
+`test_rule`, `update_rule`, `delete_rule`, `apply_rules`, `link_transfers`, `link_transaction`, `unlink_transaction`,
+`transfer_rules`, `add_transfer_rule`, `delete_transfer_rule`, `portfolio`,
 `get_quote`, `add_holding`, `update_holding`, `delete_holding`, `add_account`, `update_account`, `add_valuation`,
-`bills`, `sync_monarch`; and for admins `diagnostics`.
+`bills`, `sync_monarch`; and for admins `diagnostics`, `monarch_new_accounts`, `resolve_new_account`.
 
 ```sh
 claude mcp add --transport http iomoney https://money.example.com/mcp --header "Authorization: Bearer APP-PASSWORD"
@@ -184,10 +206,11 @@ python -m pytest tests     # on a test MariaDB of its own: a Docker container it
 
 Covered: roles (none, viewer, member, editor), private and household accounts, the net worth and its history,
 accounts followed by their value or their transactions and the five groups, transactions and their search, rules (tried,
-kept, ordered, applied, run by the sync), spending and cash flow without transfers, the portfolio with a holding in another
+kept, ordered, applied, run by the sync), transfers (found by a named payee or a transfer category, not without
+evidence, a tie left for a person, learned and typed rules, unlinked for good, linked by hand), spending and cash flow without transfers, the portfolio with a holding in another
 currency, a house's estimate and its equity after the mortgage, bills, the Monarch sync against a stand-in for the
 library (first sync, later syncs keeping local changes, a session Monarch no longer takes, a wrong sign-in, a code by
-hand), the MCP server and a person's data deleted.
+hand, an account made again in Monarch matched with its transactions none twice, a new one held until said), the MCP server and a person's data deleted.
 
 ## Layout
 
@@ -195,7 +218,8 @@ hand), the MCP server and a person's data deleted.
 app/main.py        the application: start-up, the background chores (Monarch sync, quotes, estimates), routes
 app/api.py         the REST API
 app/model.py       accounts, balances, transactions, holdings and bills in MariaDB: who sees and changes what, the sums
-app/monarch.py     Monarch Money: the sign-in (from the suite's keys and tokens) and the sync
+app/monarch.py     Monarch Money: the sign-in (from the suite's keys and tokens) and the sync, accounts it reports as new
+app/transfers.py   transfers between the household's own accounts: found, linked, unlinked, and their rules
 app/quotes.py      quotes and exchange rates from Yahoo Finance
 app/persondata.py  what a person keeps here, for the suite's delete-a-person
 app/mcp/           the MCP server: money and admin tools

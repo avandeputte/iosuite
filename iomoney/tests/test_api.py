@@ -255,3 +255,50 @@ def test_rules_rename_and_categorize(client, as_user):
     sign_in(client, "alex")
     assert client.delete(f"/api/rules/{r2['id']}").json()["ok"]
     assert client.get(f"/api/rules/{r2['id']}").status_code in (404, 405)
+
+
+def test_transfers_between_own_accounts_are_linked(client, as_user):
+    chk = add(client, name="Joint checking", institution="JPMorgan Chase", balance=5000)
+    sav = add(client, name="Savings", institution="Ally Bank", balance=1000)
+    visa = add(client, name="Sapphire", kind="credit", institution="Chase", balance=600)
+    today = dt.date.today()
+    d = lambda n: (today - dt.timedelta(days=n)).isoformat()  # noqa: E731
+    tx = lambda a, amt, payee, n=0, **f: client.post(f"/api/accounts/{a['id']}/transactions", json={"amount": amt, "merchant": payee, "day": d(n), **f}).json()  # noqa: E731
+    out = tx(chk, -500, "Ally Bank", 6)            # the payee names the other account
+    into = tx(sav, 500, "Jpmorgan Chase", 4)       # two days later
+    assert into["transfer"] == {"id": out["id"], "accountId": chk["id"], "account": "Joint checking", "how": "auto"}
+    pay = tx(chk, -519.56, "Chase", 3, category="Credit Card Payment")
+    got = tx(visa, 519.56, "Payment Thank You", 3)  # the category says it
+    assert got["transfer"]["id"] == pay["id"]
+    tx(chk, -42, "Grocer", 2, category="Groceries")
+    refund = tx(visa, 42, "Grocer refund", 2, category="Groceries")
+    assert "transfer" not in refund                  # nothing says it is a transfer
+    tx(sav, 100, "Deposit", 1)
+    tx(visa, 100, "Payment", 1, category="Transfer")
+    third = tx(chk, -100, "Somebody", 1, category="Transfer")
+    assert "transfer" not in third                   # two as likely: left for a person
+    s = client.get(f"/api/spending?start={d(10)}&end={today}").json()
+    assert s["spent"] == 42 + 100                    # the linked ones are not spending
+    # what was learned: next time the same payee in the same account is surely a transfer
+    rules = client.get("/api/transfer-rules").json()["items"]
+    assert {(r["account"], r["pattern"], r["other"], r["source"]) for r in rules} >= {
+        ("Joint checking", "ally bank", "Savings", "learned"), ("Savings", "jpmorgan chase", "Joint checking", "learned")}
+    o2 = tx(chk, -250, "Ally Bank", 20)
+    i2 = tx(sav, 250, "Interest and things", 11)     # nine days later, a payee that says nothing: the rule knows
+    assert i2["transfer"]["id"] == o2["id"] and i2["transfer"]["how"] == "rule"
+    # by hand: unlink for good, and link one the guess left
+    assert client.delete(f"/api/transactions/{into['id']}/transfer").json()["ok"]
+    assert client.post("/api/transfers/link").json()["linked"] == 0  # not linked again by itself
+    c = client.get(f"/api/transactions/{third['id']}/transfer").json()
+    assert c["other"] is None and len(c["candidates"]) == 2
+    r = client.put(f"/api/transactions/{third['id']}/transfer", json={"with": c["candidates"][0]["id"]}).json()
+    assert r["other"]["how"] == "hand"
+    assert client.put(f"/api/transactions/{refund['id']}/transfer", json={"with": out["id"]}).status_code == 400  # not the same amount
+    # a rule typed in
+    tr = client.post("/api/transfer-rules", json={"accountId": chk["id"], "otherId": visa["id"], "pattern": "Zelle", "days": 10})
+    assert tr.status_code == 201 and tr.json()["pattern"] == "zelle"
+    assert client.post("/api/transfer-rules", json={"accountId": chk["id"], "otherId": chk["id"], "pattern": "x"}).status_code == 400
+    as_user("viv", "viewer")
+    assert client.get("/api/transfer-rules").json()["writable"] is False
+    assert client.post("/api/transfers/link").status_code == 403
+    assert client.delete(f"/api/transfer-rules/{tr.json()['id']}").status_code == 403
