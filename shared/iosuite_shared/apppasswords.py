@@ -14,7 +14,7 @@ import secrets
 import time
 
 from iosuite_shared import db, edge, users
-from iosuite_shared.passwords import check_password, check_token, token_hash
+from iosuite_shared.passwords import check_token, token_hash
 from iosuite_shared.errors import Invalid
 
 # An app password is random (144 bits), so its row keeps a SHA-256 of it (passwords.token_hash): a slow hash would add
@@ -116,12 +116,10 @@ def authenticate_scoped(name: str | None, password: str, app: str, accounts: boo
     m = re.match(r"^([a-z0-9]+)-([0-9a-f]{8})-", password)  # the word is a hint only: the row says which app
     if m:
         for r in db.q("SELECT * FROM ios_app_passwords WHERE prefix = %s AND app = %s", (m.group(2), app)):
-            scrypt2 = r["hash"].startswith("scrypt2$")  # made before 0.29: moves to token_hash on its next use
-            if check_password(password, r["hash"]) if scrypt2 else check_token(password, r["hash"]):
+            if check_token(password, r["hash"]):
                 u = users.get(r["user_id"], app)
                 if u and (not name or name.strip().lower() in (u["name"].lower(), u["email"].lower())):
-                    db.ex("UPDATE ios_app_passwords SET last_used_at = %s, hash = %s WHERE id = %s",
-                          (int(time.time()), token_hash(password), r["id"]))
+                    db.ex("UPDATE ios_app_passwords SET last_used_at = %s WHERE id = %s", (int(time.time()), r["id"]))
                     edge.publish(app, r["prefix"], password)  # made before the edge check was on, or since a restart
                     user, scope, pid = u, r.get("scope") or "", r["id"]
                     break
