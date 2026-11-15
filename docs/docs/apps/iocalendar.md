@@ -7,6 +7,9 @@ description: ioCalendar, the family calendar of the ioThing suite.
 The family calendar: a web app for the whole family, and the standard protocols every calendar app already speaks, so
 the same events show up on phones, in Apple Calendar, Google Calendar, Outlook, Thunderbird and anywhere else.
 
+[The ioCalendar page on the website, with more screenshots →](https://iosuite.iothing.net/ioCalendar/)
+{ .md-button }
+
 ![ioCalendar's week view, each event tagged with the family member it is for](../img/iocalendar-week.jpg)
 
 ## What it does

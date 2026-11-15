@@ -8,6 +8,9 @@ A web app for a photo library, for browsing, searching and managing photos from 
 companion for a [digiKam](https://www.digikam.org) library, and works just as well without digiKam: point it at a
 folder of photos and it keeps the library itself.
 
+[The ioPix page on the website, with more screenshots →](https://iosuite.iothing.net/ioPix/)
+{ .md-button }
+
 ![ioPix Explore: library totals, photos from this day in past years and a shuffle of older ones](../img/iopix-explore.jpg)
 
 **The full ioPix guide is at [iopix.net](https://iopix.net/docs/)**; this page is the short version.
