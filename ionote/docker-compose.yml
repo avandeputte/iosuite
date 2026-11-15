@@ -22,7 +22,6 @@ services:
       - ionote-data:/data
     environment:
       TZ: America/New_York
-      DB_TYPE: mysql
       DB_HOST: db.example.lan                       # CHANGE ME: your MariaDB host or IP
       DB_PORT: "3306"
       DB_NAME: notes

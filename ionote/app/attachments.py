@@ -105,16 +105,16 @@ def put(note_uid: str, data: bytes, name: str, user: str, mime_hint: str = "", a
         n = get_note(note_uid, con)
         if not n or n["deleted"]:
             raise NotFound("No such note")
-        r = con.execute("SELECT note_uuid, user_id, sha FROM nts_attachments WHERE uuid = ?", (att_uid,)).fetchone()
+        r = con.execute("SELECT note_uuid, user_id, sha FROM nts_attachments WHERE uuid = %s", (att_uid,)).fetchone()
         if r and (r["user_id"] != owner() or r["note_uuid"] != note_uid):
             raise NotFound("No such attachment")  # another note's or account's id
         if r and r["sha"] == sha:
             return n  # a device sending it again
         if not r and len(n["attachments"]) >= MAX_PER_NOTE:
             raise BadFile(f"A note holds up to {MAX_PER_NOTE} files")
-        con.execute("INSERT OR REPLACE INTO nts_attachments (uuid, note_uuid, user_id, name, mime, size_bytes, sha, width, height, data, thumb, text, created_at) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (att_uid, note_uid, owner(), name, mime, len(data), sha, w, h, data, thumb, found, time.time()))
-        con.execute("UPDATE nts_notes SET rev = ?, changed_by = ? WHERE uuid = ?", (db.next_rev(con), user, note_uid))
+        con.execute("REPLACE INTO nts_attachments (uuid, note_uuid, user_id, name, mime, size_bytes, sha, width, height, data, thumb, text, created_at) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", (att_uid, note_uid, owner(), name, mime, len(data), sha, w, h, data, thumb, found, time.time()))
+        con.execute("UPDATE nts_notes SET rev = %s, changed_by = %s WHERE uuid = %s", (db.next_rev(con), user, note_uid))
         log_change(con, user, "attach", "note", note_uid, f"{display_title(n)}: {name} ({len(data) // 1024} KB)")
         out = get_note(note_uid, con)
     out["attachmentQueued"] = None
@@ -127,10 +127,10 @@ def put(note_uid: str, data: bytes, name: str, user: str, mime_hint: str = "", a
 def rename(note_uid: str, att_uid: str, name: str, user: str) -> dict:
     note_uid, att_uid = check_uuid(note_uid), check_uuid(att_uid)
     with db.tx() as con:
-        if not con.execute("SELECT 1 FROM nts_attachments WHERE uuid = ? AND note_uuid = ? AND user_id = ?", (att_uid, note_uid, owner())).fetchone():
+        if not con.execute("SELECT 1 FROM nts_attachments WHERE uuid = %s AND note_uuid = %s AND user_id = %s", (att_uid, note_uid, owner())).fetchone():
             raise NotFound("No such attachment")
-        con.execute("UPDATE nts_attachments SET name = ? WHERE uuid = ?", (_clean_name(name), att_uid))
-        con.execute("UPDATE nts_notes SET rev = ?, changed_by = ? WHERE uuid = ?", (db.next_rev(con), user, note_uid))
+        con.execute("UPDATE nts_attachments SET name = %s WHERE uuid = %s", (_clean_name(name), att_uid))
+        con.execute("UPDATE nts_notes SET rev = %s, changed_by = %s WHERE uuid = %s", (db.next_rev(con), user, note_uid))
         return get_note(note_uid, con)
 
 
@@ -138,11 +138,11 @@ def remove(note_uid: str, att_uid: str, user: str) -> dict:
     note_uid, att_uid = check_uuid(note_uid), check_uuid(att_uid)
     with db.tx() as con:
         n = get_note(note_uid, con)
-        r = con.execute("SELECT name FROM nts_attachments WHERE uuid = ? AND note_uuid = ? AND user_id = ?", (att_uid, note_uid, owner())).fetchone()
+        r = con.execute("SELECT name FROM nts_attachments WHERE uuid = %s AND note_uuid = %s AND user_id = %s", (att_uid, note_uid, owner())).fetchone()
         if not n or not r:
             raise NotFound("No such attachment")
-        con.execute("DELETE FROM nts_attachments WHERE uuid = ?", (att_uid,))
-        con.execute("UPDATE nts_notes SET rev = ?, changed_by = ? WHERE uuid = ?", (db.next_rev(con), user, note_uid))
+        con.execute("DELETE FROM nts_attachments WHERE uuid = %s", (att_uid,))
+        con.execute("UPDATE nts_notes SET rev = %s, changed_by = %s WHERE uuid = %s", (db.next_rev(con), user, note_uid))
         log_change(con, user, "detach", "note", note_uid, f"{display_title(n)}: {r['name']}")
         return get_note(note_uid, con)
 
@@ -150,7 +150,7 @@ def remove(note_uid: str, att_uid: str, user: str) -> dict:
 def get(note_uid: str, att_uid: str, thumb: bool = False):
     """(bytes, mime, sha, name) of this account's attachment, or None."""
     with db.connect() as con:
-        r = con.execute(f"SELECT {'thumb' if thumb else 'data'}, mime, sha, name FROM nts_attachments WHERE uuid = ? AND note_uuid = ? AND user_id = ?",
+        r = con.execute(f"SELECT {'thumb' if thumb else 'data'}, mime, sha, name FROM nts_attachments WHERE uuid = %s AND note_uuid = %s AND user_id = %s",
                         (check_uuid(att_uid), check_uuid(note_uid), owner())).fetchone()
     if not r or r[0] is None:
         return None
@@ -159,7 +159,7 @@ def get(note_uid: str, att_uid: str, thumb: bool = False):
 
 def text(note_uid: str, att_uid: str):
     with db.connect() as con:
-        r = con.execute("SELECT text FROM nts_attachments WHERE uuid = ? AND note_uuid = ? AND user_id = ?",
+        r = con.execute("SELECT text FROM nts_attachments WHERE uuid = %s AND note_uuid = %s AND user_id = %s",
                         (check_uuid(att_uid), check_uuid(note_uid), owner())).fetchone()
     return r[0] if r else None
 
@@ -167,14 +167,14 @@ def text(note_uid: str, att_uid: str):
 def raw_for_ocr(att_uid: str):
     """(bytes, sha) for the OCR thread, whoever owns it."""
     with db.connect() as con:
-        r = con.execute("SELECT data, sha FROM nts_attachments WHERE uuid = ?", (att_uid,)).fetchone()
+        r = con.execute("SELECT data, sha FROM nts_attachments WHERE uuid = %s", (att_uid,)).fetchone()
     return (bytes(r[0]), r[1]) if r else None
 
 
 def set_text(att_uid: str, found: str, sha: str):
     """Text the OCR thread read from a picture attachment (the one with this sha); the note gets a new rev."""
     with db.tx() as con:
-        r = con.execute("SELECT note_uuid FROM nts_attachments WHERE uuid = ? AND sha = ? AND (text = '' OR text IS NULL)", (att_uid, sha)).fetchone()
+        r = con.execute("SELECT note_uuid FROM nts_attachments WHERE uuid = %s AND sha = %s AND (text = '' OR text IS NULL)", (att_uid, sha)).fetchone()
         if r:
-            con.execute("UPDATE nts_attachments SET text = ? WHERE uuid = ?", (found[:MAX_TEXT], att_uid))
-            con.execute("UPDATE nts_notes SET rev = ? WHERE uuid = ?", (db.next_rev(con), r[0]))
+            con.execute("UPDATE nts_attachments SET text = %s WHERE uuid = %s", (found[:MAX_TEXT], att_uid))
+            con.execute("UPDATE nts_notes SET rev = %s WHERE uuid = %s", (db.next_rev(con), r[0]))

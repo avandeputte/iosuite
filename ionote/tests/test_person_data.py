@@ -28,5 +28,5 @@ def test_deleting_someone_removes_their_notes(client, admin):
     assert client.delete(f"/api/suite-admin/users/{sam}").status_code == 200
     with db.connect() as con:
         for t in ("nts_notes", "nts_folders", "nts_tag_colors", "nts_templates", "nts_change_log"):
-            assert con.execute(f"SELECT count(*) FROM {t} WHERE user_id = ?", (sam,)).fetchone()[0] == 0, t
+            assert con.execute(f"SELECT count(*) FROM {t} WHERE user_id = %s", (sam,)).fetchone()[0] == 0, t
     assert client.get(f"/api/notes/{NID}").json()["title"] == "alex's"
