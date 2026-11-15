@@ -1,10 +1,9 @@
 """Account passwords: Argon2id (argon2-cffi, RFC 9106's low-memory profile: 64 MiB, 3 passes, 4 lanes). The parameters
 are stored in the hash ($argon2id$v=19$m=...,t=...,p=...$salt$hash), so they can be raised later: a hash made with
-other parameters, or an scrypt2$ hash from before 0.29, is replaced the next time its password is seen (needs_rehash).
+other parameters is replaced the next time its password is seen (needs_rehash). Any other format is refused.
 
 App passwords and other random secrets do not come here: see token_hash.
 """
-import base64
 import hashlib
 import hmac
 
@@ -20,8 +19,6 @@ def hash_password(pw: str) -> str:
 
 def check_password(pw: str, stored: str) -> bool:
     """Whether pw matches the stored hash; False, never an exception, for a malformed hash."""
-    if (stored or "").startswith("scrypt2$"):
-        return _check_scrypt2(pw, stored)
     try:
         return HASHER.verify(stored, pw)
     except (VerificationError, InvalidHashError, TypeError, ValueError):
@@ -33,17 +30,6 @@ def needs_rehash(stored: str) -> bool:
         return bool(stored) and HASHER.check_needs_rehash(stored)
     except (InvalidHashError, ValueError):
         return True
-
-
-def _check_scrypt2(pw: str, stored: str) -> bool:
-    """scrypt2$n$r$p$salt$hash (0.28 and before): read only, so an account moves to Argon2id at its next sign-in."""
-    try:
-        _, n, r, p, s, h = stored.split("$")
-        got = hashlib.scrypt(pw.encode(), salt=base64.b64decode(s), n=int(n), r=int(r), p=int(p), dklen=32,
-                             maxmem=256 * 1024 * 1024)
-        return hmac.compare_digest(got, base64.b64decode(h))
-    except Exception:
-        return False
 
 
 def token_hash(secret: str) -> str:
