@@ -3,12 +3,14 @@ regularly (a paycheck), found by ioMoney itself in the transactions and kept in 
 (mny_recurring): what ioCalendar shows on the day each is due (GET /api/bills), paid or not.
 
 Found: the same payee in the same account, money out (or in), at least three times (a yearly one twice) at a steady
-pace (weekly, every two weeks, twice a month, monthly, quarterly, yearly) with an amount that stays about the same, the
-last one recent enough to still be going. What is found and not in the list yet is offered (Add, or Not recurring,
+pace (weekly, every two weeks, twice a month, monthly, every two months, quarterly, every six months, yearly) with an
+amount that mostly stays about the same, the last one recent enough to still be going (see "found in the
+transactions" below for how). What is found and not in the list yet is offered (Add, or Not recurring,
 which is not offered again); anyone who may change the household's things also adds one by hand, changes it or
 removes it.
 
-Each one in the list: a name, the words its payee or bank's text has (the pattern), the account (or any), money out or
+Each one in the list: a name, the words its payee or bank's text has (the pattern; "a|b" when the payee had more
+than one name), the account (or any), money out or
 in, the usual amount (approximate: it varies), how often, a day it fell on (the dates follow from it) and a category.
 A date is paid when a transaction like it (that account, those words, that way, the amount within reach) is a few
 days from it.
@@ -27,17 +29,20 @@ from iosuite_shared.errors import Invalid
 
 from app import db, model
 
-FREQS = ("weekly", "biweekly", "semimonthly", "monthly", "quarterly", "yearly")
+FREQS = ("weekly", "biweekly", "semimonthly", "monthly", "bimonthly", "quarterly", "semiannual", "yearly")
 FREQ_LABEL = {"weekly": "Every week", "biweekly": "Every two weeks", "semimonthly": "Twice a month",
-              "monthly": "Every month", "quarterly": "Every three months", "yearly": "Every year"}
-BANDS = {"weekly": (6, 8), "biweekly": (13, 15), "semimonthly": (12, 19), "monthly": (26, 35), "quarterly": (82, 100),
-         "yearly": (350, 380)}
-SPAN = {"weekly": 7, "biweekly": 14, "semimonthly": 15, "monthly": 31, "quarterly": 92, "yearly": 366}
-LOOK_BACK = 400        # days of transactions looked at to find them
+              "monthly": "Every month", "bimonthly": "Every two months", "quarterly": "Every three months",
+              "semiannual": "Every six months", "yearly": "Every year"}
+BANDS = {"weekly": (6, 8), "biweekly": (13, 15), "semimonthly": (12, 19), "monthly": (26, 35), "bimonthly": (55, 66),
+         "quarterly": (82, 100), "semiannual": (170, 200), "yearly": (350, 380)}
+SPAN = {"weekly": 7, "biweekly": 14, "semimonthly": 15, "monthly": 31, "bimonthly": 62, "quarterly": 92, "semiannual": 183,
+        "yearly": 366}
+MONTHS = {"monthly": 1, "bimonthly": 2, "quarterly": 3, "semiannual": 6, "yearly": 12}
+LOOK_BACK = 800        # days of transactions looked at to find them: two years and more, so a yearly one is seen twice
 NEAR = {"weekly": 2, "biweekly": 3}  # how far from its date a payment still counts (5 days for the rest)
 VARIES = Decimal("0.35")  # an approximate amount: a payment within 35% of it is one
-PER_MONTH = {"weekly": Decimal(52) / 12, "biweekly": Decimal(26) / 12, "semimonthly": Decimal(2), "monthly": Decimal(1),
-             "quarterly": Decimal(1) / 3, "yearly": Decimal(1) / 12}
+PER_MONTH = {"weekly": Decimal(52) / 12, "biweekly": Decimal(26) / 12, "semimonthly": Decimal(2),
+             **{f: Decimal(1) / n for f, n in MONTHS.items()}}
 
 # the services people subscribe to, by the words their payee or the bank's text has
 SERVICES = re.compile(r"\b(?:" + "|".join([  # a short or common word ends at a word's end; a long name may run on (YouTubePremium)
@@ -85,8 +90,7 @@ def _step(d: dt.date, freq: str, sign: int, dom: int) -> dt.date:
         if d.day > lo:
             return d.replace(day=lo)
         return _add_months(d, -1, lo + 15)
-    months = {"monthly": 1, "quarterly": 3, "yearly": 12}[freq]
-    return _add_months(d, months * sign, dom)
+    return _add_months(d, MONTHS[freq] * sign, dom)
 
 
 def dates(r: dict, start: dt.date, end: dt.date) -> list[dt.date]:
@@ -123,31 +127,52 @@ def per_month(amount, freq: str) -> Decimal:
 
 # ---- what it matches
 
-def _label(t: dict) -> str | None:
-    """The payee as a word to look for: Monarch's payee name, or the bank's text without its numbers."""
-    s = (t.get("merchant") or t.get("description") or "").lower()
+def _norm(s: str | None) -> str:
+    """Words to compare a payee or the bank's text by: lower case, without the words that have a digit (a card's last
+    digits, a date, a store's number, a phone number) and without the signs between them."""
+    s = (s or "").lower().replace("*", " ").replace("#", " ")
     s = re.sub(r"\S*\d\S*", " ", s)
-    s = re.sub(r"[^\w&'.+ -]+", " ", s)
-    s = re.sub(r"\s+", " ", s).strip(" -.")
+    s = re.sub(r"[^\w&'.+/ -]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip(" -./")
+
+
+def _label(t: dict) -> str | None:
+    """The payee as words to look for: Monarch's payee name, or the bank's text."""
+    s = _norm(t.get("merchant") or t.get("description"))
     return s[:120] if len(s) >= 3 else None
 
 
+def _alts(pattern: str | None) -> list[str]:
+    """The pattern's words, one or more ways (a payee Monarch renamed: "aes loan|aes student loans")."""
+    return [a for a in (_norm(x) for x in (pattern or "").split("|")) if a]
+
+
+def _says(r: dict, t: dict) -> bool:
+    alts = _alts(r["pattern"])
+    texts = [_norm(t.get("merchant")), _norm(t.get("description"))]
+    raw = (r["pattern"] or "").lower()
+    return any(a in x for a in alts for x in texts if x) or bool(raw) and any(raw in (x or "").lower() for x in (t.get("merchant"), t.get("description")))
+
+
+def _reach(r: dict) -> Decimal:
+    want = Decimal(r["amount"])
+    return want * VARIES if r["approximate"] else max(Decimal("1.00"), want * Decimal("0.02"))
+
+
 def _hits(r: dict, t: dict) -> bool:
-    p = (r["pattern"] or "").lower()
     amt = Decimal(t["amount"])
     if (r["flow"] == "out") != (amt < 0) or (r["account_id"] and r["account_id"] != t["account_id"]):
         return False
-    if not any(p in (x or "").lower() for x in (t.get("merchant"), t.get("description"))):
+    if abs(abs(amt) - Decimal(r["amount"])) > _reach(r):
         return False
-    want = Decimal(r["amount"])
-    reach = want * VARIES if r["approximate"] else max(Decimal("1.00"), want * Decimal("0.02"))
-    return abs(abs(amt) - want) <= reach
+    return _says(r, t)
 
 
 def _payments(r: dict, start: dt.date, end: dt.date) -> list[dict]:
     """The transactions that look like this one from start to end (not hidden)."""
-    p = "%" + (r["pattern"] or "").lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-    where, args = "t.hidden = 0 AND t.day BETWEEN %s AND %s AND (LOWER(t.merchant) LIKE %s OR LOWER(t.description) LIKE %s)", [start, end, p, p]
+    want, reach = Decimal(r["amount"]), _reach(r)
+    where = "t.hidden = 0 AND t.day BETWEEN %s AND %s AND ABS(t.amount) BETWEEN %s AND %s AND t.amount " + ("< 0" if r["flow"] == "out" else "> 0")
+    args = [start, end, want - reach, want + reach]
     if r["account_id"]:
         where += " AND t.account_id = %s"
         args.append(r["account_id"])
@@ -314,30 +339,40 @@ def for_transaction(u: dict, t: dict, today: dt.date = None) -> dict:
     if r:
         return {"item": public(r, u, today), "suggestion": None}
     flow = "out" if Decimal(t["amount"]) < 0 else "in"
-    lab = _label(t) or (t["merchant"] or t["description"] or "").lower()[:120]
-    like = [x for x in db.q("SELECT day, amount, merchant, description FROM mny_transactions WHERE account_id = %s AND hidden = 0 "
-                            "AND day BETWEEN %s AND %s AND " + ("amount < 0" if flow == "out" else "amount > 0"),
-                            (t["account_id"], today - dt.timedelta(days=LOOK_BACK), today)) if _label(x) == lab]
-    by_day = {x["day"]: abs(Decimal(x["amount"])) for x in like} or {t["day"]: abs(Decimal(t["amount"]))}
-    days = sorted(by_day)
-    freq = _freq_of([(b - a).days for a, b in zip(days, days[1:])]) or "monthly"
-    amts = list(by_day.values())
-    med = Decimal(statistics.median(amts)).quantize(model.CENT) if len(amts) > 2 else abs(Decimal(t["amount"]))
-    name = t["merchant"] or lab
-    return {"item": None, "suggestion": {
-        "name": name, "pattern": lab, "accountId": t["account_id"], "flow": flow, "amount": model.n2(med),
-        "approximate": med > 0 and (max(amts) - min(amts)) / med > Decimal("0.02"), "frequency": freq,
-        "day": t["day"].isoformat(), "category": t["category"], "subscription": flow == "out" and looks_subscription(name, lab, t["category"]),
-        "count": len(days)}}
+    rows = db.q("SELECT t.id, t.account_id, t.day, t.amount, t.merchant, t.description, t.category FROM mny_transactions t "
+                "WHERE t.account_id = %s AND t.hidden = 0 AND t.day BETWEEN %s AND %s AND t.amount " + ("< 0" if flow == "out" else "> 0"),
+                (t["account_id"], today - dt.timedelta(days=LOOK_BACK), today))
+    if not any(x["id"] == t["id"] for x in rows):
+        rows.append(t)
+    comps = _components(rows)
+    comp = next((c for c in comps if any(x["id"] == t["id"] for x in c)), [t])
+    ser = next((x for x in _series(comp, today, stale=False) if any(y["id"] == t["id"] for y in x["ts"])), None)
+    if not ser:  # alone, or not steady: this one's amount, monthly unless the dates say otherwise
+        days = sorted({x["day"] for x in comp})
+        ser = {"ts": comp, "days": days, "freq": _cadence(days, 0.5) or "monthly", "amount": abs(Decimal(t["amount"])), "approximate": False}
+    s = _suggest(ser, flow)
+    s["day"] = t["day"].isoformat()
+    return {"item": None, "suggestion": s}
 
 
 # ---- found in the transactions
+#
+# The transactions of an account one way (out, or in) are put together by payee: the same payee name, or the same
+# bank's text (Monarch renames a payee now and then; the bank's text stays), unless that text is one many payees share.
+# A payee's transactions are then split by amount (two loans paid to the same bank, a weekly box and a monthly pass):
+# first the amounts within 3% of each other, then within a quarter, then whatever is left at a steady pace with an
+# amount that varies (a utility). Each group is recurring when its dates come at a steady pace (most of the gaps
+# between them in one band, so an extra payment or a late one does not spoil it) and most of its amounts are near
+# the usual one (a bonus, a refund or a price change does not either), it still goes on, and it happened three times
+# (a yearly one, or a known service, twice). Transfers to a card or between cash accounts are left out; a payment to
+# a loan or an investment account (the car loan, the mortgage, a 529) is a bill.
 
-def _key(account_id, flow: str, pattern: str) -> str:
-    return f"{account_id or 0}:{flow}:{pattern}"[:300]
+def _key(account_id, flow: str, label: str, amount: Decimal) -> str:
+    return f"{account_id or 0}:{flow}:{label}:{int(amount)}"[:300]
 
 
-def _freq_of(gaps: list[int]) -> str | None:
+def _cadence(days: list, need: float = 0.6) -> str | None:
+    gaps = [(b - a).days for a, b in zip(days, days[1:])]
     if not gaps:
         return None
     med = statistics.median(gaps)
@@ -345,70 +380,162 @@ def _freq_of(gaps: list[int]) -> str | None:
         lo, hi = BANDS[f]
         if f == "semimonthly" and all(13 <= g <= 15 for g in gaps):
             continue  # exactly every two weeks
-        if lo <= med <= hi and sum(lo <= g <= hi for g in gaps) >= 0.7 * len(gaps):
+        if lo <= med <= hi and sum(lo <= g <= hi for g in gaps) >= need * len(gaps):
             return f
     return None
+
+
+def _components(rows: list[dict]) -> list[list[dict]]:
+    """The transactions (of one account, one way) put together by payee name or the bank's text."""
+    ms = [_label({"merchant": t.get("merchant")}) for t in rows]
+    ds = [_label({"description": t.get("description")}) for t in rows]
+    payees: dict = {}
+    for m, d in zip(ms, ds):
+        if d:
+            payees.setdefault(d, set()).add(m)
+    parent = list(range(len(rows)))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    first: dict = {}
+    for i, (m, d) in enumerate(zip(ms, ds)):
+        keys = ([("m", m)] if m else []) + ([("d", d)] if d and len(payees[d]) <= 3 else [])
+        if not keys:
+            parent[i] = -1
+            continue
+        for k in keys:
+            if k in first:
+                parent[find(i)] = find(first[k])
+            else:
+                first[k] = i
+    comps: dict = {}
+    for i, t in enumerate(rows):
+        if parent[i] != -1:
+            comps.setdefault(find(i), []).append(t)
+    return list(comps.values())
+
+
+def _clusters(ts: list[dict], step: Decimal) -> list[list[dict]]:
+    """Split by amount: sorted, a new cluster where the next amount is more than step above the last."""
+    out, cur, last = [], [], None
+    for t in sorted(ts, key=lambda t: abs(Decimal(t["amount"]))):
+        a = abs(Decimal(t["amount"]))
+        if cur and a > last * (1 + step):
+            out.append(cur)
+            cur = []
+        cur.append(t)
+        last = a
+    return out + ([cur] if cur else [])
+
+
+def _steady(ts: list[dict], today: dt.date, stale: bool, varies: bool) -> dict | None:
+    by_day: dict = {}
+    for t in sorted(ts, key=lambda t: t["day"]):
+        by_day.setdefault(t["day"], t)
+    days = sorted(by_day)
+    freq = _cadence(days, 0.7 if varies else 0.6)
+    if not freq:
+        return None
+    last = by_day[days[-1]]
+    sub = Decimal(last["amount"]) < 0 and looks_subscription(last.get("merchant"), _label(last), last.get("category"))
+    if len(days) < (2 if freq == "yearly" or sub else 5 if varies else 3):
+        return None
+    if stale and (today - days[-1]).days > BANDS[freq][1] * 1.5 + 5:
+        return None  # stopped
+    amts = [abs(Decimal(by_day[d]["amount"])) for d in days]
+    med = Decimal(statistics.median(amts))
+    if med <= 0:
+        return None
+    near = [a for a in amts if abs(a - med) <= med * Decimal("0.25")]
+    if not varies and len(near) < 0.7 * len(amts):
+        return None  # the amount is all over the place: shopping, not a bill
+    approximate = varies or (max(near) - min(near)) > med * Decimal("0.02")
+    return {"ts": list(by_day.values()), "days": days, "freq": freq, "amount": med.quantize(model.CENT), "approximate": approximate}
+
+
+def _series(comp: list[dict], today: dt.date, stale: bool = True) -> list[dict]:
+    """The recurring series in one payee's transactions."""
+    out, left = [], list(comp)
+    for step, varies in ((Decimal("0.03"), False), (Decimal("0.25"), False), (None, True)):
+        rest = []
+        for c in (_clusters(left, step) if step is not None else [left]):
+            s = _steady(c, today, stale, varies) if c else None
+            if s:
+                out.append(s)
+            else:
+                rest.extend(c)
+        left = rest
+    return out
+
+
+def _suggest(ser: dict, flow: str) -> dict:
+    """What a series would be in the list: its name (the payee's latest), the words (every name it had), the rest."""
+    ts = sorted(ser["ts"], key=lambda t: t["day"], reverse=True)
+    names, alts = [], []
+    for t in ts:
+        n = t.get("merchant") or t.get("description")
+        if n and n not in names:
+            names.append(n)
+        lab = _label({"merchant": t.get("merchant")}) or _label({"description": t.get("description")})
+        if lab and lab not in alts:
+            alts.append(lab)
+    pattern = ""
+    for a in alts:
+        if len(pattern) + len(a) + 1 > 255:
+            break
+        pattern = f"{pattern}|{a}" if pattern else a
+    cat = next((t["category"] for t in ts if t.get("category")), None)
+    name = names[0] if names else pattern
+    return {"name": name, "pattern": pattern, "accountId": ts[0]["account_id"], "flow": flow, "amount": model.n2(ser["amount"]),
+            "approximate": ser["approximate"], "frequency": ser["freq"], "day": ser["days"][-1].isoformat(), "category": cat,
+            "subscription": flow == "out" and looks_subscription(name, pattern, cat), "count": len(ser["days"])}
 
 
 def found(u: dict, today: dt.date = None) -> list[dict]:
     """What looks recurring in the transactions this person sees and is not in the list (nor set aside): each
     {key, name, pattern, accountId, account, flow, amount, approximate, frequency, frequencyLabel, day (the last
-    one), next, category, count, subscription}, the most regular first. A known service paid twice is enough."""
+    one), next, category, count, subscription, perMonth}, the most regular first."""
     today = today or dt.date.today()
     if model.role_rank(u) < 1:
         return []
     where, args = model._visible(u)
-    rows = db.q(f"SELECT t.account_id, t.day, t.amount, t.merchant, t.description, t.category, a.name AS account_name, a.currency "
-                f"FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id WHERE {where} AND a.track = 'transactions' "
-                f"AND t.hidden = 0 AND t.amount <> 0 AND t.day BETWEEN %s AND %s "
-                f"AND NOT EXISTS (SELECT 1 FROM mny_transfers x WHERE x.out_id = t.id OR x.in_id = t.id)",
+    rows = db.q(f"SELECT t.id, t.account_id, t.day, t.amount, t.merchant, t.description, t.category, a.name AS account_name, "
+                f"a.currency, oa.kind AS other_kind, x.out_id AS x_out "
+                f"FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id "
+                f"LEFT JOIN mny_transfers x ON x.out_id = t.id OR x.in_id = t.id "
+                f"LEFT JOIN mny_transactions o ON o.id = IF(x.out_id = t.id, x.in_id, x.out_id) "
+                f"LEFT JOIN mny_accounts oa ON oa.id = o.account_id "
+                f"WHERE {where} AND a.track = 'transactions' AND t.hidden = 0 AND t.amount <> 0 AND t.day BETWEEN %s AND %s",
                 (*args, today - dt.timedelta(days=LOOK_BACK), today))
-    groups: dict = {}
+    by: dict = {}
     for t in rows:
-        lab = _label(t)
-        if lab:
-            groups.setdefault((t["account_id"], "out" if t["amount"] < 0 else "in", lab), []).append(t)
+        if t["x_out"] is not None and (t["amount"] > 0 or t["other_kind"] in (None, "cash", "credit")):
+            continue  # a card's payment, money moved between cash accounts, or money in from one's own account
+        by.setdefault((t["account_id"], "out" if t["amount"] < 0 else "in"), []).append(t)
     kept = db.q("SELECT * FROM mny_recurring")
     nots = {r["k"] for r in db.q("SELECT k FROM mny_recurring_nots")}
     out = []
-    for (aid, flow, lab), ts in groups.items():
-        by_day = {}
-        for t in ts:
-            by_day.setdefault(t["day"], t)
-        days = sorted(by_day)
-        if len(days) < 2:
-            continue
-        gaps = [(b - a).days for a, b in zip(days, days[1:])]
-        freq = _freq_of(gaps)
-        names = [by_day[d]["merchant"] or lab for d in days]
-        cats = [by_day[d]["category"] for d in days if by_day[d]["category"]]
-        name = max(set(names), key=names.count)
-        cat = max(set(cats), key=cats.count) if cats else None
-        sub = flow == "out" and looks_subscription(name, lab, cat)
-        if not freq or (len(days) < 3 and freq != "yearly" and not sub):
-            continue
-        if (today - days[-1]).days > BANDS[freq][1] * 1.5 + 5:
-            continue  # stopped
-        amts = [abs(Decimal(by_day[d]["amount"])) for d in days]
-        med = Decimal(statistics.median(amts))
-        if med <= 0 or (max(amts) - min(amts)) / med > Decimal("0.6"):
-            continue  # the amount is all over the place: shopping, not a bill
-        approximate = (max(amts) - min(amts)) / med > Decimal("0.02")
-        if _key(aid, flow, lab) in nots:
-            continue
-        probe = {"account_id": aid, "amount": (-med if flow == "out" else med), "merchant": by_day[days[-1]]["merchant"],
-                 "description": by_day[days[-1]]["description"]}
-        if any(_hits(r, probe) for r in kept):
-            continue
-        r = {"day": days[-1], "frequency": freq}
-        nxt = next_date(r, today)
-        sign = -1 if flow == "out" else 1
-        out.append({"key": _key(aid, flow, lab), "name": name, "pattern": lab, "accountId": aid,
-                    "account": ts[0]["account_name"], "currency": ts[0]["currency"], "flow": flow,
-                    "amount": model.n2(sign * med.quantize(model.CENT)), "approximate": approximate, "frequency": freq,
-                    "frequencyLabel": FREQ_LABEL[freq], "day": days[-1].isoformat(), "next": nxt.isoformat() if nxt else None,
-                    "category": cat, "count": len(days), "subscription": sub,
-                    "perMonth": model.n2(sign * per_month(med, freq))})
+    for (aid, flow), ts in by.items():
+        for comp in _components(ts):
+            for ser in _series(comp, today):
+                f = _suggest(ser, flow)
+                last = max(ser["ts"], key=lambda t: t["day"])
+                labs = [_label(t) for t in ser["ts"]]
+                key = _key(aid, flow, max(set(labs), key=labs.count) or "", ser["amount"])
+                if key in nots:
+                    continue
+                sign = -1 if flow == "out" else 1
+                probe = {"account_id": aid, "amount": sign * ser["amount"], "merchant": last["merchant"], "description": last["description"]}
+                if any(_hits(r, probe) for r in kept):
+                    continue
+                nxt = next_date({"day": ser["days"][-1], "frequency": ser["freq"]}, today)
+                f.update(key=key, account=last["account_name"], currency=last["currency"], amount=model.n2(sign * ser["amount"]),
+                         frequencyLabel=FREQ_LABEL[ser["freq"]], next=nxt.isoformat() if nxt else None,
+                         perMonth=model.n2(sign * per_month(ser["amount"], ser["freq"])))
+                out.append(f)
     out.sort(key=lambda x: (-x["count"], x["name"].lower()))
     return out
 

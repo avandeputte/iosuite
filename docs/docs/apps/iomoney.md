@@ -42,8 +42,9 @@ quotes, and what the house and the cars are worth after their loans.
   why it was not linked: Link, or Not a transfer; ties are grouped and likely duplicates pointed out.
 - **Transactions by hand** in any account that follows its transactions, one from Monarch too: a cash payment, or one
   the bank has not sent yet.
-- **Recurring**: ioMoney finds the bills and paychecks itself (the same payee at a steady pace, every week to every
-  year, with about the same amount) and offers them: add the ones that are, say "Not recurring" to the others, or add
+- **Recurring**: ioMoney finds the bills and paychecks itself in the past two years (the same payee at a steady pace,
+  every week to every year; a bonus, a renamed payee or a price change does not throw it off, and two loans at the same
+  bank are two, loan payments included) and offers them: add the ones that are, say "Not recurring" to the others, or add
   one by hand, or choose **Make recurring** on a transaction. Each shows when it is next due and the last payment, and
   the transaction list marks the ones that are recurring.
 - **Subscriptions**: Netflix, Max, YouTube, Spotify, Disney+, iCloud, Amazon Prime and other services get a section of
