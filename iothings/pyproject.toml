@@ -30,3 +30,7 @@ Homepage = "https://github.com/avandeputte/iosuite/tree/main/iothings"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.iosuite]
+# Debian/Ubuntu packages setup.sh and update.sh install when missing (as root): the font the inventory PDF is written in
+system-packages = ["fonts-dejavu-core"]

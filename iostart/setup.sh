@@ -99,6 +99,36 @@ PY="${PY:-python3}"
 # >>> own: sysdeps
 # <<< own: sysdeps
 
+# the system packages the app asks for ([tool.iosuite] system-packages in its pyproject.toml, Debian/Ubuntu names, such
+# as a font): the missing ones are installed with apt-get, as root or through sudo when it is allowed without a password.
+# None of them is needed to run, so one that cannot be installed is a note, never a failure.
+syspkgs() {  # syspkgs <python> <pyproject.toml>
+  command -v apt-get >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1 || return 0
+  WANT="$("$1" - "$2" <<'PYEOF' 2>/dev/null
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+try:
+    import tomllib
+    pkgs = tomllib.loads(text).get("tool", {}).get("iosuite", {}).get("system-packages", [])
+except ImportError:  # Python 3.10
+    m = re.search(r'^\s*system-packages\s*=\s*\[([^\]]*)\]', text, re.M)
+    pkgs = re.findall(r'"([^"]+)"', m.group(1)) if m else []
+print(" ".join(p for p in pkgs if re.fullmatch(r"[a-z0-9][a-z0-9.+-]*", p)))
+PYEOF
+)"
+  MISSING=""
+  for P in $WANT; do dpkg -s "$P" >/dev/null 2>&1 || MISSING="$MISSING $P"; done
+  [ -n "$MISSING" ] || return 0
+  if [ "$(id -u)" = 0 ]; then SUDO=""; elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then SUDO="sudo -n"; else
+    echo "  note: the system packages$MISSING are missing; as root: apt-get install -y$MISSING"; return 0; fi
+  echo "  installing the system packages$MISSING"
+  # shellcheck disable=SC2086
+  $SUDO apt-get install -y -qq $MISSING >/dev/null 2>&1 || { $SUDO apt-get update -qq >/dev/null 2>&1 && $SUDO apt-get install -y -qq $MISSING >/dev/null 2>&1; } \
+    || echo "  note: the system packages$MISSING could not be installed; as root: apt-get install -y$MISSING"
+  return 0
+}
+[ "$SYSDEPS" = 0 ] || syspkgs "$PY" pyproject.toml
+
 # ---- the answers (what config.env holds is the default)
 if [ -z "$DBS" ]; then
   say "The $WHAT database (MariaDB / MySQL)"
