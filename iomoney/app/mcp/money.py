@@ -398,7 +398,8 @@ def bills(start: Optional[str] = None, end: Optional[str] = None) -> list:
 @server.tool(annotations=READ_ONLY)
 def recurring_transactions() -> dict:
     """The household's recurring transactions (bills, subscriptions, paychecks): name, account, amount, how often,
-    the next date, the last payment, what it costs a month (perMonth) and whether it is a subscription to a service
+    the next date, the last payment, its flag (missed: no payment came when its pace says one should have; changed:
+    the latest payment had another amount), what it costs a month (perMonth) and whether it is a subscription to a service
     (Netflix, Spotify, iCloud...); and found: what looks recurring in the transactions and is not in the list yet (a
     person adds it on the Recurring page)."""
     u = who()

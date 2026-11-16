@@ -272,7 +272,7 @@ function drawNav() {
           h('span', { class: 'brand-name' }, brandName())),
       h('button', { id: 'sidebtn', class: 'iconbtn', onclick: sidebarButton })),
     Object.entries(VIEWS).filter(([k]) => k !== 'assets' || shown.some((a) => THINGS.includes(a.kind)) || canAdd())
-      .map(([k, [label, ic, hv]]) => link(k, k === 'overview' ? '#/' : `#/${k}`, ic, label, null, r.view === k, hv)),
+      .map(([k, [label, ic, hv]]) => link(k, k === 'overview' ? '#/' : `#/${k}`, ic, label, k === 'recurring' && S.sum && S.sum.recurringFlags ? S.sum.recurringFlags : null, r.view === k, hv)),
     h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), h('span', { class: 'nl' }, 'More')),
     byGroup(shown).map((g) => [h('div', { class: 'navgap' }), sec(g.label),
       g.list.map((a) => behindMark(link('acct', `#/account/${a.id}`, a.household ? KIND_LOOK[a.kind][0] : 'lock', a.name, null, r.view === 'account' && r.id === a.id, KIND_LOOK[a.kind][1]), a))]),
@@ -363,6 +363,7 @@ async function showOverview(page) {
   const segs = h('div', { class: 'segs' }, RANGES.map(([d, l]) => h('button', { class: d === days ? 'on' : null, onclick: () => { store.set('range', d); onRoute(); } }, l)));
   put(page, h('div', { class: 'pagehead' }, h('h1', null, 'Overview'), h('span', { class: 'grow' }), segs,
     canAdd() ? h('button', { class: 'pillbtn addacct', onclick: () => accountDialog() }, icon('add'), h('span', null, 'Account')) : null));
+  put(page, flagNote());
   put(page, syncNote());
   put(page, h('div', { class: 'hero' },
     h('div', null, h('div', { class: 'lbl' }, 'Net worth'), h('div', { class: 'big num' }, money(nw.netWorth, nw.currency))),
@@ -396,6 +397,14 @@ function acctRow(a) {
     !followsTx(a) && !THINGS.includes(a.kind) && a.kind !== 'investment' ? h('span', { class: 'tag', title: 'Its value alone is followed, not its transactions' }, 'Value') : null,
     h('span', { class: 'end' }, h('span', { class: `num ${a.isAsset ? '' : 'neg'}` }, money(a.isAsset ? shown : -Math.abs(shown), a.currency)),
       a.currency !== CUR() ? h('small', { class: 'muted num' }, money(a.value, CUR())) : a.equity != null ? h('small', { class: 'muted num' }, `Equity ${money(a.equity)}`) : null)));
+}
+function flagNote() {
+  const n = S.sum && S.sum.recurringFlags;
+  if (!n) return null;
+  return h('div', { class: 'note warnnote' }, icon('warning', 's'),
+    h('span', { class: 'grow' }, n === 1 ? 'A recurring transaction needs a look: a payment that did not come, or an amount that changed.'
+      : `${n} recurring transactions need a look: payments that did not come, or amounts that changed.`),
+    h('a', { class: 'pillbtn primary', href: '#/recurring' }, 'Review'));
 }
 function syncNote() {
   const m = S.sum && S.sum.monarch;
@@ -735,7 +744,7 @@ async function showRecurring(page) {
     'ioMoney looks for them in the transactions; add the ones that are, or add one by hand.'));
   const money2 = (x) => h('span', { class: `num ${x.amount < 0 ? '' : 'pos'}` }, `${x.approximate ? '≈ ' : ''}${money(x.amount, x.currency)}`);
   const row = (x) => h('li', null, h('div', { class: 'r', role: w ? 'button' : null, tabindex: w ? 0 : null, onclick: w ? () => recurringDialog(x) : null },
-    h('span', { class: 'main' }, h('b', null, x.name), h('small', null, [x.frequencyLabel, x.account || 'Any account', x.category, x.last ? `last ${fmtDay(x.last.day, x.last.day.slice(0, 4) !== today().slice(0, 4))} ${money(x.last.amount, x.currency)}` : 'not seen yet'].filter(Boolean).join(' · '))),
+    h('span', { class: 'main' }, h('b', null, x.name, x.flag ? h('span', { class: 'tag warn', title: flagText(x) }, icon('warning', 'xs'), x.flag.kind === 'missed' ? (x.flow === 'out' ? 'Not paid' : 'Missing') : 'Amount changed') : null), h('small', null, [x.frequencyLabel, x.account || 'Any account', x.category, x.last ? `last ${fmtDay(x.last.day, x.last.day.slice(0, 4) !== today().slice(0, 4))} ${money(x.last.amount, x.currency)}` : 'not seen yet'].filter(Boolean).join(' · '))),
     h('span', { class: 'when' }, x.next ? `next ${fmtDay(x.next, true)}` : ''),
     h('span', { class: 'amt' }, money2(x))));
   const monthly = (xs) => xs.reduce((s, x) => s + Math.abs(x.perMonth), 0);
@@ -749,6 +758,22 @@ async function showRecurring(page) {
     put(page, h('h2', { class: 'recurhead' }, icon(ic), h('span', null, `${title} (${xs.length})`), h('span', { class: 'grow' }), xs.length ? note : null));
     put(page, xs.length ? h('ul', { class: 'rows recur' }, xs.map(row)) : h('p', { class: 'muted' }, empty));
   };
+  // what is off: a payment that did not come, an amount that changed
+  const flagged = d.items.filter((x) => x.flag);
+  if (flagged.length) {
+    put(page, h('h2', { class: 'recurhead' }, icon('warning'), h('span', null, `To check (${flagged.length})`)));
+    put(page, h('ul', { class: 'rows recur flagged' }, flagged.map((x) => {
+      const f = x.flag;
+      const act = (label, fn, cls) => h('button', { class: `pillbtn tiny ${cls || ''}`, onclick: async (e) => { e.stopPropagation(); try { await fn(); await refreshSummary(); onRoute(); } catch (er) { fail(er); } } }, label);
+      const ok = () => api(`api/recurring/${x.id}/ok`, { method: 'POST', json: { kind: f.kind, day: f.day } });
+      const acts = !x.writable ? null : f.kind === 'changed'
+        ? [act(`Use ${money(Math.abs(f.to), x.currency)}`, () => api(`api/recurring/${x.id}`, { method: 'PATCH', json: { amount: Math.abs(f.to) } }), 'primary'), act('Dismiss', ok)]
+        : [act('Dismiss', ok), act('It stopped', async () => { if (await confirmDialog('Remove it', `Remove ${x.name} from the recurring transactions?`, 'Remove', true)) await api(`api/recurring/${x.id}`, { method: 'DELETE' }); })];
+      return h('li', null, h('div', { class: 'r' },
+        h('span', { class: 'main' }, h('b', null, x.name), h('small', null, flagText(x))),
+        h('span', { class: 'amt' }, money2(x)), acts ? h('span', { class: 'end acts', style: { flexDirection: 'row', gap: '6px' } }, acts) : null));
+    })));
+  }
   const subsFound = d.found.filter((x) => x.subscription).length;
   section('Subscriptions', 'play', subs, h('span', { class: 'muted small' }, h('span', { class: 'num' }, money(monthly(subs), CUR())), ' a month · ', h('span', { class: 'num' }, money(monthly(subs) * 12, CUR())), ' a year'),
     subsFound ? `None yet. ${subsFound} found in the transactions below ${subsFound === 1 ? 'is' : 'are'} marked Subscription: Add ${subsFound === 1 ? 'it' : 'them'} here.`
@@ -768,6 +793,15 @@ async function showRecurring(page) {
         h('span', { class: 'amt' }, money2(x)), w ? h('span', { class: 'end acts', style: { flexDirection: 'row', gap: '6px' } }, add, not) : null));
     })));
   }
+}
+/** What a recurring transaction's flag says: the payment that did not come, or the amount that changed. */
+function flagText(x) {
+  const f = x.flag;
+  if (f.kind === 'changed') {
+    const up = Math.abs(f.to) > Math.abs(f.from);
+    return `${x.flow === 'out' ? (up ? 'Went up' : 'Came down') : (up ? 'More than usual' : 'Less than usual')}: ${money(Math.abs(f.to), x.currency)} on ${fmtDay(f.day, true)}, ${x.approximate ? 'usually about' : 'was'} ${money(Math.abs(f.from), x.currency)}`;
+  }
+  return `${x.flow === 'out' ? 'Not paid' : 'Did not come'}: expected about ${fmtDay(f.expected, true)}, last seen ${fmtDay(f.since, true)}`;
 }
 /** Add a recurring transaction by hand, or change or remove one. */
 async function recurringDialog(x, preset) {

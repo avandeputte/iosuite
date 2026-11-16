@@ -18,6 +18,9 @@ quotes, and what the house and the cars are worth after their loans.
   from Zillow, the cars) with its balance history, two years of transactions and the holdings,
   copied in every six hours. ioMoney only reads: nothing is changed in Monarch. A sync runs in the background and the
   page shows how far it is (the first one, with two years of transactions, takes minutes).
+- **Missed a paycheck, or a price went up?** A recurring transaction whose payment did not come when its pace says
+  it should have, or whose latest payment had another amount, is flagged: on the overview, in the sidebar and first
+  on the Recurring page, where you take the new amount, dismiss the flag or remove what stopped.
 - **A bank link behind?** When Monarch has not heard from an account's bank in more than two days, or says the
   link was cut or the bank sign-in needs fixing, ioMoney flags the account (on the overview, in the sidebar and on its
   page) so you can check its connection in Monarch. An account that rarely changes can be left out from its menu

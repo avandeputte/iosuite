@@ -107,6 +107,12 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   household's; a member those of their own accounts. In the transaction list a recurring one has a small icon by its
   payee; **Make recurring** in a transaction's dialog opens one to add, its pace and usual amount taken from the
   transactions like it (or the one it already is).
+- **Missed and changed**: a recurring transaction whose payment did not come for longer than its pace allows (a
+  paycheck two days late, a monthly bill five) is flagged as missed; one whose latest payment had another amount (a
+  fixed one off by more than a quarter or 1%, one that varies by more than a third; also a payment with its words,
+  when one was due, between half and twice the amount) as changed. Flagged ones are listed first on the Recurring
+  page (To check: Use the new amount, Dismiss, It stopped), counted in the sidebar and on the overview, and carry
+  `flag` in the API and MCP. A flag goes when the next payment comes, the amount is updated or it is dismissed.
 - **Subscriptions**: Netflix, Max, YouTube, Spotify, Disney+, iCloud, Amazon Prime and other services (or a category
   like Streaming or Subscriptions) are marked as subscriptions, found after two payments already; the Recurring page
   shows them in a section of their own with what they cost a month and a year. Any recurring one can be marked or

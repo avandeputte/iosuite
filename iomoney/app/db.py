@@ -160,6 +160,16 @@ SCHEMA = [
         k VARCHAR(300) PRIMARY KEY,
         at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""",
+    # a flag on a recurring transaction (missed: none seen since its payment of that day; changed: the payment of that
+    # day had another amount) someone looked at and set aside: not shown again for that day
+    """CREATE TABLE IF NOT EXISTS mny_recurring_ok (
+        recurring_id INT NOT NULL,
+        kind VARCHAR(8) NOT NULL,
+        day DATE NOT NULL,
+        at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (recurring_id, kind, day),
+        CONSTRAINT fk_mny_recurring_ok_item FOREIGN KEY (recurring_id) REFERENCES mny_recurring(id) ON DELETE CASCADE
+    )""",
     # the household's categories (app/categories.py): those added here, and those renamed or regrouped here, with
     # their group. Those only in the transactions (Monarch's) are categories too, without a row.
     """CREATE TABLE IF NOT EXISTS mny_categories (
