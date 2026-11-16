@@ -58,15 +58,16 @@ def bank_contact(account: str) -> dict:
 @server.tool(annotations=READ_ONLY)
 def search_transactions(query: Optional[str] = None, account: Optional[str] = None, category: Optional[str] = None,
                         start: Optional[str] = None, end: Optional[str] = None, flow: Optional[Literal["in", "out"]] = None,
-                        reconciled: Optional[bool] = None, limit: int = 50) -> dict:
+                        reconciled: Optional[bool] = None, amount: Optional[str] = None, limit: int = 50) -> dict:
     """Transactions, the newest first: query (words in the payee, the bank's text, the category, the notes),
     account (id or name), category (exact name), start and end (YYYY-MM-DD), flow (out: money out; in: money in),
-    reconciled (true: only those reconciled; false: only those not). With how many match and their sum."""
+    reconciled (true: only those reconciled; false: only those not), amount (money out or in alike: "280" exactly, or
+    a range "100-200", ">500", "<20"). With how many match and their sum."""
     u = who()
     _need_role(u)
     aid = find_account(u, account)["id"] if account else None
     rec = None if reconciled is None else ("yes" if reconciled else "no")
-    r = guard(model.find_transactions, u, query or "", aid, category, start, end, flow, clamp(limit, 1, 500), 0, False, rec)
+    r = guard(model.find_transactions, u, query or "", aid, category, start, end, flow, clamp(limit, 1, 500), 0, False, rec, amount)
     for t in r["items"]:
         for k in ("writable", "edited", "source"):
             t.pop(k, None)

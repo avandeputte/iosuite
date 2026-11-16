@@ -292,6 +292,21 @@ def test_recurring_found_despite_outliers_renames_and_shared_payees(client):
     assert len([x for x in client.get("/api/recurring").json()["found"] if x["name"] == "Big Bank"]) == 1  # the other loan
 
 
+def test_transactions_by_amount(client):
+    a = add(client)
+    for amt, who in ((-280, "Friend"), (-280.5, "Garage"), (150, "Refund"), (-12.5, "Cafe"), (-7834, "Tax")):
+        client.post(f"/api/accounts/{a['id']}/transactions", json={"amount": amt, "merchant": who, "notes": "ref 7834" if who == "Cafe" else None})
+    names = lambda **p: sorted(t["merchant"] for t in client.get("/api/transactions", params=p).json()["items"])  # noqa: E731
+    assert names(amount="280") == ["Friend"]
+    assert names(amount="$280.50") == ["Garage"]
+    assert names(amount="100-300") == ["Friend", "Garage", "Refund"]
+    assert names(amount=">1000") == ["Tax"] and names(amount="<20") == ["Cafe"]
+    assert names(amount="100-300", flow="in") == ["Refund"]
+    assert names(q="$12.50") == ["Cafe"] and names(q="200..290") == ["Friend", "Garage"]
+    assert names(q="7834") == ["Cafe", "Tax"]  # a bare number: the amount, or words that have it
+    assert client.get("/api/transactions", params={"amount": "lots"}).status_code == 400
+
+
 def test_manual_transactions_and_categories(client):
     a = add(client)
     db.ex("UPDATE mny_accounts SET source = 'monarch', external_id = 'm1' WHERE id = %s", (a["id"],))  # one from Monarch takes them too

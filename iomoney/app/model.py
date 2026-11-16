@@ -605,8 +605,31 @@ def words(*parts) -> str:
     return " ".join(str(p) for p in parts if p).lower()[:4000]
 
 
+_NUM = r"\$?\s*(\d[\d,]*(?:\.\d{1,2})?)"
+
+
+def amount_range(s: str | None) -> tuple[Decimal | None, Decimal | None] | None:
+    """An amount as typed, money out or in alike: "280", "$280.00", "100-200", "100..200", ">500", "<=20". (low,
+    high), either None for no bound; None when it is not an amount."""
+    s = (s or "").strip().replace(" ", "")
+    if not s:
+        return None
+    num = lambda x: Decimal(x.replace(",", ""))  # noqa: E731
+    m = re.fullmatch(_NUM + r"(?:-|\.\.|to)" + _NUM, s, re.I)
+    if m:
+        lo, hi = sorted((num(m[1]), num(m[2])))
+        return lo, hi
+    m = re.fullmatch(r"(>=?|<=?)" + _NUM, s)
+    if m:
+        return (num(m[2]), None) if m[1].startswith(">") else (None, num(m[2]))
+    m = re.fullmatch(_NUM, s)
+    return (num(m[1]), num(m[1])) if m else None
+
+
 def _tx_filter(u: dict, q: str = "", account: int = None, category: str = None, start=None, end=None,
-               flow: str = None, hidden: bool = False, reconciled: str = None) -> tuple[str, list]:
+               flow: str = None, hidden: bool = False, reconciled: str = None, amount: str = None) -> tuple[str, list]:
+    """amount: an amount or a range (amount_range); in q, a word with $ or cents, a range or > < is an amount too, and
+    a bare number is an amount or a word (the last digits in the bank's text)."""
     where, args = _visible(u)
     where += " AND a.track = 'transactions'"  # an account followed by its value alone keeps its transactions out of sight
     if not hidden:
@@ -632,15 +655,40 @@ def _tx_filter(u: dict, q: str = "", account: int = None, category: str = None, 
         where += " AND t.amount > 0"
     if reconciled in ("yes", "no"):
         where += f" AND {'' if reconciled == 'yes' else 'NOT '}EXISTS (SELECT 1 FROM mny_reconciled r WHERE r.transaction_id = t.id)"
+    if amount not in (None, ""):
+        r = amount_range(str(amount))
+        if not r:
+            raise Invalid("The amount: a number (280.00) or a range (100-200, >500, <20)")
+        where, args = _amount_where(where, args, r)
     for w in (q or "").lower().split()[:8]:
-        where += " AND t.words LIKE %s"
-        args.append("%" + w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+        like = "%" + w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        r = amount_range(w)
+        if r and re.fullmatch(r"\d+", w):  # 7834: the amount, or the last digits in the bank's text
+            where += " AND (ABS(t.amount) = %s OR t.words LIKE %s)"
+            args += [r[0], like]
+        elif r:
+            where, args = _amount_where(where, args, r)
+        else:
+            where += " AND t.words LIKE %s"
+            args.append(like)
+    return where, args
+
+
+def _amount_where(where: str, args: list, r: tuple) -> tuple[str, list]:
+    lo, hi = r
+    if lo is not None:
+        where += " AND ABS(t.amount) >= %s"
+        args.append(lo)
+    if hi is not None:
+        where += " AND ABS(t.amount) <= %s"
+        args.append(hi)
     return where, args
 
 
 def find_transactions(u: dict, q: str = "", account: int = None, category: str = None, start=None, end=None,
-                      flow: str = None, limit: int = 100, offset: int = 0, hidden: bool = False, reconciled: str = None) -> dict:
-    where, args = _tx_filter(u, q, account, category, start, end, flow, hidden, reconciled)
+                      flow: str = None, limit: int = 100, offset: int = 0, hidden: bool = False, reconciled: str = None,
+                      amount: str = None) -> dict:
+    where, args = _tx_filter(u, q, account, category, start, end, flow, hidden, reconciled, amount)
     base = f"FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id WHERE {where}"
     total = db.one(f"SELECT count(*) AS n, COALESCE(SUM(t.amount), 0) AS s {base}", args)
     rows = db.q(f"SELECT t.*, a.owner_id, a.name AS account_name, a.currency, EXISTS (SELECT 1 FROM mny_reconciled r WHERE r.transaction_id = t.id) AS reconciled {base} ORDER BY t.day DESC, t.id DESC LIMIT %s OFFSET %s",
