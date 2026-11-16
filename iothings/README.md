@@ -16,6 +16,13 @@ single-page vanilla JS app, with everything stored in MariaDB / MySQL (the files
   the place and in the labels.
 - **Places** as a tree (House / Kitchen / Drawer by the sink): deleting one moves what was in it one level up.
   **Labels** with a colour. Both in the sidebar, with how many things each holds.
+- **Whose it is**: a thing can be marked as one or more people's of the family (Emma's bike, Dad's laptop, the
+  children's games console); marked as nobody's, it is the household's. The family is the suite's one list
+  (Settings › Security › Family, suite admins), with the same colours, initials and faces as in ioTask and
+  ioCalendar, and everyone in it can be given a thing, whether or not they use ioThings. The sidebar's **Family**
+  lists each person with how many things are theirs and shows them; the cards and the table show their faces;
+  searching a name ("emma", "emma's") finds their things too. The REST API (`people` on a thing, `?person=` on the
+  list) and the MCP tools (`people`, `search_items(person=...)`) do the same.
 - **Files**: photos (turned upright, with a small copy for the cards), manuals, receipts, warranty cards and anything
   else, picked, dropped on the thing or taken with the phone. Up to `MAX_FILE_MB` each (100). They are kept in the
   database in 4 MB parts, so a backup of the database has them and nothing else needs one.

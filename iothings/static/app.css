@@ -84,6 +84,21 @@
 .chip .lab { color: var(--fg2); font-size: var(--fs-s); }
 a.chip:hover { background: var(--accent-bg); color: var(--accent); }
 
+/* the family (the suite's one list): a round badge with initials, or their face ringed in their colour, as in every io app */
+.mem { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%;
+  font-size: 9px; font-weight: 700; letter-spacing: 0; color: #fff; background: var(--mc, #5f6b7a); position: relative; }
+.mem.face img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--mc, #5f6b7a); }
+#nav a.who .mem { width: 22px; height: 22px; margin: 0 1px; }
+.sheetgrid .sic .mem { width: 32px; height: 32px; font-size: 12px; }
+.chip.mchip { padding-left: 4px; margin: 0; }
+.chip.mchip .mem { width: 22px; height: 22px; }
+button.chip.toggle { border: 1px solid var(--line, transparent); cursor: pointer; font: inherit; color: var(--fg2); }
+button.chip.toggle .mem { opacity: .5; }
+button.chip.toggle.on { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+button.chip.toggle.on .mem { opacity: 1; }
+.labs .mem { margin-right: 2px; }
+.ppl { display: inline-flex; gap: 4px; }
+
 /* ---- forms */
 .form { padding: 24px 32px 80px; max-width: 900px; }
 .fsec { margin: 22px 0 6px; font-weight: 600; color: var(--fg2); font-size: var(--fs-m); display: flex; align-items: center; gap: 8px; }
@@ -134,7 +149,7 @@ label.check { display: inline-flex; align-items: flex-start; gap: 6px; cursor: p
 
 /* ---- narrow screens: the sidebar slides in; phones get a bottom bar with the smart lists and More */
 @media (max-width: 860px) {
-  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav a[data-v="place"], #nav a[data-v="label"], #nav a[data-v="import"], #nav a[data-v="new"] { display: none !important; }
+  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav a[data-v="place"], #nav a[data-v="label"], #nav a[data-v="person"], #nav a[data-v="import"], #nav a[data-v="new"] { display: none !important; }
   #suitebtn:not([hidden]) { display: inline-flex; margin: 0; }
   #topbar { gap: 6px; padding: 0 8px; left: 0; padding-top: env(safe-area-inset-top); height: calc(var(--topbar) + env(safe-area-inset-top)); }
   #nav { top: auto; bottom: 0; left: 0; right: 0; width: auto; height: calc(56px + env(safe-area-inset-bottom)); flex-direction: row; justify-content: space-around;

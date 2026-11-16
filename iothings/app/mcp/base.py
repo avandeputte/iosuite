@@ -83,6 +83,7 @@ def item_out(u: dict, it: dict) -> dict:
     j = model.public(it, u)
     j["location"] = j["location"]["path"] if j["location"] else None
     j["labels"] = [x["name"] for x in j["labels"]]
+    j["people"] = [x["displayName"] for x in j["people"]]
     j["files"] = [{"kind": f["kind"], "name": f["name"], "size": f["size"]} for f in j["files"]]
     j["youCanChange"] = j.pop("writable")
     j.pop("canLog", None)
@@ -93,5 +94,6 @@ def summary(u: dict, row: dict) -> dict:
     j = model.public(row, u, full=False)
     j["location"] = j["location"]["path"] if j["location"] else None
     j["labels"] = [x["name"] for x in j["labels"]]
+    j["people"] = [x["displayName"] for x in j["people"]]
     j.pop("writable", None)
     return _tidy(j, row["id"])
