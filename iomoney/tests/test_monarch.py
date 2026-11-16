@@ -282,6 +282,33 @@ def test_accounts_whose_bank_link_is_behind_are_flagged(client, mm):
     assert "bank" not in m
 
 
+def test_history_follows_the_dates_of_the_transactions(client, mm, monkeypatch):
+    put_keys()
+    # an account typed in at Monarch: a starting balance long ago, then one added there with an earlier date
+    FakeMM.accounts = list(ACCOUNTS) + [acct("109", "Pension", "depository", 400, isManual=True)]
+    FakeMM.transactions = [tx("p1", 700, 400, "Balance Adjustment", account={"id": "109"})]
+    assert client.post("/api/monarch/sync").json()["ok"]
+    pid = next(a["id"] for a in client.get("/api/accounts").json()["items"] if a["name"] == "Pension")
+    FakeMM.accounts[-1] = acct("109", "Pension", "depository", 500, isManual=True)
+    FakeMM.transactions = [tx("p1", 700, 400, "Balance Adjustment", account={"id": "109"}),
+                           tx("p2", 300, 100, "Adjustment", account={"id": "109"})]
+    r = client.post("/api/monarch/sync", json={"accountId": pid, "wait": 30}).json()
+    assert r["ok"], r
+    kept = {r["day"].isoformat(): float(r["balance"]) for r in db.q("SELECT day, balance FROM mny_balances WHERE account_id = %s", (pid,))}
+    assert kept == {D(701): 0, D(700): 400, D(300): 500, TODAY.isoformat(): 500}  # the daily copies give way
+    assert client.get(f"/api/accounts/{pid}/history?days=400").json()["items"][0]["value"] == 400
+    # an account linked to its bank keeps Monarch's history, and syncing it again takes Monarch's new one
+    chk = next(a["id"] for a in client.get("/api/accounts").json()["items"] if a["name"] == "Checking")
+    monkeypatch.setattr(FakeMM, "get_account_history", lambda self, i: _async([{"date": D(30), "signedBalance": 3000}]))
+    assert client.post("/api/monarch/sync", json={"accountId": chk, "wait": 30}).json()["ok"]
+    hist = {p["day"]: p["value"] for p in client.get(f"/api/accounts/{chk}/history?days=60").json()["items"]}
+    assert hist[D(30)] == 3000 and hist[D(10)] == 4500
+
+
+async def _async(v):
+    return v
+
+
 def test_categories_renamed_here_follow_the_syncs(client, mm):
     put_keys()
     assert client.post("/api/monarch/sync").json()["ok"]

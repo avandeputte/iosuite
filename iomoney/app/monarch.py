@@ -239,8 +239,45 @@ async def _history(mm, ext: str, aid: int, is_asset: bool) -> int:
         v = Decimal(str(s.get("signedBalance") or 0)).quantize(model.CENT)
         rows.append((aid, d, v if is_asset else abs(v)))
     if rows:
-        db.many("INSERT IGNORE INTO mny_balances (account_id, day, balance, source) VALUES (%s, %s, %s, 'sync')", rows)
+        # Monarch's history wins over the daily copies kept here (it is asked again when an account is synced again,
+        # after Monarch recomputed it for a transaction added there with an earlier date)
+        db.many("INSERT INTO mny_balances (account_id, day, balance, source) VALUES (%s, %s, %s, 'sync') "
+                "ON DUPLICATE KEY UPDATE balance = IF(source = 'sync', VALUES(balance), balance)", rows)
     return len(rows)
+
+
+def _from_transactions(aids) -> int:
+    """The values over time of the accounts Monarch keeps without a bank (typed in there, or their updates turned off)
+    that follow their transactions here and hold nothing: worked out from Monarch's transactions, back from today's
+    balance, so one added there with an earlier date moves the history on its own date, not on the day it was added
+    (as Monarch's history and the daily copies here have it). Replaces their synced values before today; the number
+    of accounts redone."""
+    aids = [int(x) for x in aids]
+    if not aids:
+        return 0
+    today = dt.date.today()
+    picked = db.q("SELECT a.id, a.is_asset, a.balance FROM mny_accounts a JOIN mny_bank_links l ON l.account_id = a.id "
+                  f"WHERE a.id IN ({db.marks(len(aids))}) AND a.source = 'monarch' AND l.linked = 0 "
+                  "AND a.track = 'transactions' AND a.kind NOT IN ('property', 'vehicle', 'other_asset') "
+                  "AND NOT EXISTS (SELECT 1 FROM mny_holdings h WHERE h.account_id = a.id)", aids)
+    for a in picked:
+        days = db.q("SELECT day, SUM(amount) AS s FROM mny_transactions WHERE account_id = %s AND source = 'monarch' "
+                    "AND day <= %s GROUP BY day ORDER BY day DESC", (a["id"], today))
+        if not days:
+            continue
+        # an asset's balance grows with what comes in; what is owed (kept as a positive number) shrinks with it
+        sign = Decimal(1) if a["is_asset"] else Decimal(-1)
+        bal, rows = Decimal(a["balance"]), []
+        for d in days:
+            if d["day"] < today:
+                rows.append((a["id"], d["day"], bal if a["is_asset"] else abs(bal)))
+            bal -= sign * Decimal(d["s"])
+        rows.append((a["id"], days[-1]["day"] - dt.timedelta(days=1), bal if a["is_asset"] else abs(bal)))
+        with db.tx():
+            db.ex("DELETE FROM mny_balances WHERE account_id = %s AND source = 'sync' AND day < %s", (a["id"], today))
+            db.many("INSERT INTO mny_balances (account_id, day, balance, source) VALUES (%s, %s, %s, 'sync') "
+                    "ON DUPLICATE KEY UPDATE balance = VALUES(balance)", rows)
+    return len(picked)
 
 
 def _put_tx(t: dict, aid: int, groups: dict, cats: tuple = None) -> bool:
@@ -552,6 +589,7 @@ async def _run(full: bool, only: int = None, years: int = 2) -> dict:
         _at("Its transactions")
         since = dt.date(1990, 1, 1) if not years else today - dt.timedelta(days=round(365.25 * years))
         n_tx = await _transactions(mm, {ext: only}, since, today, groups, account_ids=[ext])
+        _from_transactions([only])
         if (acc.get("type") or {}).get("name") == "brokerage" or acc.get("holdingsCount"):
             n_hold = await _holdings(mm, ext, only)
         return {"accounts": 1, "transactions": n_tx, "holdings": n_hold, "held": 0, "only": acc.get("displayName"),
@@ -567,6 +605,7 @@ async def _run(full: bool, only: int = None, years: int = 2) -> dict:
         since = old
     _at("Transactions")
     n_tx = await _transactions(mm, ids, since, today, groups)
+    _from_transactions(ids.values())
     _at("Holdings")
     for acc in accts:
         if str(acc["id"]) not in ids:

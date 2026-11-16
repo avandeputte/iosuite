@@ -19,6 +19,11 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
 - **One account synced again** (admins, an account's menu › Sync this account again): its transactions of the past
   two years, five years or all Monarch has fetched again, with its history and holdings; changes made here stay,
   what Monarch no longer has or hides goes. The regular sync's window is not moved by it.
+- **Values over time**: Monarch's own history when an account first comes in (asked again, and taking over the daily
+  copies, when the account is synced again); afterwards a value every sync. An account Monarch keeps without a bank
+  (typed in there, or its updates turned off) that follows its transactions and holds nothing has its values worked
+  out from its transactions instead, back from today's balance, at every sync: a transaction added in Monarch with an
+  earlier date then moves the chart on its own date, not on the day it was added.
 - **Bank links behind**: each sync keeps what Monarch says of every account's link to its bank (when Monarch last
   heard from the bank, whether the bank sign-in needs fixing there, whether the link was cut). An account Monarch has
   not heard from in more than 48 hours (by the time of the sync), or whose link is cut or needs its sign-in fixed, is
