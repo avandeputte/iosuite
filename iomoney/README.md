@@ -11,7 +11,7 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
 
 - **Monarch Money**: every account Monarch has (bank accounts, credit cards, investments, loans, and the house from
   Zillow and the cars it values) with its balance history, the transactions of the past two years, the holdings of the
-  investment accounts and the coming bills, copied in every six hours and on **Sync now**. ioMoney only reads: nothing
+  investment accounts, copied in every six hours and on **Sync now**. ioMoney only reads: nothing
   is changed in Monarch. Monarch has no public API; ioMoney uses the community's Python library
   ([`monarchmoneycommunity`](https://pypi.org/project/monarchmoneycommunity/)), which speaks to the API Monarch's web
   app uses. A sync runs in the background: Sync now waits a few seconds, then the page follows it (its stage and count
@@ -71,6 +71,23 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   numbers show as •••• and their last four digits until shown, with a copy button; whoever sees the account sees
   them, whoever may change it changes them. They are kept apart from the account (mny_account_info), so no list,
   summary or MCP tool carries them; the MCP tool `bank_contact` gives the phone, website, email and address only.
+- **Transactions by hand** in any account that follows its transactions, one from Monarch too (a cash payment, one
+  the bank has not sent yet): kept through the syncs, and in an account kept by hand each one moves the balance.
+- **Recurring**: the bills, subscriptions and paychecks, found by ioMoney itself (Monarch's recurring transactions are
+  not brought in): the same payee in the same account, money out or in, at least three times (a yearly one twice) at a
+  steady pace (every week, two weeks, twice a month, monthly, every three months, yearly) with an amount that stays
+  about the same and the last one recent enough. What is found is offered on the Recurring page: **Add**, or **Not
+  recurring** (not offered again); one is also added by hand (its name, the words its payee has, the account, the usual
+  amount and whether it varies, how often, a day it falls on, a category), changed or removed. Editors change the
+  household's; a member those of their own accounts.
+- **Subscriptions**: Netflix, Max, YouTube, Spotify, Disney+, iCloud, Amazon Prime and other services (or a category
+  like Streaming or Subscriptions) are marked as subscriptions, found after two payments already; the Recurring page
+  shows them in a section of their own with what they cost a month and a year. Any recurring one can be marked or
+  unmarked by hand.
+- **Categories**: every category by group, with how many transactions have it: add one, rename it (into one there is:
+  merged), move it to another group, or delete it (its transactions moved to another category or left without one).
+  The transactions, rules and recurring transactions follow, and so does what Monarch sends later under the old name
+  (Monarch itself is not changed). Editors change them.
 - **Rules**: the household's rules rename the payee, set the category or hide a transaction when the payee or the
   bank's own text contains, is or starts with some words (optionally only in one account, money out or in, between two
   amounts). They run over what each sync brings and over a transaction added by hand; **Apply now** runs them over the
@@ -88,8 +105,8 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
 - **Who sees it**: only the people given a role in ioMoney; others are told they have none. Viewers read; members keep
   their own private accounts; editors and admins change the household's. Settings › Money (admins) has the
   household's currency and Monarch Money.
-- **Bills in ioCalendar**: Monarch's recurring transactions show on the day they are due in ioCalendar, to the people
-  with a role in ioMoney (asked as them, so nobody else sees them).
+- **Bills in ioCalendar**: the recurring transactions show on the day they are due in ioCalendar (paid once a payment
+  like it is a few days from it), to the people with a role in ioMoney (asked as them, so nobody else sees them).
 - **Everywhere**: a REST API with OpenAPI docs at `/api/docs`, and an MCP server for AI assistants.
 
 ## Monarch Money's sign-in
@@ -197,7 +214,9 @@ Updates, releases, the reverse proxy and Cloudflare Access work as in every app 
 | Transfer rules: list, add, change, delete | `/api/transfer-rules`, `/api/transfer-rules/{id}` |
 | Rules: list, add, try, apply, order, change, delete | `/api/rules`, `POST /api/rules/test`, `POST /api/rules/apply`, `PUT /api/rules/order`, `/api/rules/{id}` |
 | The portfolio and quotes | `GET /api/portfolio`, `POST /api/accounts/{id}/holdings`, `/api/holdings/{id}`, `GET /api/quotes/{symbol}`, `POST /api/quotes/refresh` |
-| Bills (Monarch's recurring transactions) | `GET /api/bills?start=&end=` |
+| Recurring: list and found, add (or add what was found), not recurring, change, remove | `GET`, `POST /api/recurring` (`{found: key}` or the fields), `POST /api/recurring/not` (`{key}`), `PATCH`, `DELETE /api/recurring/{id}` |
+| Bills: each date a recurring transaction falls on, paid or not | `GET /api/bills?start=&end=` |
+| Categories: list, add, rename / merge / regroup, delete | `GET`, `POST`, `PUT /api/categories` (`{name, newName?, group?}`), `POST /api/categories/delete` (`{name, moveTo?}`) |
 | Monarch Money (admins) | `GET /api/monarch` (with the running sync's progress), `POST /api/monarch/sync` (`{full, wait}`), `POST /api/monarch/code`, `DELETE /api/monarch/session` |
 | Accounts Monarch reports as new (admins) | `GET /api/monarch/new`, `POST /api/monarch/new/{monarch id}` (`{as: "new"}` or `{as: "existing", accountId}`) |
 | The household's currency, the automatic sync | `GET /api/settings`, `PUT /api/settings` (admins) |
@@ -218,7 +237,7 @@ Off until an admin turns it on in **Settings › Server**. The tools: `overview`
 `test_rule`, `update_rule`, `delete_rule`, `apply_rules`, `link_transfers`, `possible_transfers`, `link_transaction`, `unlink_transaction`,
 `transfer_rules`, `add_transfer_rule`, `delete_transfer_rule`, `portfolio`,
 `get_quote`, `add_holding`, `update_holding`, `delete_holding`, `add_account`, `update_account`, `add_valuation`,
-`bills`, `sync_monarch`; and for admins `diagnostics`, `monarch_new_accounts`, `resolve_new_account`.
+`bills`, `recurring_transactions`, `sync_monarch`; and for admins `diagnostics`, `monarch_new_accounts`, `resolve_new_account`.
 
 ```sh
 claude mcp add --transport http iomoney https://money.example.com/mcp --header "Authorization: Bearer APP-PASSWORD"
@@ -237,7 +256,9 @@ kept, ordered, applied, run by the sync), transfers (found by a named payee, a t
 payment, not without evidence, a tie left for a person, learned and typed rules, unlinked for good, linked by hand, the
 maintenance's list of what is left and why), reconciled (marked, filtered, in bulk, not by a viewer), bank details (kept, changed, removed, not in the account
 or by a viewer), spending and cash flow without transfers, the portfolio with a holding in another
-currency, a house's estimate and its equity after the mortgage, bills, the Monarch sync against a stand-in for the
+currency, a house's estimate and its equity after the mortgage, recurring transactions (found, added, not recurring, by hand,
+whose they are) and subscriptions, the bills, transactions by hand in a Monarch account, categories (renamed, merged,
+deleted, with their rules and what a sync brings later), the Monarch sync against a stand-in for the
 library (first sync, later syncs keeping local changes, a session Monarch no longer takes, a wrong sign-in, a code by
 hand, an account made again in Monarch matched with its transactions none twice, a new one held until said), the MCP server and a person's data deleted.
 
@@ -246,8 +267,10 @@ hand, an account made again in Monarch matched with its transactions none twice,
 ```
 app/main.py        the application: start-up, the background chores (Monarch sync, quotes, estimates), routes
 app/api.py         the REST API
-app/model.py       accounts, balances, transactions, holdings and bills in MariaDB: who sees and changes what, the sums
+app/model.py       accounts, balances, transactions and holdings in MariaDB: who sees and changes what, the sums
 app/monarch.py     Monarch Money: the sign-in (from the suite's keys and tokens) and the sync, accounts it reports as new
+app/recurring.py   recurring transactions and subscriptions: found in the transactions, the household's list, the bills' dates
+app/categories.py  the categories: added, renamed, merged, regrouped, deleted, and what a sync brings later under the old name
 app/transfers.py   transfers between the household's own accounts: found, linked, unlinked, and their rules
 app/quotes.py      quotes and exchange rates from Yahoo Finance
 app/persondata.py  what a person keeps here, for the suite's delete-a-person

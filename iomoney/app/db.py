@@ -134,25 +134,44 @@ SCHEMA = [
         close DECIMAL(18,6) NOT NULL,
         PRIMARY KEY (symbol, day)
     )""",
-    # the bills to come, and the ones just paid, as Monarch Money's recurring transactions see them: what ioCalendar
-    # shows on their days (GET /api/bills). key: Monarch's stream and the day. account_id: the account it is paid from,
-    # when it is one of ours (its owner decides who sees the bill; none: the household's).
-    """CREATE TABLE IF NOT EXISTS mny_bills (
+    # the recurring transactions the household keeps (app/recurring.py): a bill or money that comes in regularly, found
+    # in the transactions or added by hand. pattern: words its payee or bank's text has; account_id: that account only
+    # (none: any); flow: out or in; amount: the usual one (positive; approximate: it varies); frequency: weekly,
+    # biweekly, semimonthly, monthly, quarterly, yearly; day: a day it fell on (the dates follow from it).
+    """CREATE TABLE IF NOT EXISTS mny_recurring (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        ext_key VARCHAR(128) NOT NULL,
-        stream_id VARCHAR(64) NULL,
-        day DATE NOT NULL,
-        merchant VARCHAR(255) NULL,
+        name VARCHAR(255) NOT NULL,
+        pattern VARCHAR(255) NOT NULL,
+        account_id INT NULL,
+        flow VARCHAR(3) NOT NULL DEFAULT 'out',
         amount DECIMAL(18,2) NOT NULL,
         approximate TINYINT(1) NOT NULL DEFAULT 0,
-        frequency VARCHAR(32) NULL,
+        frequency VARCHAR(16) NOT NULL DEFAULT 'monthly',
+        day DATE NOT NULL,
         category VARCHAR(128) NULL,
-        account_id INT NULL,
-        paid TINYINT(1) NOT NULL DEFAULT 0,
-        seen_at DATETIME NOT NULL,
-        UNIQUE KEY uq_mny_bills_key (ext_key),
-        KEY idx_mny_bills_day (day),
-        CONSTRAINT fk_mny_bills_account FOREIGN KEY (account_id) REFERENCES mny_accounts(id) ON DELETE CASCADE
+        subscription TINYINT(1) NOT NULL DEFAULT 0,
+        source VARCHAR(8) NOT NULL DEFAULT 'hand',
+        created_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_mny_recurring_account FOREIGN KEY (account_id) REFERENCES mny_accounts(id) ON DELETE CASCADE
+    )""",
+    # what was found to look recurring and a person said is not: account:flow:pattern, not offered again
+    """CREATE TABLE IF NOT EXISTS mny_recurring_nots (
+        k VARCHAR(300) PRIMARY KEY,
+        at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""",
+    # the household's categories (app/categories.py): those added here, and those renamed or regrouped here, with
+    # their group. Those only in the transactions (Monarch's) are categories too, without a row.
+    """CREATE TABLE IF NOT EXISTS mny_categories (
+        name VARCHAR(128) PRIMARY KEY,
+        grp VARCHAR(128) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""",
+    # a category renamed, merged into another or deleted here: what a sync brings in under the old name goes under the
+    # new one (none: no category)
+    """CREATE TABLE IF NOT EXISTS mny_category_alias (
+        old VARCHAR(128) PRIMARY KEY,
+        new VARCHAR(128) NULL
     )""",
     # the household's rules for transactions: when the payee or the bank's text matches (contains, is, starts with;
     # field: payee, bank's text, or either), optionally only in one account and between two amounts (money out or in,

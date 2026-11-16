@@ -204,7 +204,7 @@ export async function tickTask(o) {
   } catch (e) { fail(e); }
   if (['month', 'week', 'day', 'agenda'].includes(route().view)) drawView();
 }
-// the household's coming bills from ioMoney (Monarch Money's recurring transactions), for those with a role there
+// the household's coming bills from ioMoney (its recurring transactions), for those with a role there
 export const billsOn = () => !!S.status.iomoney && S.settings.hideBills !== '1';
 /** ioMoney did answer this person (a role there): the sidebar offers the bills, and remembers why they are away. */
 export const billsOffered = () => !!S.status.iomoney && !/not part of the suite|No role/.test(S.bills.reason || '');

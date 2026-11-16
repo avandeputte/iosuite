@@ -1,4 +1,4 @@
-"""Monarch Money: the household's accounts, balances, transactions, holdings and coming bills, copied in.
+"""Monarch Money: the household's accounts, balances, transactions and holdings, copied in.
 
 Monarch has no public API; the community's Python library (`monarchmoneycommunity`, the maintained fork of
 `monarchmoney`) speaks to the same GraphQL API Monarch's web app uses. Nothing goes the other way: ioMoney only reads.
@@ -22,7 +22,9 @@ What a sync does (sync(); every SYNC_HOURS hours from the chores in app/main.py,
   link broke). An existing one takes the new id, and the next sync matches the transactions Monarch sends under it
   with those kept (same amount, a few days apart): none is there twice, and what was changed here stays.
 - holdings of the investment accounts, with Monarch's last price (used while there is no quote).
-- the recurring transactions from a month back to two months ahead: the bills ioCalendar shows.
+Monarch's recurring transactions (its bills) are not taken: ioMoney finds them itself (app/recurring.py).
+A category renamed, merged or regrouped here (app/categories.py) stays so: what Monarch sends under its old name
+comes in under the new one, in its group here.
 """
 import asyncio
 import datetime as dt
@@ -35,7 +37,7 @@ from decimal import Decimal
 from iosuite_shared import credentials
 from iosuite_shared.errors import Invalid
 
-from app import config, db, model
+from app import categories, config, db, model
 
 log = logging.getLogger("iomoney.monarch")
 APP = config.APP
@@ -50,7 +52,6 @@ KEYS = [
 INITIAL_DAYS = 730      # transactions fetched on the first sync
 OVERLAP_DAYS = 14       # a later sync looks this far back before the last one
 PAGE = 500              # transactions per request
-BILLS_BACK, BILLS_AHEAD = 31, 62
 TIMEOUT = 60
 SYNC_HOURS = 6
 
@@ -214,9 +215,10 @@ async def _history(mm, ext: str, aid: int, is_asset: bool) -> int:
     return len(rows)
 
 
-def _put_tx(t: dict, aid: int, groups: dict) -> bool:
+def _put_tx(t: dict, aid: int, groups: dict, cats: tuple = None) -> bool:
     """Insert or refresh one Monarch transaction in account aid (what was changed here by hand stays); one hidden in
-    Monarch is not kept here (removed when it was): False."""
+    Monarch is not kept here (removed when it was): False. cats: the household's renamed categories and their groups
+    (app/categories.py maps())."""
     if t.get("hideFromReports"):
         db.ex("DELETE FROM mny_transactions WHERE source = 'monarch' AND external_id = %s", (str(t["id"]),))
         return False
@@ -226,7 +228,8 @@ def _put_tx(t: dict, aid: int, groups: dict) -> bool:
     day = dt.date.fromisoformat(str(t["date"])[:10])
     amt = Decimal(str(t.get("amount") or 0)).quantize(model.CENT)
     grp = groups.get(str(cat.get("id"))) if cat else None
-    w = model.words(merchant, t.get("plaidName"), cat.get("name"), grp, t.get("notes"), ",".join(tags))
+    cname, grp = categories.mapped(cat.get("name") or None, grp, *(cats or categories.maps()))
+    w = model.words(merchant, t.get("plaidName"), cname, grp, t.get("notes"), ",".join(tags))
     db.ex("INSERT INTO mny_transactions (account_id, source, external_id, day, amount, merchant, description, category, "
           "category_group, notes, tags, pending, hidden, recurring, words) "
           "VALUES (%s, 'monarch', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
@@ -236,7 +239,7 @@ def _put_tx(t: dict, aid: int, groups: dict) -> bool:
           "category_group = IF(edited, category_group, VALUES(category_group)), notes = IF(edited, notes, VALUES(notes)), "
           "hidden = IF(edited, hidden, VALUES(hidden)), words = IF(edited, words, VALUES(words))",
           (aid, str(t["id"]), day, amt, (merchant or "")[:255] or None, (t.get("plaidName") or "")[:255] or None,
-           (cat.get("name") or "")[:128] or None, (grp or "")[:128] or None, t.get("notes") or None,
+           (cname or "")[:128] or None, (grp or "")[:128] or None, t.get("notes") or None,
            json.dumps(tags) if tags else None, 1 if t.get("pending") else 0, 0,
            1 if t.get("isRecurring") else 0, w))
     return True
@@ -256,13 +259,14 @@ async def _pages(mm, start: dt.date, end: dt.date, **kw):
 
 async def _transactions(mm, ids: dict, since: dt.date, today: dt.date, groups: dict) -> int:
     seen, n = set(), 0
+    cats = categories.maps()
     async for page in _pages(mm, since, today):
         for t in page:
             aid = ids.get(str((t.get("account") or {}).get("id")))
             if not aid:
                 continue  # an account held for a person to say what it is, or one Monarch no longer lists
             seen.add(str(t["id"]))
-            n += _put_tx(t, aid, groups)
+            n += _put_tx(t, aid, groups, cats)
         _at("Transactions", n)
     # gone from Monarch inside the window: a pending one that posted under another id, one deleted there. Only in the
     # accounts Monarch still lists: an account deleted there (to be made again) keeps its transactions until they
@@ -331,8 +335,9 @@ async def _adopt(mm, move: dict, aid: int, today: dt.date, groups: dict) -> int:
             db.ex("UPDATE mny_transactions SET source = 'monarch', external_id = %s WHERE id = %s", (str(t["id"]), best[1]["id"]))
             used.add(best[1]["id"])
             n += 1
+    cats = categories.maps()
     for t in incoming:
-        _put_tx(t, aid, groups)
+        _put_tx(t, aid, groups, cats)
     model.apply_rules("t.account_id = %s", (aid,))
     from app import transfers
     transfers.link("t.account_id = %s", (aid,))
@@ -468,36 +473,6 @@ async def _holdings(mm, ext: str, aid: int) -> int:
     return n
 
 
-async def _bills(mm, ids: dict, today: dt.date) -> int:
-    start, end = today - dt.timedelta(days=BILLS_BACK), today + dt.timedelta(days=BILLS_AHEAD)
-    got = await mm.get_recurring_transactions(start.isoformat(), end.isoformat())
-    items = (got or {}).get("recurringTransactionItems") or []
-    seen, now = set(), dt.datetime.now().replace(microsecond=0)
-    for it in items:
-        stream = it.get("stream") or {}
-        try:
-            day = dt.date.fromisoformat(str(it.get("date"))[:10])
-        except ValueError:
-            continue
-        key = f"{stream.get('id') or ''}:{day.isoformat()}"[:128]
-        seen.add(key)
-        amt = it.get("amount") if it.get("amount") is not None else stream.get("amount")
-        db.ex("INSERT INTO mny_bills (ext_key, stream_id, day, merchant, amount, approximate, frequency, category, account_id, paid, seen_at) "
-              "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE merchant = VALUES(merchant), "
-              "amount = VALUES(amount), approximate = VALUES(approximate), frequency = VALUES(frequency), category = VALUES(category), "
-              "account_id = VALUES(account_id), paid = VALUES(paid), seen_at = VALUES(seen_at)",
-              (key, str(stream.get("id") or "")[:64] or None, day, ((stream.get("merchant") or {}).get("name") or "")[:255] or None,
-               Decimal(str(amt or 0)).quantize(model.CENT), 1 if stream.get("isApproximate") else 0,
-               (stream.get("frequency") or "")[:32] or None, ((it.get("category") or {}).get("name") or "")[:128] or None,
-               ids.get(str((it.get("account") or {}).get("id"))), 1 if (it.get("isPast") and it.get("transactionId")) else 0, now))
-    old = db.q("SELECT id, ext_key FROM mny_bills WHERE day BETWEEN %s AND %s", (start, end))
-    gone = [r["id"] for r in old if r["ext_key"] not in seen]
-    if gone:
-        db.ex(f"DELETE FROM mny_bills WHERE id IN ({db.marks(len(gone))})", gone)
-    db.ex("DELETE FROM mny_bills WHERE day < %s", (today - dt.timedelta(days=400),))
-    return len(items)
-
-
 async def _run(full: bool) -> dict:
     today = dt.date.today()
     _at("Signing in")
@@ -546,13 +521,6 @@ async def _run(full: bool) -> dict:
                 if _unauthorized(e):
                     raise
                 log.warning("holdings of Monarch account %s: %s", acc["id"], e)
-    _at("Bills")
-    try:
-        await _bills(mm, ids, today)
-    except Exception as e:  # noqa: BLE001 - the bills are a bonus
-        if _unauthorized(e):
-            raise
-        log.warning("Monarch's recurring transactions: %s", e)
     return {"accounts": len(ids), "transactions": n_tx, "holdings": n_hold, "held": n_held}
 
 

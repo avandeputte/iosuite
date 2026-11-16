@@ -46,6 +46,8 @@ const ICONS = {
   prev: 'M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z',
   next: 'M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z',
   minus: 'M19 13H5v-2h14v2z',
+  play: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z',
+  repeat: 'M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z',
   eye: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
   copy: 'M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z',
   phone: 'M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z',
@@ -250,7 +252,8 @@ function bar(label, value, max, { href, hueVar, cur, sub } = {}) {
    button put it away (remembered); otherwise it slides over the page. Phones get a bottom bar instead. */
 const DOCK_MIN = 1100;
 const VIEWS = { overview: ['Overview', 'dashboard', '--c-amber'], transactions: ['Transactions', 'receipt', '--c-blue'],
-  spending: ['Spending', 'pie', '--c-rose'], portfolio: ['Portfolio', 'trend', '--c-indigo'], assets: ['Assets', 'home', '--c-orange'], rules: ['Rules', 'tune', '--c-teal'] };
+  spending: ['Spending', 'pie', '--c-rose'], portfolio: ['Portfolio', 'trend', '--c-indigo'], assets: ['Assets', 'home', '--c-orange'],
+  recurring: ['Recurring', 'repeat', '--c-green'], rules: ['Rules', 'tune', '--c-teal'] };
 function drawNav() {
   const nav = $('#nav'); const r = route();
   const link = (v, href, ic, label, n, on, hueVar) => h('a', { href, 'data-v': v, class: on ? 'on' : null, style: hueVar ? { '--hue': `var(${hueVar})` } : null },
@@ -286,7 +289,9 @@ function moreSheet() {
   const tile = (href, ic, label, hueV, on) => h('a', { href, class: on ? 'on' : null, style: { '--hue': hueV } }, h('span', { class: 'sic' }, icon(ic)), h('span', null, label));
   const grid = h('div', { class: 'sheetgrid' },
     tile('#/assets', 'home', 'Assets', 'var(--c-orange)', r.view === 'assets'),
+    tile('#/recurring', 'repeat', 'Recurring', 'var(--c-green)', r.view === 'recurring'),
     tile('#/rules', 'tune', 'Rules', 'var(--c-teal)', r.view === 'rules'),
+    tile('#/categories', 'list', 'Categories', 'var(--c-purple)', r.view === 'categories'),
     tile('#/settings', 'settings', 'Settings', 'var(--c-slate)', r.view === 'settings'),
     S.accounts.filter((a) => !a.hidden && !a.closed).map((a) => tile(`#/account/${a.id}`, KIND_LOOK[a.kind][0], a.name, `var(${KIND_LOOK[a.kind][1]})`, r.view === 'account' && r.id === a.id)));
   const p = dialog('More', grid, [{ label: 'Close', value: null }]);
@@ -307,6 +312,8 @@ function route() {
   if (a === 'portfolio') return { view: 'portfolio' };
   if (a === 'assets') return { view: 'assets' };
   if (a === 'rules') return { view: 'rules' };
+  if (a === 'recurring') return { view: 'recurring' };
+  if (a === 'categories') return { view: 'categories' };
   if (a === 'transfers') return { view: 'transfers', q };
   if (a === 'account' && b) return { view: 'account', id: +b, tab: c };
   if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: c };
@@ -321,7 +328,7 @@ async function onRoute() {
     const page = h('div', { class: 'page wide' });
     if (!may('read') && r.view !== 'settings') noRole(page);
     else await ({ overview: showOverview, transactions: showTransactions, spending: showSpending, portfolio: showPortfolio,
-      assets: showAssets, rules: showRules, transfers: showTransfers, account: showAccount, settings: showSettings })[r.view](page, r);
+      assets: showAssets, rules: showRules, transfers: showTransfers, recurring: showRecurring, categories: showCategories, account: showAccount, settings: showSettings })[r.view](page, r);
     main.replaceChildren(page);
     if (!r.keepScroll) main.scrollTop = 0;
   } catch (e) { main.replaceChildren(h('div', { class: 'page' }, h('div', { class: 'empty' }, icon('warning'), h('p', null, e.message || String(e)), h('p', null, h('a', { class: 'lnk', href: '#/' }, 'Overview'))))); }
@@ -468,7 +475,7 @@ async function showAccount(page, r) {
     a.writable && !thing ? ['bank', 'Bank details', () => infoDialog(a)] : null,
     a.writable && a.source === 'manual' && valued ? ['add', 'Add a value', () => valueDialog(a)] : null,
     a.writable && a.source === 'manual' && a.kind === 'investment' ? ['add', 'Add a holding', () => holdingDialog(null, a.id)] : null,
-    a.writable && a.source === 'manual' && tx ? ['add', 'Add a transaction', () => txDialog(null, a)] : null,
+    a.writable && tx ? ['add', 'Add a transaction', () => txDialog(null, a)] : null,
     tx ? ['receipt', 'Its transactions', `#/transactions?account=${a.id}`] : null,
     a.writable && a.source === 'manual' ? ['delete', 'Delete', () => removeAccount(a)] : null,
   ]) }, icon('more'));
@@ -667,6 +674,131 @@ async function valueDialog(a) {
   try { await api(`api/accounts/${a.id}/values`, { method: 'POST', json: { value: v.value, day: d.value, note: n.value } }); toast('Added'); await refreshSummary(); onRoute(); } catch (e) { fail(e); }
 }
 
+// ------------------------------------------------------------------ recurring: bills and money coming in regularly
+/** The household's recurring transactions (what ioCalendar shows on their days), and what ioMoney found in the
+    transactions that looks recurring: Add, or Not recurring. */
+async function showRecurring(page) {
+  const d = await api('api/recurring');
+  const w = d.writable;
+  S.freqs = d.frequencies;
+  put(page, h('div', { class: 'pagehead' }, h('h1', null, 'Recurring'), h('span', { class: 'grow' }),
+    w ? h('button', { class: 'pillbtn', onclick: () => recurringDialog() }, icon('add'), h('span', null, 'Recurring')) : null));
+  put(page, h('p', { class: 'muted' }, 'Bills, subscriptions and paychecks: what comes back at a steady pace. ioCalendar shows each on the day it is due, ticked once paid. ',
+    'ioMoney looks for them in the transactions; add the ones that are, or add one by hand.'));
+  const money2 = (x) => h('span', { class: `num ${x.amount < 0 ? '' : 'pos'}` }, `${x.approximate ? '≈ ' : ''}${money(x.amount, x.currency)}`);
+  const row = (x) => h('li', null, h('div', { class: 'r', role: w ? 'button' : null, tabindex: w ? 0 : null, onclick: w ? () => recurringDialog(x) : null },
+    h('span', { class: 'main' }, h('b', null, x.name), h('small', null, [x.frequencyLabel, x.account || 'Any account', x.category, x.last ? `last ${fmtDay(x.last.day, x.last.day.slice(0, 4) !== today().slice(0, 4))} ${money(x.last.amount, x.currency)}` : 'not seen yet'].filter(Boolean).join(' · '))),
+    h('span', { class: 'when' }, x.next ? `next ${fmtDay(x.next, true)}` : ''),
+    h('span', { class: 'amt' }, money2(x))));
+  const monthly = (xs) => xs.reduce((s, x) => s + Math.abs(x.perMonth), 0);
+  const subs = d.items.filter((x) => x.subscription);
+  const bills = d.items.filter((x) => !x.subscription && x.flow === 'out');
+  const income = d.items.filter((x) => !x.subscription && x.flow === 'in');
+  if (!d.items.length) put(page, h('div', { class: 'empty' }, icon('repeat'), h('p', null, 'None in the list yet.'), h('p', { class: 'muted' }, d.found.length ? 'Add the ones found below.' : 'Add one by hand.')));
+  else put(page, h('p', { class: 'sumline' }, `${d.items.length} recurring · out about `, h('span', { class: 'num' }, money(monthly(subs) + monthly(bills), CUR())), ' a month · in about ', h('span', { class: 'num pos' }, money(monthly(income), CUR())), ' a month'));
+  const section = (title, ic, xs, note) => {
+    if (!xs.length) return;
+    put(page, h('h2', { class: 'recurhead' }, icon(ic), h('span', null, `${title} (${xs.length})`), h('span', { class: 'grow' }), note || null));
+    put(page, h('ul', { class: 'rows recur' }, xs.map(row)));
+  };
+  section('Subscriptions', 'play', subs, h('span', { class: 'muted small' }, h('span', { class: 'num' }, money(monthly(subs), CUR())), ' a month · ', h('span', { class: 'num' }, money(monthly(subs) * 12, CUR())), ' a year'));
+  section('Bills', 'repeat', bills, h('span', { class: 'muted small' }, h('span', { class: 'num' }, money(monthly(bills), CUR())), ' a month'));
+  section('Money coming in', 'download', income, h('span', { class: 'muted small' }, h('span', { class: 'num pos' }, money(monthly(income), CUR())), ' a month'));
+  if (d.found.length) {
+    put(page, h('h2', { class: 'recurhead' }, icon('search'), h('span', null, `Found in the transactions (${d.found.length})`)));
+    put(page, h('ul', { class: 'rows recur found' }, d.found.map((x) => {
+      const add = h('button', { class: 'pillbtn primary tiny' }, icon('add', 'xs'), 'Add');
+      const not = h('button', { class: 'pillbtn tiny' }, 'Not recurring');
+      add.onclick = async () => { try { await api('api/recurring', { method: 'POST', json: { found: x.key } }); toast('Added'); onRoute(); } catch (e) { fail(e); } };
+      not.onclick = async () => { try { await api('api/recurring/not', { method: 'POST', json: { key: x.key } }); add.closest('li').remove(); } catch (e) { fail(e); } };
+      return h('li', null, h('div', { class: 'r' },
+        h('span', { class: 'main' }, h('b', null, x.name, x.subscription ? h('span', { class: 'tag' }, 'Subscription') : null), h('small', null, [x.frequencyLabel, x.account, x.category, `${x.count} times, last ${fmtDay(x.day, true)}`].filter(Boolean).join(' · '))),
+        h('span', { class: 'when' }, x.next ? `next ${fmtDay(x.next, true)}` : ''),
+        h('span', { class: 'amt' }, money2(x)), w ? h('span', { class: 'end acts', style: { flexDirection: 'row', gap: '6px' } }, add, not) : null));
+    })));
+  }
+}
+/** Add a recurring transaction by hand, or change or remove one. */
+async function recurringDialog(x) {
+  const isNew = !x;
+  x = x || { flow: 'out', frequency: 'monthly', day: today(), approximate: false };
+  const cats = await categories();
+  const freqs = S.freqs || [];
+  const f = { name: inp(x.name, { placeholder: 'Power bill, Netflix, Paycheck' }), pattern: inp(x.pattern, { placeholder: 'the payee’s name or words of the bank’s text' }),
+    account: h('select', { class: 't' }, h('option', { value: '' }, 'Any account'), S.accounts.filter(followsTx).map((a) => h('option', { value: a.id, selected: a.id === x.accountId ? true : null }, a.name))),
+    flow: h('select', { class: 't' }, h('option', { value: 'out', selected: x.flow === 'out' ? true : null }, 'Money out (a bill)'), h('option', { value: 'in', selected: x.flow === 'in' ? true : null }, 'Money in (a paycheck)')),
+    amount: inp(x.amount != null ? Math.abs(x.amount) : '', { inputmode: 'decimal' }), approximate: h('input', { type: 'checkbox', checked: x.approximate ? true : null }),
+    subscription: h('input', { type: 'checkbox', checked: x.subscription ? true : null }),
+    frequency: h('select', { class: 't' }, freqs.map((q) => h('option', { value: q.value, selected: q.value === x.frequency ? true : null }, q.label))),
+    day: inp(x.day, { type: 'date' }), category: inp(x.category, { list: 'reccats' }) };
+  const body = h('div', null, h('datalist', { id: 'reccats' }, cats.map((c) => h('option', { value: c.category }))),
+    h('div', { class: 'grid' }, fld('Name', f.name, true), fld('Its payee or bank’s text has', f.pattern, true), fld('Account', f.account), fld('Way', f.flow),
+      fld('Usual amount', f.amount), fld('How often', f.frequency), fld('A day it falls on', f.day), fld('Category', f.category)),
+    h('label', { class: 'check', style: { marginTop: '10px' } }, f.approximate, 'The amount varies (a payment within a third of it counts)'),
+    h('label', { class: 'check', style: { marginTop: '6px' } }, f.subscription, isNew ? 'A subscription to a service (Netflix, Spotify, iCloud…; a known one is marked on its own)' : 'A subscription to a service (shown under Subscriptions)'));
+  const btns = [!isNew ? { label: 'Remove', value: 'delete', danger: true } : null, { label: 'Cancel', value: false }, { label: isNew ? 'Add' : 'Save', value: true, primary: true }].filter(Boolean);
+  const ok = await dialog(isNew ? 'Add a recurring transaction' : x.name, body, btns, 'wide');
+  if (ok === 'delete') {
+    if (!await confirmDialog('Remove it', `Remove ${x.name} from the recurring transactions? Its transactions stay.`, 'Remove', true)) return;
+    try { await api(`api/recurring/${x.id}`, { method: 'DELETE' }); toast('Removed'); onRoute(); } catch (e) { fail(e); } return;
+  }
+  if (!ok) return;
+  const b = { name: f.name.value, pattern: f.pattern.value || f.name.value, accountId: f.account.value ? +f.account.value : null, flow: f.flow.value,
+    amount: f.amount.value, approximate: f.approximate.checked, frequency: f.frequency.value, day: f.day.value, category: f.category.value };
+  if (!isNew || f.subscription.checked) b.subscription = f.subscription.checked;
+  try { await api(isNew ? 'api/recurring' : `api/recurring/${x.id}`, { method: isNew ? 'POST' : 'PATCH', json: b }); toast(isNew ? 'Added' : 'Saved'); onRoute(); } catch (e) { fail(e); }
+}
+
+// ------------------------------------------------------------------ categories
+/** Every category by group: add one, rename it (into another: merged), move it to another group, delete it (its
+    transactions moved to another or left without one). What Monarch sends later follows. */
+async function showCategories(page) {
+  const d = await api('api/categories');
+  const w = d.writable;
+  S.cats = d.items;
+  put(page, h('div', { class: 'pagehead' }, h('a', { class: 'iconbtn', href: '#/transactions', title: 'Transactions', 'aria-label': 'Transactions' }, icon('prev')),
+    h('h1', null, 'Categories'), h('span', { class: 'grow' }),
+    w ? h('button', { class: 'pillbtn', onclick: () => categoryDialog(null, d.items) }, icon('add'), h('span', null, 'Category')) : null));
+  put(page, h('p', { class: 'muted' }, 'The categories of the transactions, by group. A category renamed, merged into another or deleted here stays so: what Monarch Money sends later under the old name comes in under the new one.'));
+  const groups = new Map();
+  for (const c of d.items) { const g = c.group || 'No group'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(c); }
+  for (const [g, list] of groups) {
+    put(page, h('div', { class: 'catgrp' }, h('h3', null, g), h('ul', { class: 'rows' }, list.map((c) => h('li', null,
+      h('div', { class: 'r', role: w ? 'button' : null, tabindex: w ? 0 : null, onclick: w ? () => categoryDialog(c, d.items) : null },
+        h('span', { class: 'main' }, h('b', null, c.category)),
+        h('a', { class: 'lnk small', href: `#/transactions?${new URLSearchParams({ category: c.category })}`, onclick: (e) => e.stopPropagation() }, `${c.count} transaction${c.count === 1 ? '' : 's'}`)))))));
+  }
+}
+async function categoryDialog(c, all) {
+  const isNew = !c;
+  const groups = [...new Set(all.map((x) => x.group).filter(Boolean))].sort();
+  const f = { name: inp(c ? c.category : '', { maxlength: 128, list: isNew ? null : 'catnames' }), group: inp(c ? c.group : '', { list: 'catgroups', placeholder: 'Food & Dining, Bills & Utilities…' }) };
+  const body = h('div', null, h('datalist', { id: 'catgroups' }, groups.map((g) => h('option', { value: g }))),
+    h('datalist', { id: 'catnames' }, all.filter((x) => !c || x.category !== c.category).map((x) => h('option', { value: x.category }))),
+    h('div', { class: 'grid' }, fld('Name', f.name), fld('Group', f.group)),
+    !isNew ? h('p', { class: 'muted small' }, `${c.count} transaction${c.count === 1 ? '' : 's'}. Give it the name of another category to merge the two.`) : null);
+  const btns = [!isNew ? { label: 'Delete', value: 'delete', danger: true } : null, { label: 'Cancel', value: false }, { label: isNew ? 'Add' : 'Save', value: true, primary: true }].filter(Boolean);
+  const ok = await dialog(isNew ? 'Add a category' : c.category, body, btns);
+  if (ok === 'delete') {
+    const to = h('select', { class: 't' }, h('option', { value: '' }, 'No category'), all.filter((x) => x.category !== c.category).map((x) => h('option', { value: x.category }, x.category)));
+    const go = await dialog(`Delete ${c.category}`, h('div', null, h('p', null, `Its ${c.count} transaction${c.count === 1 ? '' : 's'} (and the rules and recurring transactions that set it) move to:`), fld('Category', to)),
+      [{ label: 'Cancel', value: false }, { label: 'Delete', value: true, danger: true }]);
+    if (!go) return;
+    try { const r = await api('api/categories/delete', { method: 'POST', json: { name: c.category, moveTo: to.value || null } }); S.cats = []; toast(`Deleted; ${r.moved} moved`); onRoute(); } catch (e) { fail(e); }
+    return;
+  }
+  if (!ok) return;
+  try {
+    if (isNew) await api('api/categories', { method: 'POST', json: { name: f.name.value, group: f.group.value } });
+    else {
+      const merge = all.some((x) => x.category === f.name.value.trim() && x.category !== c.category);
+      if (merge && !await confirmDialog('Merge the categories', `Merge ${c.category} into ${f.name.value.trim()}? Its ${c.count} transactions move there.`, 'Merge')) return;
+      await api('api/categories', { method: 'PUT', json: { name: c.category, newName: f.name.value, group: f.group.value } });
+    }
+    S.cats = []; toast(isNew ? 'Added' : 'Saved'); onRoute();
+  } catch (e) { fail(e); }
+}
+
 // ------------------------------------------------------------------ transactions
 async function categories() {
   if (!S.cats.length) { try { S.cats = (await api('api/categories')).items || []; } catch { S.cats = []; } }
@@ -724,8 +856,9 @@ async function showTransactions(page, r) {
   const sel = (k, opts, label) => h('select', { class: 't', 'aria-label': label, onchange: (e) => go({ [k]: e.target.value }) }, opts.map(([v, l]) => h('option', { value: v, selected: String(q[k] || '') === String(v) ? true : null }, l)));
   const months = [['', 'Any time']]; for (let i = 0; i < 24; i++) { const m = shiftMonth(thisMonth(), -i); months.push([m, fmtMonth(m)]); }
   put(page, h('div', { class: 'pagehead' }, h('h1', null, 'Transactions'), h('span', { class: 'grow' }),
+    h('a', { class: 'pillbtn', href: '#/categories', title: 'Add, rename, regroup or delete categories' }, icon('list'), h('span', null, 'Categories')),
     h('a', { class: 'pillbtn', href: '#/rules', title: 'Rules that rename and categorize transactions' }, icon('tune'), h('span', null, 'Rules')),
-    S.accounts.some((a) => a.source === 'manual' && a.writable && followsTx(a)) ? h('button', { class: 'pillbtn', onclick: () => txDialog() }, icon('add'), h('span', null, 'Transaction')) : null));
+    S.accounts.some((a) => a.writable && followsTx(a)) ? h('button', { class: 'pillbtn', onclick: () => txDialog() }, icon('add'), h('span', null, 'Transaction')) : null));
   put(page, h('div', { class: 'filters' }, search,
     sel('account', [['', 'Every account'], ...S.accounts.filter(followsTx).map((a) => [a.id, a.name])], 'Account'),
     sel('category', [['', 'Every category'], ['-', 'Uncategorized'], ...cats.map((c) => [c.category, c.category])], 'Category'),
@@ -750,7 +883,7 @@ async function showTransactions(page, r) {
 async function txDialog(t, account) {
   const isNew = !t;
   const cats = await categories();
-  const manualAccts = S.accounts.filter((a) => a.source === 'manual' && a.writable && followsTx(a));
+  const manualAccts = S.accounts.filter((a) => a.writable && followsTx(a));  // any account that follows its transactions
   t = t || { day: today(), source: 'manual', writable: true, accountId: (account || manualAccts[0] || {}).id };
   const ro = !t.writable;
   const manual = t.source === 'manual';
@@ -767,7 +900,8 @@ async function txDialog(t, account) {
     h('div', { class: 'chiprow', style: { marginTop: '10px', gap: '18px' } }, h('label', { class: 'check' }, f.hidden, 'Hidden: left out of the sums'),
       !isNew ? h('label', { class: 'check' }, f.reconciled, 'Reconciled with the statement') : null), xbox,
     t.description && t.description !== t.merchant ? h('p', { class: 'muted small' }, 'At the bank: ', t.description) : null,
-    t.source === 'monarch' ? h('p', { class: 'muted small' }, 'From Monarch Money. A change here stays here: Monarch itself is not changed.') : null);
+    t.source === 'monarch' ? h('p', { class: 'muted small' }, 'From Monarch Money. A change here stays here: Monarch itself is not changed.') : null,
+    isNew ? h('p', { class: 'muted small' }, 'Added here, by hand. In an account from Monarch Money it stays beside Monarch’s own transactions, and the balance stays Monarch’s.') : null);
   const btns = ro ? [{ label: 'Close', value: false }] : [
     !isNew && manual ? { label: 'Delete', value: 'delete', danger: true } : null,
     !isNew && may('household') ? { label: 'Make a rule', value: 'rule' } : null, { label: 'Cancel', value: false }, { label: isNew ? 'Add' : 'Save', value: true, primary: true }].filter(Boolean);
@@ -1392,7 +1526,7 @@ async function start() {
   const nb = $('#newbtn');
   nb.hidden = !canAdd();
   nb.onclick = () => popMenu(nb, [['bank', 'An account', accountDialog],
-    S.accounts.some((a) => a.source === 'manual' && a.writable && followsTx(a)) ? ['receipt', 'A transaction', () => txDialog()] : null,
+    S.accounts.some((a) => a.writable && followsTx(a)) ? ['receipt', 'A transaction', () => txDialog()] : null,
     S.accounts.some((a) => a.kind === 'investment' && a.source === 'manual' && a.writable) ? ['trend', 'A holding', () => holdingDialog(null)] : null]);
   $('#menubtn').onclick = openNav;
   $('#navscrim').onclick = closeNav;

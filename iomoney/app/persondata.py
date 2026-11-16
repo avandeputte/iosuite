@@ -15,7 +15,6 @@ def of(user_id: int, remove: bool) -> list:
     if remove and accts:
         with db.tx():
             db.ex(f"UPDATE mny_accounts SET loan_id = NULL WHERE loan_id IN ({marks})", accts)
-            db.ex(f"UPDATE mny_bills SET account_id = NULL WHERE account_id IN ({marks})", accts)
             db.ex("DELETE FROM mny_accounts WHERE owner_id = %s", (user_id,))  # balances, transactions, holdings go with them
         related.forget_many("asset", accts)  # their links to other items of the suite go too
     return [{"what": "private accounts", "one": "private account", "count": len(accts)},

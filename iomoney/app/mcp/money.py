@@ -5,7 +5,7 @@ from typing import Literal, Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import __version__, config, model, monarch, quotes, transfers
+from app import __version__, config, model, monarch, quotes, recurring, transfers
 from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, clamp, find_account, guard, link, need_admin, server, who
 
 
@@ -95,7 +95,7 @@ def cash_flow(months: int = 12) -> list:
 
 @server.tool(annotations=READ_ONLY)
 def categories() -> list:
-    """The categories in use (with their group and how many transactions have each)."""
+    """The categories (those in use and those added in ioMoney), with their group and how many transactions have each."""
     u = who()
     _need_role(u)
     return model.categories(u)
@@ -383,18 +383,29 @@ def add_valuation(account: str, value: float, day: Optional[str] = None, note: O
 
 @server.tool(annotations=READ_ONLY)
 def bills(start: Optional[str] = None, end: Optional[str] = None) -> list:
-    """The bills (Monarch's recurring transactions) between start and end (YYYY-MM-DD; today to a month ahead as
-    left out): day, payee, amount, the account it is paid from, paid or not."""
+    """The dates the household's recurring transactions fall on between start and end (YYYY-MM-DD; today to a month
+    ahead as left out): day, name, amount (money out negative), the account, paid or not."""
     u = who()
     _need_role(u)
     s = guard(model.day, start) if start else dt.date.today()
     e = guard(model.day, end) if end else s + dt.timedelta(days=31)
-    return model.bills(u, s, e)
+    return recurring.bills(u, s, e)
+
+
+@server.tool(annotations=READ_ONLY)
+def recurring_transactions() -> dict:
+    """The household's recurring transactions (bills, subscriptions, paychecks): name, account, amount, how often,
+    the next date, the last payment, what it costs a month (perMonth) and whether it is a subscription to a service
+    (Netflix, Spotify, iCloud...); and found: what looks recurring in the transactions and is not in the list yet (a
+    person adds it on the Recurring page)."""
+    u = who()
+    _need_role(u)
+    return {"items": recurring.items(u), "found": recurring.found(u)}
 
 
 @server.tool(annotations=WRITES)
 def sync_monarch() -> dict:
-    """Admins: copy Monarch Money in now (accounts, balances, transactions, holdings, bills) and say how it went. A
+    """Admins: copy Monarch Money in now (accounts, balances, transactions, holdings) and say how it went. A
     long one (the first, with two years of transactions) goes on in the background: then running is true, and
     diagnostics or this tool again says how it goes."""
     u = who()
