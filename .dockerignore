@@ -11,6 +11,8 @@ docs
 **/proxmox
 **/config.env
 **/data
+# ...but not the code that is named data: ioPix's package app/data (without it the image cannot start)
+!iopix/app/data
 **/*.log
 **/.DS_Store
 iopix/docs

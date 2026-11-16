@@ -3,6 +3,9 @@
 #
 #   docker compose up -d        # or paste this file as a stack in Dockge / Portainer
 #
+# Rather not edit a file? https://iosuite.iothing.net/compose/ asks which apps, which database and how the suite is
+# reached, and writes a stack with nothing left to change (the first admin, HTTPS and one address for the suite included).
+#
 # Edit the CHANGE ME spots below (or put the same names in a .env file next to this file): the two passwords, the
 # admin, the time zone, the photos folder. Everything else is shared through the YAML anchors, so it is written once:
 # every app talks to the same MariaDB (`db`), each with its own database and the same user, and to the same Shared

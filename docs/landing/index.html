@@ -384,6 +384,10 @@
           <h3>Several apps on one host <span>→</span></h3>
           <p>The one-line installer, one container with several apps, the whole-suite Docker stack.</p>
         </a>
+        <a class="dcard" href="/compose/">
+          <h3>Docker Compose builder <span>→</span></h3>
+          <p>Pick the apps, answer a few questions, get one stack file: the databases, the first admin and HTTPS included.</p>
+        </a>
         <a class="dcard" href="/docs/run/accounts/">
           <h3>Accounts and roles <span>→</span></h3>
           <p>One account for every app, a role per app, suite admins, app passwords, one-click accounts without a password.</p>
@@ -450,6 +454,7 @@
   };
   var ORDER = ["iopix","ionote","iocalendar","iotask","iorecipe","iothings","iomoney","iocontact","iohealth","iostart"];
   var RAW = "https://raw.githubusercontent.com/avandeputte/iosuite/main/";
+  var BUILDER = 'Or let the <a href="/compose/"><strong>Docker Compose builder</strong></a> write one file for the apps you pick, with MariaDB, the admin and HTTPS: nothing to edit.';
 
   function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
@@ -557,7 +562,7 @@
           "# set the passwords, the photos folder and the time zone at the top, then",
           "docker compose up -d"
         ]);
-        msg = "<strong>The whole suite:</strong> one MariaDB with a database per app, one Shared ioSuite database, one admin.";
+        msg = "<strong>The whole suite:</strong> one MariaDB with a database per app, one Shared ioSuite database, one admin. " + BUILDER;
       } else {
         sel.forEach(function(a){
           html += term("docker compose — " + APPS[a].name, [
@@ -568,8 +573,8 @@
           ]);
         });
         msg = sel.length === 1
-          ? "<strong>One stack, one app.</strong> The image (<code>ghcr.io/avandeputte/iosuite/" + APPS[sel[0]].docker + "</code>, amd64 and arm64) holds no data of its own."
-          : "A stack per app. Give them all the same <code>IOSUITE_DB_*</code> settings and they share the accounts. All of them? Tick them all for the one-stack version.";
+          ? "<strong>One stack, one app.</strong> The image (<code>ghcr.io/avandeputte/iosuite/" + APPS[sel[0]].docker + "</code>, amd64 and arm64) holds no data of its own. " + BUILDER
+          : "A stack per app. Give them all the same <code>IOSUITE_DB_*</code> settings and they share the accounts. " + BUILDER;
       }
     } else {
       var b = sel[0], al = sel.slice(1);

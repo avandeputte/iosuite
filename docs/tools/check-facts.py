@@ -12,7 +12,9 @@ repository. It reads docs/ and landing/ and fails on:
     (shared/iosuite_shared/install.py, APPS);
   - a Proxmox container size in docs/start/proxmox.md that is not the app's ct script default (var_cpu, var_ram,
     var_disk);
-  - an image ghcr.io/avandeputte/iosuite/<app> that the app's docker-compose.yml does not use.
+  - an image ghcr.io/avandeputte/iosuite/<app> that the app's docker-compose.yml does not use;
+  - an app missing from the Docker Compose builder's list (landing/compose/compose.js), or one there with a folder
+    that is not the one the suite serves it in (shared/iosuite_shared/suite.py, FOLDERS).
 
 The docs workflow runs it whenever a page or an app changes, so a change in an app that makes a page wrong fails in
 the same pull request.
@@ -33,7 +35,7 @@ problems = []
 
 
 def pages():
-    for p in sorted((HERE / "docs").rglob("*.md")) + sorted((HERE / "landing").glob("*.html")):
+    for p in sorted((HERE / "docs").rglob("*.md")) + sorted((HERE / "landing").rglob("*.html")) + sorted((HERE / "landing").rglob("*.js")):
         yield p, p.read_text()
 
 
@@ -48,6 +50,15 @@ def app_ports(src):
                 apps[k.value] = ast.literal_eval(kw["port"])
             return apps
     raise SystemExit("no APPS in iosuite_shared/install.py")
+
+
+def suite_folders(src):
+    """shared/iosuite_shared/suite.py's FOLDERS (the folder each app is served in on the suite's one address)."""
+    tree = ast.parse((src / "shared" / "iosuite_shared" / "suite.py").read_text())
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "FOLDERS" for t in node.targets):
+            return ast.literal_eval(node.value)
+    raise SystemExit("no FOLDERS in iosuite_shared/suite.py")
 
 
 def main():
@@ -80,6 +91,20 @@ def main():
         for app, port in ports.items():
             if not any(str(port) in t for _, t in pages()):
                 problems.append(f"{app}'s port {port} is not mentioned anywhere")
+
+        # 2b. the Docker Compose builder's list of apps: every app, its port (above) and its folder on the one address
+        builder = (HERE / "landing" / "compose" / "compose.js").read_text()
+        listed = {m.group(1): m.group(2) for m in re.finditer(r'\{key:"(\w+)", name:"io\w+", port:\d+, folder:"(\w*)"', builder)}
+        folders = dict(suite_folders(src), iostart="")
+        for app in ports:
+            checked += 1
+            if app not in listed:
+                problems.append(f"landing/compose/compose.js: {app} is not in the builder's list of apps")
+            elif listed[app] != folders.get(app):
+                problems.append(f"landing/compose/compose.js: {app} in the folder {listed[app]!r}, but the suite serves it in {folders.get(app)!r}")
+        for app in listed:
+            if app not in ports:
+                problems.append(f"landing/compose/compose.js: {app} is not an app of the suite")
 
         # 3. Proxmox container sizes
         size = re.compile(r"^\| (io\w+) \| `bash -c .*\| (\d+) CPU, (\d+) (GB|MB), (\d+) GB \|$", re.M)

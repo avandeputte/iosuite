@@ -4,9 +4,9 @@ name: docs
 on:
   push:
     branches: [main]
-    paths: ["docs/**", "*/proxmox/ct/**", "*/docker-compose.yml", "docker-compose.yml", "shared/iosuite_shared/install.py", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "*/proxmox/ct/**", "*/docker-compose.yml", "docker-compose.yml", "shared/iosuite_shared/install.py", "shared/iosuite_shared/suite.py", ".github/workflows/docs.yml"]
   pull_request:
-    paths: ["docs/**", "*/proxmox/ct/**", "*/docker-compose.yml", "docker-compose.yml", "shared/iosuite_shared/install.py", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "*/proxmox/ct/**", "*/docker-compose.yml", "docker-compose.yml", "shared/iosuite_shared/install.py", "shared/iosuite_shared/suite.py", ".github/workflows/docs.yml"]
   workflow_dispatch:
 defaults:
   run:

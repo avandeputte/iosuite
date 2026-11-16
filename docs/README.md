@@ -14,12 +14,14 @@ landing/            the landing page, served at /  (index.html, 404.html, robots
 landing/img/        the app icons (each app's static/icons/mark.svg) and the screenshots
 landing/site.css    the styles of the landing page and the app pages; landing/app.js their copy buttons, tabs, lightbox
 landing/apps.toml   the words and screenshots of each app's own page (/ioContact/ and so on)
+landing/compose/    the Docker Compose builder, served at /compose/: index.html, page.js (the form) and compose.js (the file it writes)
 docs/               the guide (MkDocs Material), served at /docs/
 docs/stylesheets/   the Material theme in the landing page's palette
 overrides/          the header brand
 tools/check-facts.py  holds the pages to the apps' code (links, ports, container sizes, images)
 tools/check-site.py   every local link and image in the built site resolves
 tools/app-pages.py    writes site/<App>/index.html for each app from landing/apps.toml
+tools/check-compose.js  runs the builder's code over the choices it offers; with Docker, `docker compose config` reads every file
 mkdocs.yml          site settings and the nav
 build.sh            check, build into site/, lay the landing page over it, write the sitemap
 CLOUDFLARE.md       hosting on Cloudflare Workers: the Worker, the domain, the deploy token
@@ -52,7 +54,9 @@ python3 -m http.server -d site 8000  # http://localhost:8000/ and /docs/
 
 `mkdocs build --strict` fails on a page the nav names that does not exist, or a link that resolves nowhere.
 `tools/check-facts.py` fails when a page has drifted from the apps: a link to a file an app no longer has, a default
-port, a Proxmox container size or a Docker image that is not what the app's code says. Both on purpose.
+port, a Proxmox container size or a Docker image that is not what the app's code says, or an app missing from the
+builder's list. `tools/check-compose.js` (Node) fails when the builder writes a stack file that is not what its
+answers call for. All on purpose.
 
 ## Deploying
 

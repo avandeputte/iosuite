@@ -682,6 +682,24 @@ another, such as `'192.168.1.%'` for a container whose address changes); never f
 question is left empty and none is in config.env, `setup.sh` makes a random one: there is no default password. The
 administrator's password travels in `DB_ADMIN_PASSWORD`, never on a command line, and is not written anywhere.
 
+### A Docker stack set up before its apps start: `stack`
+
+```sh
+iosuite-shared stack [--db-admin root --databases iostart,iocalendar] [--one-address on|off] [--proxies 10.186.30.10,10.186.30.11]
+```
+
+The `setup` service of a stack file made by the [Docker Compose builder](https://iosuite.iothing.net/compose/) runs
+this in any app's image, before the apps, at every `docker compose up`; the server and the users come from the
+environment (`DB_*`, `IOSUITE_DB_*`), as the apps of the stack get them. With `--db-admin` (password in
+`DB_ADMIN_PASSWORD`) it makes the listed databases for `DB_USER` and the Shared ioSuite database and user, as
+`provision` does, for any host (`--client-host`, `%` by default: a container's address is not known ahead of time, and
+the builder makes the passwords at random). It then makes the Shared ioSuite database's tables and the first admin
+(`ADMIN_USER` / `ADMIN_PASSWORD`, when there is no account yet), and writes what the stack says about how the suite is
+reached: the one-address switch and the reverse proxy addresses, which live in the Shared ioSuite database and not in
+any app's environment. Those two are written only when they differ from what `stack` wrote the last time, so starting
+the same file again leaves alone what a suite admin changed under Settings since. A database that is still starting
+is waited for, a minute at most.
+
 ## Tests
 
 `pytest tests/test_updates.py` runs without a database. The rest of `pytest` needs a MariaDB of its own: a Docker container it starts itself (`iosuite-test-mariadb`, kept for the next
