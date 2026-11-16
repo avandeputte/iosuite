@@ -209,13 +209,25 @@ def test_recurring_found_added_and_shown_as_bills(client, as_user):
     assert [x["paid"] for x in power][:2] == [True, False] and power[0]["amount"] == -80.4 and power[0]["account"] == "Checking"
     assert any(x["merchant"] == "Spotify" and x["subscription"] and not x["paid"] for x in b)
     assert client.delete(f"/api/recurring/{s['id']}").json()["ok"]
+    # from the transaction list: which ones are recurring, and one made recurring from a transaction
+    txs = {x["merchant"]: x for x in client.get("/api/transactions?limit=500").json()["items"]}
+    assert txs["NETFLIX.COM"]["recurring"]["name"] == "NETFLIX.COM" and txs["NETFLIX.COM"]["recurring"]["subscription"]
+    assert txs["Grocer"]["recurring"] is None
+    got = client.get(f"/api/transactions/{txs['NETFLIX.COM']['id']}/recurring").json()
+    assert got["item"]["id"] == nf["id"] and got["suggestion"] is None and got["writable"]
+    pay = client.get(f"/api/transactions/{txs['ACME PAYROLL']['id']}/recurring").json()  # set aside as not recurring, still made one by hand
+    sug = pay["suggestion"]
+    assert pay["item"] is None and sug["frequency"] == "biweekly" and sug["flow"] == "in" and sug["amount"] == 2000 and sug["count"] == 4
+    assert sug["pattern"] == "acme payroll" and sug["accountId"] == a["id"] and sug["subscription"] is False
+    assert client.post("/api/recurring", json=sug).status_code == 201
+    assert client.get("/api/transactions?q=acme").json()["items"][0]["recurring"]["name"] == "ACME PAYROLL"
     # a person's own account: its recurring ones are theirs; the household's are the editors'
     as_user("sam", "member")
     assert client.post("/api/recurring", json={"name": "Water", "amount": 30}).status_code == 403
     mine = add(client, name="Sam's", household=False)
     sg = client.post("/api/recurring", json={"name": "Sam's gym", "amount": 30, "accountId": mine["id"]})
     assert sg.status_code == 201 and sg.json()["writable"]
-    assert {x["name"] for x in client.get("/api/recurring").json()["items"]} == {"Power co", "NETFLIX.COM", "Gym", "Sam's gym"}
+    assert {x["name"] for x in client.get("/api/recurring").json()["items"]} == {"Power co", "NETFLIX.COM", "Gym", "ACME PAYROLL", "Sam's gym"}
     sign_in(client, "alex")
     as_user("ed", "editor")
     assert client.post("/api/recurring", json={"name": "Ed's gym", "amount": 30, "accountId": mine["id"]}).status_code == 400  # not one Ed sees

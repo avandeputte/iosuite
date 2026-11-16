@@ -79,7 +79,9 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   about the same and the last one recent enough. What is found is offered on the Recurring page: **Add**, or **Not
   recurring** (not offered again); one is also added by hand (its name, the words its payee has, the account, the usual
   amount and whether it varies, how often, a day it falls on, a category), changed or removed. Editors change the
-  household's; a member those of their own accounts.
+  household's; a member those of their own accounts. In the transaction list a recurring one has a small icon by its
+  payee; **Make recurring** in a transaction's dialog opens one to add, its pace and usual amount taken from the
+  transactions like it (or the one it already is).
 - **Subscriptions**: Netflix, Max, YouTube, Spotify, Disney+, iCloud, Amazon Prime and other services (or a category
   like Streaming or Subscriptions) are marked as subscriptions, found after two payments already; the Recurring page
   shows them in a section of their own with what they cost a month and a year. Any recurring one can be marked or
@@ -215,6 +217,7 @@ Updates, releases, the reverse proxy and Cloudflare Access work as in every app 
 | Rules: list, add, try, apply, order, change, delete | `/api/rules`, `POST /api/rules/test`, `POST /api/rules/apply`, `PUT /api/rules/order`, `/api/rules/{id}` |
 | The portfolio and quotes | `GET /api/portfolio`, `POST /api/accounts/{id}/holdings`, `/api/holdings/{id}`, `GET /api/quotes/{symbol}`, `POST /api/quotes/refresh` |
 | Recurring: list and found, add (or add what was found), not recurring, change, remove | `GET`, `POST /api/recurring` (`{found: key}` or the fields), `POST /api/recurring/not` (`{key}`), `PATCH`, `DELETE /api/recurring/{id}` |
+| One transaction's recurring one, or one to add from it | `GET /api/transactions/{id}/recurring` |
 | Bills: each date a recurring transaction falls on, paid or not | `GET /api/bills?start=&end=` |
 | Categories: list, add, rename / merge / regroup, delete | `GET`, `POST`, `PUT /api/categories` (`{name, newName?, group?}`), `POST /api/categories/delete` (`{name, moveTo?}`) |
 | Monarch Money (admins) | `GET /api/monarch` (with the running sync's progress), `POST /api/monarch/sync` (`{full, wait}`), `POST /api/monarch/code`, `DELETE /api/monarch/session` |

@@ -44,7 +44,8 @@ quotes, and what the house and the cars are worth after their loans.
   the bank has not sent yet.
 - **Recurring**: ioMoney finds the bills and paychecks itself (the same payee at a steady pace, every week to every
   year, with about the same amount) and offers them: add the ones that are, say "Not recurring" to the others, or add
-  one by hand. Each shows when it is next due and the last payment.
+  one by hand, or choose **Make recurring** on a transaction. Each shows when it is next due and the last payment, and
+  the transaction list marks the ones that are recurring.
 - **Subscriptions**: Netflix, Max, YouTube, Spotify, Disney+, iCloud, Amazon Prime and other services get a section of
   their own on the Recurring page, with what they cost a month and a year.
 - **Categories**: add, rename, merge, move to another group or delete a category; its transactions and rules follow,

@@ -696,12 +696,15 @@ async function showRecurring(page) {
   const income = d.items.filter((x) => !x.subscription && x.flow === 'in');
   if (!d.items.length) put(page, h('div', { class: 'empty' }, icon('repeat'), h('p', null, 'None in the list yet.'), h('p', { class: 'muted' }, d.found.length ? 'Add the ones found below.' : 'Add one by hand.')));
   else put(page, h('p', { class: 'sumline' }, `${d.items.length} recurring · out about `, h('span', { class: 'num' }, money(monthly(subs) + monthly(bills), CUR())), ' a month · in about ', h('span', { class: 'num pos' }, money(monthly(income), CUR())), ' a month'));
-  const section = (title, ic, xs, note) => {
-    if (!xs.length) return;
-    put(page, h('h2', { class: 'recurhead' }, icon(ic), h('span', null, `${title} (${xs.length})`), h('span', { class: 'grow' }), note || null));
-    put(page, h('ul', { class: 'rows recur' }, xs.map(row)));
+  const section = (title, ic, xs, note, empty) => {
+    if (!xs.length && !empty) return;
+    put(page, h('h2', { class: 'recurhead' }, icon(ic), h('span', null, `${title} (${xs.length})`), h('span', { class: 'grow' }), xs.length ? note : null));
+    put(page, xs.length ? h('ul', { class: 'rows recur' }, xs.map(row)) : h('p', { class: 'muted' }, empty));
   };
-  section('Subscriptions', 'play', subs, h('span', { class: 'muted small' }, h('span', { class: 'num' }, money(monthly(subs), CUR())), ' a month · ', h('span', { class: 'num' }, money(monthly(subs) * 12, CUR())), ' a year'));
+  const subsFound = d.found.filter((x) => x.subscription).length;
+  section('Subscriptions', 'play', subs, h('span', { class: 'muted small' }, h('span', { class: 'num' }, money(monthly(subs), CUR())), ' a month · ', h('span', { class: 'num' }, money(monthly(subs) * 12, CUR())), ' a year'),
+    subsFound ? `None yet. ${subsFound} found in the transactions below ${subsFound === 1 ? 'is' : 'are'} marked Subscription: Add ${subsFound === 1 ? 'it' : 'them'} here.`
+      : 'None yet. Netflix, Spotify, iCloud and the like land here once added; mark any recurring one as a subscription, or open a transaction and choose Make recurring.');
   section('Bills', 'repeat', bills, h('span', { class: 'muted small' }, h('span', { class: 'num' }, money(monthly(bills), CUR())), ' a month'));
   section('Money coming in', 'download', income, h('span', { class: 'muted small' }, h('span', { class: 'num pos' }, money(monthly(income), CUR())), ' a month'));
   if (d.found.length) {
@@ -719,9 +722,9 @@ async function showRecurring(page) {
   }
 }
 /** Add a recurring transaction by hand, or change or remove one. */
-async function recurringDialog(x) {
+async function recurringDialog(x, preset) {
   const isNew = !x;
-  x = x || { flow: 'out', frequency: 'monthly', day: today(), approximate: false };
+  x = x || preset || { flow: 'out', frequency: 'monthly', day: today(), approximate: false };
   const cats = await categories();
   const freqs = S.freqs || [];
   const f = { name: inp(x.name, { placeholder: 'Power bill, Netflix, Paycheck' }), pattern: inp(x.pattern, { placeholder: 'the payee’s name or words of the bank’s text' }),
@@ -737,7 +740,10 @@ async function recurringDialog(x) {
     h('label', { class: 'check', style: { marginTop: '10px' } }, f.approximate, 'The amount varies (a payment within a third of it counts)'),
     h('label', { class: 'check', style: { marginTop: '6px' } }, f.subscription, isNew ? 'A subscription to a service (Netflix, Spotify, iCloud…; a known one is marked on its own)' : 'A subscription to a service (shown under Subscriptions)'));
   const btns = [!isNew ? { label: 'Remove', value: 'delete', danger: true } : null, { label: 'Cancel', value: false }, { label: isNew ? 'Add' : 'Save', value: true, primary: true }].filter(Boolean);
-  const ok = await dialog(isNew ? 'Add a recurring transaction' : x.name, body, btns, 'wide');
+  if (isNew && preset) body.prepend(h('p', { class: 'muted small', style: { marginTop: 0 } }, preset.count > 1
+    ? `From this transaction and the ${preset.count - 1} other${preset.count === 2 ? '' : 's'} like it in the past year: check how often and the amount.`
+    : 'From this transaction, the only one like it in the past year: check how often it comes back.'));
+  const ok = await dialog(isNew ? (preset ? 'Make it recurring' : 'Add a recurring transaction') : x.name, body, btns, 'wide');
   if (ok === 'delete') {
     if (!await confirmDialog('Remove it', `Remove ${x.name} from the recurring transactions? Its transactions stay.`, 'Remove', true)) return;
     try { await api(`api/recurring/${x.id}`, { method: 'DELETE' }); toast('Removed'); onRoute(); } catch (e) { fail(e); } return;
@@ -745,7 +751,7 @@ async function recurringDialog(x) {
   if (!ok) return;
   const b = { name: f.name.value, pattern: f.pattern.value || f.name.value, accountId: f.account.value ? +f.account.value : null, flow: f.flow.value,
     amount: f.amount.value, approximate: f.approximate.checked, frequency: f.frequency.value, day: f.day.value, category: f.category.value };
-  if (!isNew || f.subscription.checked) b.subscription = f.subscription.checked;
+  if (!isNew || preset || f.subscription.checked) b.subscription = f.subscription.checked;
   try { await api(isNew ? 'api/recurring' : `api/recurring/${x.id}`, { method: isNew ? 'POST' : 'PATCH', json: b }); toast(isNew ? 'Added' : 'Saved'); onRoute(); } catch (e) { fail(e); }
 }
 
@@ -821,6 +827,7 @@ function txList(items, showAccount = true) {
       onkeydown: (e) => { if (e.key === 'Enter') txDialog(t); } },
       h('span', { class: 'd' }, fmtTxDay(t.day)),
       h('span', { class: 'p' }, h('b', null, t.merchant || t.description || '(no payee)'), t.pending ? h('span', { class: 'tag' }, 'Pending') : null,
+        t.recurring ? h('span', { class: 'rec', title: `Recurring: ${t.recurring.name}${t.recurring.subscription ? ' (a subscription)' : ''}` }, icon(t.recurring.subscription ? 'play' : 'repeat', 'xs')) : null,
         h('small', { class: 'cs' }, txCat(t))),
       h('span', { class: 'n', title: t.notes || null }, t.notes || ''),
       h('span', { class: 'c' }, txCat(t)),
@@ -904,9 +911,20 @@ async function txDialog(t, account) {
     isNew ? h('p', { class: 'muted small' }, 'Added here, by hand. In an account from Monarch Money it stays beside Monarch’s own transactions, and the balance stays Monarch’s.') : null);
   const btns = ro ? [{ label: 'Close', value: false }] : [
     !isNew && manual ? { label: 'Delete', value: 'delete', danger: true } : null,
-    !isNew && may('household') ? { label: 'Make a rule', value: 'rule' } : null, { label: 'Cancel', value: false }, { label: isNew ? 'Add' : 'Save', value: true, primary: true }].filter(Boolean);
+    !isNew && may('household') ? { label: 'Make a rule', value: 'rule' } : null,
+    !isNew ? { label: t.recurring ? 'Recurring…' : 'Make recurring', value: 'recur' } : null, { label: 'Cancel', value: false }, { label: isNew ? 'Add' : 'Save', value: true, primary: true }].filter(Boolean);
   const ok = await dialog(isNew ? 'Add a transaction' : (t.merchant || 'Transaction'), body, btns, 'wide');
   if (ok === 'delete') { try { await api(`api/transactions/${t.id}`, { method: 'DELETE' }); toast('Deleted'); onRoute(); } catch (e) { fail(e); } return; }
+  if (ok === 'recur') {  // the recurring one it is, or one to add from it (how often and the amount from those like it)
+    try {
+      const d = await api(`api/transactions/${t.id}/recurring`);
+      S.freqs = d.frequencies;
+      if (d.item) recurringDialog(d.item);
+      else if (!d.writable) toast('Only editors add the household’s recurring transactions');
+      else recurringDialog(null, d.suggestion);
+    } catch (e) { fail(e); }
+    return;
+  }
   if (ok === 'rule') {  // the same payee next time: what was typed here, for every transaction like this one
     const name = t.merchant || t.description || '';
     ruleDialog(null, { pattern: name, field: t.merchant ? 'merchant' : 'description',
