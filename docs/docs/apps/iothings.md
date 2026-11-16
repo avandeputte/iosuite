@@ -33,6 +33,9 @@ fridge's water filter). It does what Homebox does, and brings a Homebox inventor
   how much.
 - **The things as cards or a table**, sorted by name, the newest, the price, when they were bought or when their
   warranty ends; all of them, by place, by label, or found by words in any of their details.
+- **For the insurer: everything in one PDF** (Import and export): every thing with its details, photos, log, and its
+  receipts, warranties and manuals, behind a front page with the total paid and a list that links to each thing. Keep
+  it somewhere other than the house (a cloud drive, a USB stick at work) and make a new one now and then.
 - **Homebox, straight from the server**: give Homebox's address, email and password (used once, not kept) and
   everything comes over: the things, places, labels and fields, the photos, manuals, receipts and warranties, and the
   maintenance log. Running it again brings things up to date instead of adding them twice. The server must reach

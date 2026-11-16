@@ -6,6 +6,8 @@ COPY iothings/app ./app
 COPY iothings/static ./static
 # the suite's shared library, from the same commit: shared/ of the repository (the build context is the repository root)
 COPY shared /opt/iosuite-shared
+# DejaVu Sans: the inventory PDF writes every language with it
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir /opt/iosuite-shared
 RUN pip install --no-cache-dir -e . \
     && useradd --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin iothings && chown -R iothings:iothings /app
