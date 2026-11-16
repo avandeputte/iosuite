@@ -217,6 +217,34 @@ def test_a_pending_one_is_followed_until_it_posts(client, mm):
     assert client.get("/api/transactions?q=garage").json()["items"][0]["pending"] is False
 
 
+def test_receipts_links_and_split_follow_a_pending_one_that_posts(client, mm):
+    """Monarch gives a pending transaction a new id when it posts: what was kept with it here moves to the new one."""
+    from iosuite_shared import related
+    put_keys()
+    FakeMM.transactions = [tx("p1", 4, -280, "Appliance shop", pending=True), tx("p2", 4, -40, "Bistro", pending=True),
+                           tx("p3", 4, -15, "Kiosk", pending=True), tx("t1", 3, -54.2, "Grocer")]
+    assert client.post("/api/monarch/sync").json()["ok"]
+    one = lambda q: client.get(f"/api/transactions?q={q}").json()["items"][0]  # noqa: E731
+    shop, bistro, kiosk = one("appliance"), one("bistro"), one("kiosk")
+    pdf = b"%PDF-1.4\n%%EOF\n"
+    for t in (shop, bistro, kiosk):
+        assert client.post(f"/api/transactions/{t['id']}/receipts", params={"name": "slip.pdf"}, content=pdf).status_code == 201
+    related.add(("transaction", shop["id"]), ("item", 7))
+    related.add(("transaction", kiosk["id"]), ("item", 9))
+    client.put(f"/api/transactions/{shop['id']}/splits", json={"items": [{"amount": 200, "category": "Home"}, {"amount": 80, "category": "Gifts"}]})
+    # posted: the shop's under a new id, the bistro's with the tip added; the kiosk's charge never went through
+    FakeMM.transactions = [tx("p1b", 3, -280, "Appliance shop"), tx("p2b", 3, -46, "Bistro"), tx("t1", 3, -54.2, "Grocer")]
+    assert client.post("/api/monarch/sync").json()["ok"]
+    new, tipped = one("appliance"), one("bistro")
+    assert new["id"] != shop["id"] and new["pending"] is False
+    assert [r["name"] for r in new["receipts"]] == ["slip.pdf"] and client.get(f"/api/receipts/{new['receipts'][0]['id']}").content == pdf
+    assert [(p["amount"], p["category"]) for p in new["splits"]] == [(-200, "Home"), (-80, "Gifts")]
+    assert [(x["kind"], x["id"]) for x in related.of("item", 7)] == [("transaction", str(new["id"]))]
+    assert tipped["amount"] == -46 and len(tipped["receipts"]) == 1
+    assert client.get("/api/transactions?q=kiosk").json()["items"] == [] and related.of("item", 9) == []
+    assert db.one("SELECT count(*) AS n FROM mny_receipts")["n"] == 2
+
+
 def test_one_account_synced_again(client, mm):
     put_keys()
     assert client.post("/api/monarch/sync").json()["ok"]

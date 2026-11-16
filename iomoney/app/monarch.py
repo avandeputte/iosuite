@@ -38,7 +38,7 @@ from decimal import Decimal
 from iosuite_shared import credentials
 from iosuite_shared.errors import Invalid
 
-from app import categories, config, db, model
+from app import categories, config, db, model, receipts
 
 log = logging.getLogger("iomoney.monarch")
 APP = config.APP
@@ -285,7 +285,10 @@ def _put_tx(t: dict, aid: int, groups: dict, cats: tuple = None) -> bool:
     Monarch is not kept here (removed when it was): False. cats: the household's renamed categories and their groups
     (app/categories.py maps())."""
     if t.get("hideFromReports"):
-        db.ex("DELETE FROM mny_transactions WHERE source = 'monarch' AND external_id = %s", (str(t["id"]),))
+        had = db.one("SELECT id FROM mny_transactions WHERE source = 'monarch' AND external_id = %s", (str(t["id"]),))
+        if had:
+            db.ex("DELETE FROM mny_transactions WHERE id = %s", (had["id"],))
+            receipts.forget([had["id"]])
         return False
     cat = (t.get("category") or {})
     merchant = (t.get("merchant") or {}).get("name")
@@ -342,6 +345,7 @@ async def _transactions(mm, ids: dict, since: dt.date, today: dt.date, groups: d
                    f"AND account_id IN ({db.marks(len(aids))})", (since, today, *aids))
         gone = [r["id"] for r in old if r["external_id"] not in seen]
         if gone:
+            receipts.carry(gone, seen)  # a pending one that posted: its receipts, links and split move to the posted one
             db.ex(f"DELETE FROM mny_transactions WHERE id IN ({db.marks(len(gone))})", gone)
     # the household's rules, over what just came in (Monarch's own payee and category, unless changed here by hand)
     _at("Rules and transfers", n)

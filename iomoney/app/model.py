@@ -540,8 +540,11 @@ def delete_account(u: dict, a: dict) -> None:
     if a["source"] == "monarch":
         raise Forbidden("This account comes from Monarch Money: hide it instead (it would come back with the next sync)")
     db.ex("UPDATE mny_accounts SET loan_id = NULL WHERE loan_id = %s", (a["id"],))
+    from app import receipts
+    tids = [r["id"] for r in db.q("SELECT id FROM mny_transactions WHERE account_id = %s", (a["id"],))]
     db.ex("DELETE FROM mny_accounts WHERE id = %s", (a["id"],))  # its balances, transactions and holdings go with it
     related.forget("asset", a["id"])
+    receipts.forget(tids)
 
 
 def set_balance(aid: int, on: dt.date, balance: Decimal, source: str = "sync", note: str = None) -> None:
@@ -702,7 +705,8 @@ def amount_range(s: str | None) -> tuple[Decimal | None, Decimal | None] | None:
 
 
 def _tx_filter(u: dict, q: str = "", account: int = None, category: str = None, start=None, end=None,
-               flow: str = None, hidden: bool = False, reconciled: str = None, amount: str = None) -> tuple[str, list]:
+               flow: str = None, hidden: bool = False, reconciled: str = None, amount: str = None,
+               receipt: str = None) -> tuple[str, list]:
     """amount: an amount or a range (amount_range); in q, a word with $ or cents, a range or > < is an amount too, and
     a bare number is an amount or a word (the last digits in the bank's text)."""
     where, args = _visible(u)
@@ -732,6 +736,8 @@ def _tx_filter(u: dict, q: str = "", account: int = None, category: str = None, 
         where += " AND t.amount > 0"
     if reconciled in ("yes", "no"):
         where += f" AND {'' if reconciled == 'yes' else 'NOT '}EXISTS (SELECT 1 FROM mny_reconciled r WHERE r.transaction_id = t.id)"
+    if receipt in ("yes", "no"):
+        where += f" AND {'' if receipt == 'yes' else 'NOT '}EXISTS (SELECT 1 FROM mny_receipts rc WHERE rc.transaction_id = t.id)"
     if amount not in (None, ""):
         r = amount_range(str(amount))
         if not r:
@@ -764,8 +770,8 @@ def _amount_where(where: str, args: list, r: tuple) -> tuple[str, list]:
 
 def find_transactions(u: dict, q: str = "", account: int = None, category: str = None, start=None, end=None,
                       flow: str = None, limit: int = 100, offset: int = 0, hidden: bool = False, reconciled: str = None,
-                      amount: str = None) -> dict:
-    where, args = _tx_filter(u, q, account, category, start, end, flow, hidden, reconciled, amount)
+                      amount: str = None, receipt: str = None) -> dict:
+    where, args = _tx_filter(u, q, account, category, start, end, flow, hidden, reconciled, amount, receipt)
     base = f"FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id WHERE {where}"
     total = db.one(f"SELECT count(*) AS n, COALESCE(SUM(t.amount), 0) AS s {base}", args)
     rows = db.q(f"SELECT t.*, a.owner_id, a.name AS account_name, a.currency, EXISTS (SELECT 1 FROM mny_reconciled r WHERE r.transaction_id = t.id) AS reconciled {base} ORDER BY t.day DESC, t.id DESC LIMIT %s OFFSET %s",
@@ -776,10 +782,12 @@ def find_transactions(u: dict, q: str = "", account: int = None, category: str =
 def with_transfers(items: list[dict], u: dict) -> list[dict]:
     """Each transaction that is half of a transfer gets transfer: {id, accountId, account, how} (the other half; its
     account left out when it is someone else's private one); each gets recurring: the household's recurring
-    transaction it is ({id, name, subscription}), or None; and splits: its parts when it is split over categories."""
-    from app import recurring, splits, transfers
+    transaction it is ({id, name, subscription}), or None; splits: its parts when it is split over categories; and
+    receipts: the files kept with it."""
+    from app import receipts, recurring, splits, transfers
     recurring.mark(items, u)
     splits.mark(items)
+    receipts.mark(items)
     halves = transfers.halves_of([t["id"] for t in items])
     others = {}
     if halves:
@@ -883,6 +891,8 @@ def delete_transaction(u: dict, t: dict) -> None:
         raise Forbidden("This transaction comes from Monarch Money: hide it instead")
     db.ex("DELETE FROM mny_transactions WHERE id = %s", (t["id"],))
     _move_balance(t["account_id"], -Decimal(t["amount"]))
+    from app import receipts
+    receipts.forget([t["id"]])
 
 
 def categories(u: dict) -> list[dict]:

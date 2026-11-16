@@ -54,6 +54,8 @@ morning notifications work without any other app.
   ioThings. When the task is ticked off in ioTask, ioThings sees the new due day; **Done** in ioThings moves the task on.
 - **Linking**: a thing can be linked to events, tasks, notes, contacts, recipes and photos of the other apps (the
   plumber in ioContact, the invoice in ioNote).
+- **ioMoney**: link a thing to the transaction that paid for it. The thing then shows what was paid, when and from
+  which account; in ioMoney the transaction shows the thing and how long its warranty runs, and keeps the receipt.
 
 ## Install
 

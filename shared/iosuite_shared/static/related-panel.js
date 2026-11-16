@@ -6,6 +6,7 @@
      const panel = rel.mount(el, { kind: 'task', id: 12, toast });   // draws into el (empty while there is nothing to show)
      // more options: canEdit: false (no + and ×, whatever the role), onOpen(item): runs before an item of this same app
      // opens in place (the app closes its dialog, say); items of the other apps open in a new tab
+     // first: 'item' (the kind the picker opens on, when its app is in the suite), empty: the words shown while nothing is linked
      panel.pick();                                                    // opens the picker (a menu item of the app's own, say)
 */
 import { h, api, styles as kitStyles, setToast, toast, fail } from '../auth/ui.js';
@@ -19,6 +20,7 @@ const KINDS = {
   item: { label: 'Thing', ic: 'M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V4c0-1.1-1-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4l16-.02V7z', c: '#2a6f97' },
   photo: { label: 'Photo', ic: 'M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z', c: '#9334e6' },
   asset: { label: 'House or car', ic: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z', c: '#94650a' },
+  transaction: { label: 'Transaction', ic: 'M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z', c: '#0f7b6c' },
 };
 const IC = {
   link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',
@@ -145,7 +147,7 @@ export function mount(el, opts = {}) {
     if (!loaded || (!items.length && !canEdit)) return;
     el.append(h('div', { class: 'rl-head' }, h('h3', null, svg(IC.link), 'Linked'),
       canEdit ? h('button', { class: 'rl-add', type: 'button', title: 'Link an event, a task, a note, a contact, a recipe, a photo or a thing', onclick: pick }, svg(IC.add), 'Link') : null));
-    if (!items.length) { el.append(h('div', { class: 'rl-none' }, 'Nothing linked yet. Link meeting notes, a recipe, a contact, a photo…')); return; }
+    if (!items.length) { el.append(h('div', { class: 'rl-none' }, opts.empty || 'Nothing linked yet. Link meeting notes, a recipe, a contact, a photo…')); return; }
     el.append(h('div', { class: 'rl-list' }, items.map((x) => h('div', { class: 'rl-item', role: 'link', tabindex: '0', title: `Open in ${APPS[x.app] || x.app}`,
       onclick: (e) => { if (!e.target.closest('.rl-x')) open(x, opts.onOpen); }, onkeydown: (e) => { if (e.key === 'Enter') open(x, opts.onOpen); } },
       pic(x), h('span', { class: 'rl-txt' }, h('span', { class: 'rl-t' + (x.done ? ' done' : '') }, x.title), h('span', { class: 'rl-s' }, subtitle(x))),
@@ -160,7 +162,7 @@ export function mount(el, opts = {}) {
     try { await api(`${base}/${x.link}`, { method: 'DELETE' }); items = items.filter((i) => i.link !== x.link); draw(); toast('Link removed'); } catch (e) { fail(e); }
   }
   async function pick() {
-    const added = await picker({ kind, id, linked: items });
+    const added = await picker({ kind, id, linked: items, first: opts.first });
     if (added) { items = [added, ...items.filter((i) => i.link !== added.link)]; draw(); toast(`Linked: ${added.title}`); }
   }
   load();
@@ -174,13 +176,13 @@ async function kinds() {
   return kindsCache;
 }
 
-export function picker({ kind, id, linked = [] }) {
+export function picker({ kind, id, linked = [], first = '' }) {
   styles();
   return new Promise(async (resolve) => {
     const have = new Set(linked.map((x) => `${x.kind}:${x.id}`));
     have.add(`${kind}:${id}`);
     const all = await kinds();
-    let only = '', seq = 0, timer = 0, busy = false;
+    let only = all.some((k) => k.kind === first) ? first : '', seq = 0, timer = 0, busy = false;
     const back = h('div', { class: 'iosv-back iosv rl-back' });
     const close = (v) => { back.remove(); removeEventListener('keydown', esc, true); resolve(v); };
     const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(null); } };

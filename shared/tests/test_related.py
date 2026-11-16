@@ -162,3 +162,27 @@ def test_a_house_in_iomoney(suite_apps, monkeypatch):
     assert got["url"] == "https://iomoney.example.com/#/account/4"
     found = c.get("/api/related/search", params={"q": "oak", "kinds": "asset"}).json()["groups"]
     assert found and found[0]["items"][0]["title"] == "12 Oak Lane"
+
+
+def test_a_transaction_in_iomoney_and_a_thing_with_its_warranty(suite_apps, monkeypatch):
+    suite.register("iomoney", name="iomoney", url="https://iomoney.example.com")
+    suite.register("iothings", name="iothings", url="https://iothings.example.com")
+    suite.invalidate()
+    tx = {"id": 31, "merchant": "Corner Appliances", "amount": -1299.0, "currency": "USD", "day": "2026-03-02",
+          "category": "Home", "account": "Joint checking"}
+    monkeypatch.setitem(SEEN, ("iomoney", "/api/transactions/31"), tx)
+    monkeypatch.setitem(SEEN, ("iomoney", "/api/transactions"), {"items": [tx]})
+    monkeypatch.setitem(SEEN, ("iothings", "/api/items/7"), {"id": 7, "name": "Dishwasher", "location": {"path": "Kitchen"},
+                                                             "warrantyExpires": "2028-03-02", "lifetimeWarranty": False})
+    c = client()
+    got = c.post("/api/related/task/12", json={"kind": "transaction", "id": 31}).json()
+    assert got["title"] == "Corner Appliances" and got["text"] == "USD -1,299.00 · Home · Joint checking"
+    assert got["when"] == "2026-03-02" and got["allDay"] and got["url"] == "https://iomoney.example.com/#/transaction/31"
+    found = c.get("/api/related/search", params={"q": "appliances", "kinds": "transaction"}).json()["groups"]
+    assert found and found[0]["label"] == "Transactions" and found[0]["items"][0]["id"] == "31"
+    thing = c.post("/api/related/task/12", json={"kind": "item", "id": 7}).json()
+    assert thing["text"] == "Kitchen · warranty to 2028-03-02"
+    # which of many items have links (an app that removes them asks first), and forgetting them
+    assert related.having("transaction", [30, 31, 32]) == ["31"] and related.having("transaction", []) == []
+    assert related.forget_many("transaction", related.having("transaction", [31])) == 1
+    assert related.having("transaction", [31]) == []

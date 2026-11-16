@@ -175,6 +175,26 @@ SCHEMA = [
         KEY idx_mny_splits_category (category),
         CONSTRAINT fk_mny_splits_tx FOREIGN KEY (transaction_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
     )""",
+    # the receipts of a transaction (app/receipts.py): pictures and PDFs, kept here in the database (in parts, so a
+    # large scan stays under max_allowed_packet) so the suite's backup holds them too. They go with the transaction.
+    """CREATE TABLE IF NOT EXISTS mny_receipts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        transaction_id INT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        mime VARCHAR(127) NOT NULL,
+        size BIGINT NOT NULL,
+        created_by INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_mny_receipts_tx (transaction_id),
+        CONSTRAINT fk_mny_receipts_tx FOREIGN KEY (transaction_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
+    )""",
+    """CREATE TABLE IF NOT EXISTS mny_receipt_parts (
+        receipt_id INT NOT NULL,
+        n INT NOT NULL,
+        data MEDIUMBLOB NOT NULL,
+        PRIMARY KEY (receipt_id, n),
+        CONSTRAINT fk_mny_receipt_parts_receipt FOREIGN KEY (receipt_id) REFERENCES mny_receipts(id) ON DELETE CASCADE
+    )""",
     # a flag on a recurring transaction (missed: none seen since its payment of that day; changed: the payment of that
     # day had another amount) someone looked at and set aside: not shown again for that day
     """CREATE TABLE IF NOT EXISTS mny_recurring_ok (

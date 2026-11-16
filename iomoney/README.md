@@ -88,6 +88,18 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   transaction stays one line in its account; the spending by category counts its parts, a search by category or by a
   note's words finds it, and the list shows its categories with a split mark. If its amount changes later, what the
   parts no longer cover counts under its own category. `PUT /api/transactions/{id}/splits`; MCP `split_transaction`.
+- **Receipts**: a transaction keeps its receipts: pictures (JPEG, PNG, WebP, GIF, HEIC) and PDFs, up to 20 MB each
+  and 20 for one transaction, added from its dialog (picked, taken with the phone's camera, or dropped on it). A
+  large photo is made smaller in the browser before it is sent. They are kept in the database (`mny_receipts`), so
+  the suite's backup holds them; whoever sees the transaction sees them, whoever may change it adds and removes
+  them. The list marks a transaction that has one and filters on it (`receipt=yes|no`). A receipt goes with its
+  transaction; when Monarch gives a pending transaction a new id as it posts, the sync moves its receipts, its links
+  and its split to the posted one (same account, within ten days, the same amount, or the same payee and nearly the
+  amount). `POST /api/transactions/{id}/receipts` (the file as the body), `GET`, `DELETE /api/receipts/{id}`.
+- **Linked to a thing**: a transaction can be linked to the items of the other apps (the suite's linked items, kind
+  `transaction`): the thing it paid for in ioThings, so the price sits beside the thing's warranty; a note, a
+  contact, an event. The picker in the transaction's dialog opens on the things; in ioThings the thing lists the
+  transaction, and a click opens it here (`#/transaction/{id}`).
 - **Reconciled**: each transaction can be ticked as reconciled with the bank's statement (the tick at the end of its
   row, or its dialog); the list filters on it, and **Mark these reconciled** ticks every one shown. The sync leaves it
   as it is, and it does not count as a change to the transaction.
@@ -258,6 +270,8 @@ Updates, releases, the reverse proxy and Cloudflare Access work as in every app 
 | Transactions: search, add (by hand), change, delete | `GET /api/transactions?q=&account=&category=&month=&flow=&amount=`, `POST /api/accounts/{id}/transactions`, `/api/transactions/{id}` |
 | Spending and cash flow | `GET /api/spending?month=2026-11`, `GET /api/cashflow?months=12`, `GET /api/categories` |
 | Transfers: one transaction's other half and candidates, link, unlink; link all; what is left | `GET/PUT/DELETE /api/transactions/{id}/transfer`, `POST /api/transfers/link`, `GET /api/transfers/possible` |
+| One transaction | `GET /api/transactions/{id}` |
+| Receipts: add (the file as the request body), open, remove; filter | `POST /api/transactions/{id}/receipts?name=`, `GET`, `DELETE /api/receipts/{id}`, `GET /api/transactions?receipt=yes\|no` |
 | Reconciled: filter, mark | `GET /api/transactions?reconciled=yes\|no`, `PATCH /api/transactions/{id}` (`reconciled`), `POST /api/transactions/reconcile` (`{ids, reconciled}`) |
 | Not a transfer (off the list to check, never linked by itself) | `POST /api/transfers/not` (`{outId, inId}`) |
 | Transfer rules: list, add, change, delete | `/api/transfer-rules`, `/api/transfer-rules/{id}` |
@@ -322,6 +336,10 @@ app/monarch.py     Monarch Money: the sign-in (from the suite's keys and tokens)
 app/recurring.py   recurring transactions and subscriptions: found in the transactions, the household's list, the bills' dates
 app/categories.py  the categories: added, renamed, merged, regrouped, deleted, and what a sync brings later under the old name
 app/transfers.py   transfers between the household's own accounts: found, linked, unlinked, and their rules
+app/forecast.py    the cash forecast of an account: what is known to come, day by day
+app/payoff.py      a loan's payoff from its rate and its payment
+app/splits.py      a transaction split over categories
+app/receipts.py    the receipts kept with a transaction, and what follows a transaction to its new id
 app/quotes.py      quotes and exchange rates from Yahoo Finance
 app/persondata.py  what a person keeps here, for the suite's delete-a-person
 app/mcp/           the MCP server: money and admin tools

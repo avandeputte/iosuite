@@ -6,15 +6,16 @@ Clients authenticate with the web session cookie, HTTP Basic (name + password or
 `Authorization: Bearer <app password>`.
 """
 import datetime as dt
+import urllib.parse
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from iosuite_shared import users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
 
-from app import access, categories, db, forecast, model, monarch, payoff, quotes, recurring, splits, transfers
+from app import access, categories, db, forecast, model, monarch, payoff, quotes, receipts, recurring, splits, transfers
 
 router = APIRouter()
 
@@ -200,15 +201,16 @@ def networth(request: Request, days: int = 365, kind: str = None):
 @router.get("/api/transactions", dependencies=[access.signed_in])
 def list_transactions(request: Request, q: str = "", account: int = None, category: str = None, month: str = None,
                       start: str = None, end: str = None, flow: str = None, hidden: bool = False, reconciled: str = None,
-                      amount: str = None, limit: int = 100, offset: int = 0):
+                      amount: str = None, receipt: str = None, limit: int = 100, offset: int = 0):
     """The transactions you see, the newest first. q: words (the payee, the bank's text, the category, the notes;
     $280, 12.50, 100-200, >500 are amounts); account; category ('-': none); month (YYYY-MM) or start and end
     (YYYY-MM-DD); flow: out or in; amount: an amount, money out or in alike (280), or a range (100-200, >500, <20);
-    hidden: also those left out of the sums; reconciled: yes or no. With total (how many match) and sum."""
+    hidden: also those left out of the sums; reconciled: yes or no; receipt: yes (only those with a receipt kept) or
+    no. With total (how many match) and sum."""
     u = _u(request)
     if month:
         start, end = _month_bounds(month)
-    return model.find_transactions(u, q, account, category, start, end, flow, limit, offset, hidden, reconciled, amount)
+    return model.find_transactions(u, q, account, category, start, end, flow, limit, offset, hidden, reconciled, amount, receipt)
 
 
 @router.post("/api/transactions/reconcile", dependencies=[access.signed_in])
@@ -228,6 +230,13 @@ async def add_transaction(aid: int, request: Request):
     b = await json_body(request)
     t = await run_in_threadpool(lambda: model.create_transaction(u, model.account(u, aid), b))
     return JSONResponse(model.with_transfers([model.tx_public(t, u)], u)[0], status_code=201)
+
+
+@router.get("/api/transactions/{tid}", dependencies=[access.signed_in])
+def get_transaction(tid: int, request: Request):
+    """One transaction, as the list gives it (with its transfer, its recurring transaction, its splits, its receipts)."""
+    u = _u(request)
+    return model.with_transfers([model.tx_public(model.transaction(u, tid), u)], u)[0]
 
 
 @router.patch("/api/transactions/{tid}", dependencies=[access.signed_in])
@@ -289,6 +298,35 @@ async def split_transaction(tid: int, request: Request):
     b = await json_body(request)
     t = await run_in_threadpool(lambda: splits.put(u, model.transaction(u, tid), b.get("items")))
     return model.with_transfers([model.tx_public(t, u)], u)[0]
+
+
+# ------------------------------------------------------------------ receipts
+
+@router.post("/api/transactions/{tid}/receipts", dependencies=[access.signed_in])
+async def add_receipt(tid: int, request: Request, name: str | None = None):
+    """The receipt itself as the request body: a picture (JPEG, PNG, WebP, GIF, HEIC) or a PDF, up to 20 MB. name:
+    its file name. The receipt as listed ({id, name, mime, size, url, added})."""
+    u = _u(request)
+    raw = await request.body()
+    return JSONResponse(await run_in_threadpool(lambda: receipts.add(u, model.transaction(u, tid), raw, name)), status_code=201)
+
+
+@router.get("/api/receipts/{rid}", dependencies=[access.signed_in])
+def get_receipt(rid: int, request: Request, download: bool = False):
+    """The receipt's file: shown in the browser (download=true: saved)."""
+    body, mime, name = receipts.content(_u(request), rid)
+    shown = mime in receipts.INLINE and not download
+    headers = {"Cache-Control": "private, max-age=3600",
+               "Content-Disposition": f"{'inline' if shown else 'attachment'}; filename*=UTF-8''{urllib.parse.quote(name)}"}
+    if mime != "application/pdf":  # a browser's PDF viewer does not open in a sandbox; nothing else needs more than this
+        headers["Content-Security-Policy"] = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox"
+    return Response(body, media_type=mime if shown else "application/octet-stream", headers=headers)
+
+
+@router.delete("/api/receipts/{rid}", dependencies=[access.signed_in])
+def delete_receipt(rid: int, request: Request):
+    receipts.remove(_u(request), rid)
+    return {"ok": True}
 
 
 @router.get("/api/transactions/{tid}/transfer", dependencies=[access.signed_in])

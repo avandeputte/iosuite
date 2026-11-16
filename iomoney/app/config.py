@@ -21,6 +21,7 @@ DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD = _db["host"], _db["port"], _db[
 
 MAX_JSON_BYTES = 2 * 1024 * 1024      # a request body
 MAX_IMPORT_BYTES = 20 * 1024 * 1024   # a CSV file of transactions or holdings
+MAX_RECEIPT_BYTES = 20 * 1024 * 1024  # one receipt (a picture or a PDF) as uploaded
 
 # the background work (app/chores.py): SYNC=0 stops it (Monarch, quotes and notifications then only run when asked)
 SYNC = env_flag("SYNC", True)

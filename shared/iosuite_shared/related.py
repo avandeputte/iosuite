@@ -1,8 +1,9 @@
 """Linked items: an event linked to its meeting notes, a task to a recipe, a note to a contact, across the apps.
 
 A link joins two items of the suite, each named by its kind and its id in its app (KINDS: event, task, note, contact,
-recipe, photo, item: a thing in ioThings, asset: a house, a car or another thing of value in ioMoney). It is one row of ios_related in the Shared ioSuite database and works both ways: the task shows the
-recipe and the recipe shows the task. Nothing about the items is kept with it; what a link shows (the title, the date,
+recipe, photo, item: a thing in ioThings, asset: a house, a car or another thing of value in ioMoney, transaction:
+one of ioMoney's, what a thing was paid with, say). It is one row of ios_related in the Shared ioSuite database and
+works both ways: the task shows the recipe and the recipe shows the task. Nothing about the items is kept with it; what a link shows (the title, the date,
 the small picture) is asked of the item's own app every time, with the viewer's own sign-in, so a link shows only to
 someone who may see both of its items, and always as the item is now. A note is its owner's alone: an event linked to
 it shows the link to the note's owner and to nobody else.
@@ -50,6 +51,7 @@ KINDS = {
     "photo": {"app": "iopix", "label": "Photo", "plural": "Photos"},
     "item": {"app": "iothings", "label": "Thing", "plural": "Things"},
     "asset": {"app": "iomoney", "label": "House or car", "plural": "Houses and cars"},
+    "transaction": {"app": "iomoney", "label": "Transaction", "plural": "Transactions"},
 }
 MAX_LINKS = 200  # links per item
 TIMEOUT = 5      # seconds, per request to an app
@@ -128,6 +130,22 @@ def forget(kind: str, item_id) -> int:
         return 0
 
 
+def having(kind: str, ids) -> list[str]:
+    """Which of these items of one kind have links (an app about to remove many of them, asking which to forget)."""
+    try:
+        ids = sorted({check(kind, i)[1] for i in ids})
+    except ValueError:
+        return []
+    out: set = set()
+    for i in range(0, len(ids), 500):
+        part = ids[i:i + 500]
+        marks = ", ".join(["%s"] * len(part))
+        for r in db.q(f"SELECT a_id AS id FROM ios_related WHERE a_kind = %s AND a_id IN ({marks}) "
+                      f"UNION SELECT b_id FROM ios_related WHERE b_kind = %s AND b_id IN ({marks})", (kind, *part, kind, *part)):
+            out.add(str(r["id"]))
+    return sorted(out)
+
+
 def forget_many(kind: str, ids) -> int:
     """forget() for many items of one kind (an app purging what was deleted)."""
     return sum(forget(kind, i) for i in ids)
@@ -187,7 +205,7 @@ def _item(kind: str, item_id, title: str, text: str = "", when: str = None, all_
     app = KINDS[kind]["app"]
     base = links.url(app) or ""
     href = {"event": "#/event/{}", "task": "#/task/{}", "note": "#/note/{}", "contact": "#/c/{}", "recipe": "#/recipe/{}",
-            "photo": "#/photos?p={}", "item": "#/item/{}", "asset": "#/account/{}"}[kind].format(urllib.parse.quote(str(item_id)))
+            "photo": "#/photos?p={}", "item": "#/item/{}", "asset": "#/account/{}", "transaction": "#/transaction/{}"}[kind].format(urllib.parse.quote(str(item_id)))
     return {"kind": kind, "id": str(item_id), "app": app, "title": (title or "").strip()[:120] or "(no title)",
             "text": (text or "").strip()[:140], "when": when, "allDay": bool(all_day), "done": bool(done),
             "image": image, "url": f"{base}/{href}" if base else None}
@@ -230,6 +248,14 @@ def _asset(a: dict) -> dict:
     return _item("asset", a.get("id"), a.get("name"), " · ".join(x for x in (a.get("kindLabel"), worth) if x))
 
 
+def _transaction(t: dict) -> dict:
+    """A transaction of ioMoney: the payee, its day, and the amount, the category and the account."""
+    v = t.get("amount")
+    amount = f"{t.get('currency') or ''} {float(v):,.2f}".strip() if isinstance(v, (int, float)) else ""
+    return _item("transaction", t.get("id"), t.get("merchant") or t.get("description") or "Transaction",
+                 " · ".join(x for x in (amount, t.get("category"), t.get("account")) if x), t.get("day"), all_day=True)
+
+
 def _photo(p: dict) -> dict:
     album = (p.get("album") or {}).get("name") if isinstance(p.get("album"), dict) else None
     title = p.get("title") or p.get("caption") or album or p.get("name") or "Photo"
@@ -237,9 +263,12 @@ def _photo(p: dict) -> dict:
 
 
 def _thing(x: dict) -> dict:
+    """A thing of ioThings: where it is (or who made it) and how long its warranty runs."""
     m = re.search(r"/files/(\d+)$", str(x.get("photo") or ""))
     where = (x.get("location") or {}).get("path") if isinstance(x.get("location"), dict) else None
-    return _item("item", x.get("id"), x.get("name"), where or x.get("manufacturer") or "", image=m.group(1) if m else None)
+    warranty = "lifetime warranty" if x.get("lifetimeWarranty") else f"warranty to {x['warrantyExpires']}" if x.get("warrantyExpires") else ""
+    return _item("item", x.get("id"), x.get("name"), " · ".join(p for p in (where or x.get("manufacturer") or "", warranty) if p),
+                 image=m.group(1) if m else None)
 
 
 def _soon_first(items: list[dict]) -> list[dict]:
@@ -277,6 +306,8 @@ def find(request: Request, kind: str, q: str, n: int = 6) -> list[dict]:
         return [_thing(x) for x in ask(request, app, "/api/items", {"q": q, "limit": n}).get("items", [])[:n]]
     if kind == "asset":
         return [_asset(x) for x in ask(request, app, "/api/accounts", {"things": "true", "q": q}).get("items", [])[:n]]
+    if kind == "transaction":
+        return [_transaction(x) for x in ask(request, app, "/api/transactions", {"q": q, "limit": n}).get("items", [])[:n]]
     if kind == "photo":
         got = ask(request, app, "/api/photos", {"q": q, "type": "photo"})
         return [_photo({"id": pid, "ts": ts}) for pid, ts in list(zip(got.get("id") or [], got.get("ts") or []))[:max(n, 12)]]
@@ -307,6 +338,8 @@ def get(request: Request, kind: str, item_id: str) -> dict:
         return _thing(ask(request, app, f"/api/items/{q}"))
     if kind == "asset":
         return _asset(ask(request, app, f"/api/accounts/{q}"))
+    if kind == "transaction":
+        return _transaction(ask(request, app, f"/api/transactions/{q}"))
     raise Unavailable(404, "No such kind of item")
 
 
