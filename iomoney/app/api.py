@@ -14,7 +14,7 @@ from iosuite_shared import users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
 
-from app import access, categories, db, model, monarch, quotes, recurring, transfers
+from app import access, categories, db, forecast, model, monarch, quotes, recurring, transfers
 
 router = APIRouter()
 
@@ -124,6 +124,21 @@ async def put_account_info(aid: int, request: Request):
     u = _u(request)
     b = await json_body(request)
     return await run_in_threadpool(lambda: model.set_account_info(u, model.account(u, aid), b))
+
+
+@router.get("/api/accounts/{aid}/forecast", dependencies=[access.signed_in])
+def account_forecast(aid: int, request: Request, days: int = forecast.DAYS):
+    """The account's balance over the coming days (7 to 366), from its recurring transactions and the transfers it
+    makes at a steady pace: the events with the balance after each, a point a day, the lowest point, and whether it
+    goes under the balance it should not go under (details.floor, set with PATCH /api/accounts/{id}; zero without)."""
+    u = _u(request)
+    return forecast.forecast(u, model.account(u, aid), days)
+
+
+@router.get("/api/forecast", dependencies=[access.signed_in])
+def forecast_warnings(request: Request, days: int = 30):
+    """The cash accounts you see that would go under their lowest balance in the coming days (30 as left out)."""
+    return {"items": forecast.warnings(_u(request), days)}
 
 
 @router.get("/api/accounts/{aid}/history", dependencies=[access.signed_in])

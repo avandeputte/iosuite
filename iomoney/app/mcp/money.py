@@ -5,7 +5,7 @@ from typing import Literal, Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import __version__, config, model, monarch, quotes, recurring, transfers
+from app import __version__, config, forecast, model, monarch, quotes, recurring, transfers
 from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, clamp, find_account, guard, link, need_admin, server, who
 
 
@@ -405,6 +405,23 @@ def recurring_transactions() -> dict:
     u = who()
     _need_role(u)
     return {"items": recurring.items(u), "found": recurring.found(u)}
+
+
+@server.tool(annotations=READ_ONLY)
+def cash_forecast(account: Optional[str] = None, days: int = 60) -> dict:
+    """Where a cash account's balance goes over the coming days, from the recurring transactions kept for it (bills,
+    subscriptions, paychecks) and the transfers it makes at a steady pace (a card paid monthly): each event with the
+    balance after it, the lowest point, and whether it goes under the balance it should not go under (floor; zero
+    without one). Everyday spending is not counted. account: its id or name; left out: the cash accounts that would go
+    under in that time (warnings)."""
+    u = who()
+    _need_role(u)
+    days = clamp(days, 7, 366)
+    if not account:
+        return {"warnings": forecast.warnings(u, days), "accounts": [{"id": a["id"], "name": a["name"]} for a in forecast.accounts(u)]}
+    f = forecast.forecast(u, find_account(u, account), days)
+    f.pop("points")
+    return f
 
 
 @server.tool(annotations=WRITES)

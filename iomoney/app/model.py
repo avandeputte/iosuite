@@ -52,7 +52,8 @@ SYMBOL = re.compile(r"^[A-Za-z0-9.\-=^]{1,32}$")
 CENT = Decimal("0.01")
 MAX_AMOUNT = Decimal("999999999999.99")
 DETAIL_FIELDS = {"address": 255, "year": 4, "make": 64, "model": 64, "vin": 32, "mileage": 12, "boughtOn": 10,
-                 "boughtFor": 20, "yearlyRate": 8, "notes": 2000}
+                 "boughtFor": 20, "yearlyRate": 8, "notes": 2000,
+                 "floor": 20}  # a cash account: the balance it should not go under (app/forecast.py warns)
 # what is kept to deal with an account's bank (mny_account_info), and how long each may be
 INFO_FIELDS = {"accountNumber": 64, "routingNumber": 32, "iban": 42, "swift": 11, "phone": 40, "phoneAbroad": 40,
                "website": 255, "email": 255, "address": 1000, "username": 128, "openedOn": 10, "notes": 4000}
@@ -195,6 +196,8 @@ def _details(v, old: dict | None = None) -> dict:
             out[k] = float(r)
         elif k == "boughtFor":
             out[k] = float(money(x, "The price paid"))
+        elif k == "floor":
+            out[k] = float(money(x, "The lowest balance"))
         elif k == "boughtOn":
             out[k] = day(x, "Bought on").isoformat()
         else:

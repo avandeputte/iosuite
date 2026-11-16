@@ -412,3 +412,16 @@ a.thing:hover { box-shadow: var(--shadow); }
   .recur.flagged .amt { min-width: 0; text-align: left; margin-right: auto; }
   .recur.found .acts { flex-basis: 100%; justify-content: flex-end; }
 }
+
+/* the cash forecast on an account's page: what is to come, each with the balance after it */
+.forecast h2 { flex-wrap: wrap; gap: 8px; }
+.forecast .rows.fc .r { gap: 12px; }
+.forecast .rows.fc .num { min-width: 96px; text-align: right; }
+.forecast .rows.fc .bal { min-width: 110px; }
+.forecast .fchead .r { color: var(--fg2); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; min-height: 28px; }
+.forecast .main .tag { margin-left: 8px; vertical-align: middle; }
+@media (max-width: 700px) {
+  .forecast .rows.fc .num { min-width: 72px; }
+  .forecast .rows.fc .bal { min-width: 80px; }
+  .forecast .rows.fc .main small { display: none; }
+}
