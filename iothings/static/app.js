@@ -878,6 +878,31 @@ async function showImport(page) {
       showJob(j);
     } catch (x) { fill(srvOut, h('p', { class: 'err' }, x.message)); }
   };
+  // the whole inventory as one PDF: made in the background, then downloaded
+  const pdfOut = h('div', { class: 'importres' });
+  const pdfOld = h('input', { type: 'checkbox' });
+  let pdfTimer = null;
+  const mb = (n) => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+  const showPdf = (j, quiet) => {
+    clearTimeout(pdfTimer);
+    if (!j || j.state === 'idle' || (quiet && j.state === 'failed')) { fill(pdfOut); return; }
+    if (j.state === 'running') {
+      fill(pdfOut, h('div', { class: 'draftnote' }, icon('print', 's'), j.total ? `Making it: ${j.done} of ${j.total} things…` : 'Making it…'));
+      pdfTimer = setTimeout(() => pollPdf(false), 1200);
+      return;
+    }
+    if (j.state === 'failed') { fill(pdfOut, h('p', { class: 'err' }, `The PDF could not be made: ${j.error}`)); return; }
+    fill(pdfOut,
+      h('div', { class: 'draftnote' }, icon('check', 's'), `Ready: ${j.things} things on ${j.pages} pages, with ${j.files} photos and papers (${mb(j.size)}), made ${(j.finished || '').replace('T', ' ').slice(0, 16)}.`),
+      h('p', null, h('a', { class: 'pillbtn primary', href: 'api/export-pdf/file', download: '' }, icon('download', 's'), 'Download the PDF')),
+      j.missing && j.missing.length ? [h('p', { class: 'muted small' }, `Not in the PDF (not a picture or a PDF), still kept in ioThings (${j.missing.length}):`),
+        h('ul', { class: 'muted small' }, j.missing.map((x) => h('li', null, x)))] : null);
+  };
+  const pollPdf = async (quiet) => { if (!document.body.contains(pdfOut)) return; try { showPdf(await api('api/export-pdf'), quiet); } catch (e) { if (!quiet) fill(pdfOut, h('p', { class: 'err' }, e.message)); } };
+  const makePdf = async () => {
+    fill(pdfOut, h('p', { class: 'muted' }, 'Starting…'));
+    try { showPdf(await api('api/export-pdf', { method: 'POST', json: { archived: pdfOld.checked } })); } catch (x) { fill(pdfOut, h('p', { class: 'err' }, x.message)); }
+  };
   put(page, h('div', { class: 'pagehead' }, h('h1', null, 'Import and export')),
     canEditAll() ? h('form', { class: 'box importbox', onsubmit: fromServer }, h('h2', null, icon('download'), 'From a Homebox server'),
       h('p', null, 'Everything in your Homebox, the photos, manuals, receipts, warranties and the maintenance log too, straight from Homebox itself. Give its address and the email and password you sign in to it with: they are used for this import and not kept.'),
@@ -891,8 +916,13 @@ async function showImport(page) {
     h('div', { class: 'box' }, h('h2', null, icon('upload'), 'Export'),
       h('p', null, 'Every thing as a spreadsheet (CSV), in Homebox’s columns: open it in a spreadsheet, or take it to Homebox or another app.'),
       h('div', { class: 'exports chiprow' }, h('a', { class: 'pillbtn', href: 'api/export.csv', download: '' }, icon('download', 's'), 'Everything'),
-        h('a', { class: 'pillbtn', href: 'api/export.csv?archived=false', download: '' }, icon('download', 's'), 'Only what you still have'))));
+        h('a', { class: 'pillbtn', href: 'api/export.csv?archived=false', download: '' }, icon('download', 's'), 'Only what you still have'))),
+    h('div', { class: 'box' }, h('h2', null, icon('print'), 'For your insurer: everything in one PDF'),
+      h('p', null, 'Every thing with all its details, its photos, its maintenance log, and its receipts, warranties and manuals, in one PDF with a list and a total at the front. Keep it somewhere other than this house (a cloud drive, a USB stick at work, an email to yourself), and make a new one now and then: if there is a fire or a theft, it is what you need for the claim.'),
+      h('label', { class: 'check' }, pdfOld, h('span', null, 'Put the archived and sold things in too')),
+      h('p', null, h('button', { class: 'pillbtn primary', onclick: makePdf }, icon('print', 's'), 'Make the PDF')), pdfOut));
   if (canEditAll()) poll();  // an import that is running (or just ran) shows where it is
+  pollPdf(true);
 }
 
 // ------------------------------------------------------------------ settings

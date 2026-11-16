@@ -22,6 +22,7 @@ $STD apt-get install -y \
   python3-venv \
   python3-pip \
   mariadb-client \
+  fonts-dejavu-core \
   curl
 msg_ok "Installed Dependencies"
 

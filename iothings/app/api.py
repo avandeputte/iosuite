@@ -9,10 +9,10 @@ import urllib.parse
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from iosuite_shared.access import json_body
 
-from app import access, files, homebox, homebox_api, model, upkeep
+from app import access, files, homebox, homebox_api, model, pdf, upkeep
 
 router = APIRouter()
 
@@ -317,6 +317,30 @@ def export_csv(request: Request, archived: bool = True):
     body = homebox.export(archived)
     return Response(body, media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="iothings-{dt.date.today().isoformat()}.csv"'})
+
+
+# ---- the whole inventory as one PDF (for the insurer, kept somewhere else)
+
+@router.post("/api/export-pdf", dependencies=[access.signed_in])
+async def export_pdf_start(request: Request):
+    """{archived?: true to put the archived and sold things in too}: start making the PDF of every thing with its
+    details, photos, receipts, warranties and manuals. It is made in the background: GET this address for how far it
+    got, then GET /api/export-pdf/file."""
+    body = await json_body(request)
+    return pdf.start(request.state.user, bool(body.get("archived")))
+
+
+@router.get("/api/export-pdf", dependencies=[access.signed_in])
+def export_pdf_progress():
+    """{state: idle|running|done|failed, done, total, things, pages, files, size, missing: [files not in it], ready}."""
+    return pdf.progress()
+
+
+@router.get("/api/export-pdf/file", dependencies=[access.signed_in])
+def export_pdf_file():
+    """The last PDF made, as a download."""
+    path, name = pdf.file()
+    return FileResponse(path, media_type="application/pdf", filename=name)
 
 
 # ---- the app's settings

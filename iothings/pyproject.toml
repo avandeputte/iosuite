@@ -18,6 +18,8 @@ dependencies = [
   "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
   "mcp<3",                        # the MCP server at /mcp
   "pillow>=10,<13",               # the small pictures of the photos
+  "fpdf2>=2.7,<3",                # the inventory as one PDF (for the insurer)
+  "pypdf>=4,<8",                  # the receipts and manuals that are PDFs, put into it
 ]
 
 [project.optional-dependencies]

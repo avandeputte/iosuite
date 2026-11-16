@@ -39,6 +39,13 @@ single-page vanilla JS app, with everything stored in MariaDB / MySQL (the files
 - **The things as cards or a table**, by name, the newest, recently changed, price, when bought or when the warranty
   ends; what they cost together on the front page. **Duplicate** makes the next one of a kind quickly. **Print** gives
   one thing on paper.
+- **For the insurer: everything in one PDF** (Import and export, anyone): every thing with all its details, photos,
+  maintenance log, and its receipts, warranties and manuals (pictures shown, PDFs put in whole after the thing's page),
+  behind a front page with the total paid and a list of everything that links to each thing. The PDF's bookmarks go
+  by place and thing. Keep it away from the house and make a new one now and then. Photos are made smaller so the
+  file stays easy to copy; a file that is neither a picture nor a PDF is named so it can be found here. It is made in
+  the background; the last one is kept until the next one or a restart. DejaVu Sans writes it when the system has it
+  (Docker and the Proxmox installer add `fonts-dejavu-core`), Helvetica otherwise.
 - **Homebox, straight from the server** (editors, Import and export › From a Homebox server): give Homebox's address
   and the email and password you sign in to it with, and ioThings reads everything through Homebox's API: the things
   with all their details, the places, the labels with their colours, the own fields, the **photos, manuals, receipts
@@ -136,6 +143,7 @@ pull the image.
 | For | Standard | Where |
 | --- | --- | --- |
 | Web and JSON clients | **REST/JSON**: things (list, search, by place or label, archived), one thing, add, change, duplicate, delete, its files, upkeep and log; places and labels | `/api/`, OpenAPI docs at `/api/docs` |
+| Inventory PDF | everything, photos and papers included, as one PDF | `POST`/`GET /api/export-pdf`, `GET /api/export-pdf/file` |
 | Homebox | Homebox's CSV, in and out; everything from a Homebox server, files and log too | `POST /api/import/homebox`, `GET /api/export.csv`, `POST`/`GET /api/import/homebox-server` |
 | AI assistants | **Model Context Protocol** (streamable HTTP, and stdio) | `https://host/mcp` (switched on in Settings › Server), or every app's tools at ioStart's `/mcp` |
 
