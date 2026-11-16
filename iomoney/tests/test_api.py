@@ -278,6 +278,55 @@ def test_recurring_flags_a_missed_payment_and_a_changed_amount(client):
     assert next(x for x in client.get("/api/recurring").json()["items"] if x["name"] == "ACME PAYROLL")["flag"] is None
 
 
+def test_cash_forecast_from_recurring_and_steady_transfers(client):
+    a = add(client, balance=1000)
+    visa = add(client, name="Visa", kind="credit", balance=300)
+    today = dt.date.today()
+    ago = lambda d: (today - dt.timedelta(days=d)).isoformat()  # noqa: E731
+    post = lambda aid, **b: client.post(f"/api/accounts/{aid}/transactions", json=b)  # noqa: E731
+    # a paycheck every two weeks (the last one 4 days ago), rent every month (20 days ago), the card paid every month
+    # (the last time 25 days ago, about 300), and a power bill kept for any account
+    for d in (32, 18, 4):
+        post(a["id"], day=ago(d), amount=2000, merchant="ACME PAYROLL")
+    for d in (81, 51, 20):
+        post(a["id"], day=ago(d), amount=-1500, merchant="Rent")
+    for d, amt in ((85, 280), (55, 300), (25, 320)):
+        post(a["id"], day=ago(d), amount=-amt, merchant="VISA PAYMENT", category="Credit Card Payment")
+        assert "transfer" in post(visa["id"], day=ago(d), amount=amt, merchant="Payment thank you").json()
+    mk = lambda **b: client.post("/api/recurring", json=b)  # noqa: E731
+    assert mk(name="ACME PAYROLL", amount=2000, flow="in", frequency="biweekly", day=ago(4), accountId=a["id"]).status_code == 201
+    assert mk(name="Rent", amount=1500, day=ago(20), accountId=a["id"]).status_code == 201
+    assert mk(name="Power co", amount=90, day=ago(3)).status_code == 201
+    f = client.get(f"/api/accounts/{a['id']}/forecast?days=30").json()
+    start = f["start"]  # what the account holds after these
+    assert f["days"] == 30 and f["floor"] is None and f["unassigned"] == 1
+    names = [e["name"] for e in f["events"]]
+    assert names.count("ACME PAYROLL") == 2 and names.count("Rent") == 1 and names.count("To Visa") == 1 and "Power co" not in names
+    pay = [e for e in f["events"] if e["name"] == "ACME PAYROLL"]
+    assert [e["day"] for e in pay] == [ago(-10), ago(-24)] and pay[0]["amount"] == 2000
+    card = next(e for e in f["events"] if e["name"] == "To Visa")
+    assert card["amount"] == -300 and card["approximate"] and card["kind"] == "transfer"
+    assert f["end"] == start + 4000 - 1500 - 300 and f["events"][-1]["balance"] == f["end"] and len(f["points"]) == 31
+    # the card and the rent come before the first paycheck here or not, by the calendar: the low point follows
+    low = min(e["balance"] for e in f["events"])
+    assert f["low"]["value"] == min(low, start) and f["below"] is (low < 0)
+    # a floor: under it, the account is among the warnings
+    assert client.patch(f"/api/accounts/{a['id']}", json={"details": {"floor": 9000}}).json()["details"]["floor"] == 9000
+    f = client.get(f"/api/accounts/{a['id']}/forecast?days=30").json()
+    assert f["floor"] == 9000 and f["below"] and f["belowOn"] == today.isoformat()
+    w = client.get("/api/forecast").json()["items"]
+    assert [x["name"] for x in w] == ["Checking"] and w[0]["floor"] == 9000
+    assert client.patch(f"/api/accounts/{a['id']}", json={"details": {"floor": ""}}).json()["details"] == {}
+    # a paycheck a few days late is still expected (today); one that did not come is left out, and said so
+    db.ex("DELETE FROM mny_transactions WHERE merchant = 'ACME PAYROLL' AND day = %s", (ago(4),))
+    f = client.get(f"/api/accounts/{a['id']}/forecast?days=30").json()
+    pay = [e for e in f["events"] if e["name"] == "ACME PAYROLL"]
+    assert pay[0]["day"] == today.isoformat() and pay[0]["late"] and len(pay) == 3
+    db.ex("DELETE FROM mny_transactions WHERE merchant = 'ACME PAYROLL' AND day = %s", (ago(18),))
+    pay = [e for e in client.get(f"/api/accounts/{a['id']}/forecast?days=30").json()["events"] if e["name"] == "ACME PAYROLL"]
+    assert pay == [] and client.get(f"/api/accounts/{a['id']}/forecast?days=30").json()["leftOut"] == ["ACME PAYROLL"]
+
+
 def test_recurring_found_despite_outliers_renames_and_shared_payees(client):
     """What a real household's transactions look like: a bonus among the paychecks, a payee Monarch renamed while the
     bank's text stayed, two loans paid to one bank, a loan's payment linked as a transfer, a bill every two months, a
@@ -386,6 +435,32 @@ def test_settings_and_admin_only(client, as_user):
     as_user("ed", "editor")
     assert client.put("/api/settings", json={"currency": "USD"}).status_code == 403
     assert client.post("/api/monarch/sync").status_code == 403
+
+
+def test_loan_payoff_with_rate_payment_and_extra(client):
+    loan = add(client, name="Mortgage", kind="loan", balance=200000)
+    p = client.get(f"/api/accounts/{loan['id']}/payoff").json()
+    assert p["needs"] == ["rate"] and p["balance"] == 200000
+    assert client.patch(f"/api/accounts/{loan['id']}", json={"details": {"rate": 101}}).status_code == 400
+    assert client.patch(f"/api/accounts/{loan['id']}", json={"details": {"rate": 6}}).json()["details"]["rate"] == 6
+    assert client.get(f"/api/accounts/{loan['id']}/payoff").json()["needs"] == ["payment"]  # no history to work it out from
+    client.patch(f"/api/accounts/{loan['id']}", json={"details": {"payment": 1199.10}})
+    p = client.get(f"/api/accounts/{loan['id']}/payoff").json()
+    today = dt.date.today()
+    assert p["months"] in (360, 361) and not p["never"] and not p["paymentEstimated"]  # a few cents left for a last payment
+    assert p["payoff"][:4] in (str(today.year + 30), str(today.year + 31))
+    assert 231600 < p["interest"] < 231750 and p["total"] == round(200000 + p["interest"], 2) and p["extra"] is None
+    x = client.get(f"/api/accounts/{loan['id']}/payoff?extra=200").json()["extra"]
+    assert x["payment"] == 1399.10 and x["months"] < 270 and x["savedMonths"] == p["months"] - x["months"] and x["savedInterest"] > 60000
+    # a payment that does not cover the interest (1000 a month at 6% on 200000) never pays it off
+    client.patch(f"/api/accounts/{loan['id']}", json={"details": {"payment": 900}})
+    assert client.get(f"/api/accounts/{loan['id']}/payoff").json()["never"] is True
+    # without a payment given: from how the balance went down (1000 a month here) plus a month's interest
+    client.patch(f"/api/accounts/{loan['id']}", json={"details": {"payment": ""}})
+    db.ex("INSERT INTO mny_balances (account_id, day, balance, source) VALUES (%s, %s, 203000, 'manual')", (loan["id"], today - dt.timedelta(days=91)))
+    p = client.get(f"/api/accounts/{loan['id']}/payoff").json()
+    assert p["paymentEstimated"] and 1990 < p["payment"] < 2030 and p["months"] < 150
+    assert client.get(f"/api/accounts/{add(client)['id']}/payoff").status_code == 400  # not for what is owned
 
 
 def test_value_or_transactions_and_the_groups(client):

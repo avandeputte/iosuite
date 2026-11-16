@@ -40,7 +40,7 @@ def test_mcp_money(client, as_user):
     names = {t["name"] for t in rpc(client, "tools/list", auth=auth)[1]["result"]["tools"]}
     assert {"overview", "net_worth_history", "search_transactions", "spending", "cash_flow", "categories", "update_transaction",
             "add_transaction", "portfolio", "get_quote", "add_holding", "update_holding", "delete_holding", "add_account",
-            "update_account", "add_valuation", "bills", "recurring_transactions", "sync_monarch", "diagnostics", "rules", "add_rule", "test_rule", "update_rule",
+            "update_account", "add_valuation", "bills", "recurring_transactions", "cash_forecast", "loan_payoff", "sync_monarch", "diagnostics", "rules", "add_rule", "test_rule", "update_rule",
             "delete_rule", "apply_rules", "link_transfers", "link_transaction", "unlink_transaction", "transfer_rules",
             "add_transfer_rule", "delete_transfer_rule", "monarch_new_accounts", "resolve_new_account"} <= names
     a = call(client, auth, "add_account", name="Checking", kind="cash", balance=1200)
@@ -50,10 +50,16 @@ def test_mcp_money(client, as_user):
           (a["id"], json.dumps({"accountNumber": "000123456789", "routingNumber": "043000096", "phone": "1-888-762-2265", "notes": "PIN 1234"})))
     assert call(client, auth, "bank_contact", account="Checking") == {"phone": "1-888-762-2265"}  # never the numbers or the notes
     assert "000123456789" not in json.dumps(call(client, auth, "overview"))
+    fc = call(client, auth, "cash_forecast", account="Checking", days=30)
+    assert fc["start"] == 1200 and fc["events"] == [] and "points" not in fc and call(client, auth, "cash_forecast")["warnings"] == []
     car = call(client, auth, "add_account", name="Family car", kind="vehicle", balance=20000, yearly_rate=-15)
     assert car["details"]["yearlyRate"] == -15
     assert call(client, auth, "add_account", name="Car loan", kind="loan", balance=8000)["kind"] == "loan"
     assert call(client, auth, "update_account", account="family car", loan="Car loan")["equity"] == 12000
+    assert call(client, auth, "loan_payoff", account="Car loan")["needs"] == ["rate"]
+    assert call(client, auth, "update_account", account="Car loan", interest_rate=5, monthly_payment=400)["details"]["rate"] == 5
+    lp = call(client, auth, "loan_payoff", account="Car loan", extra_per_month=100)
+    assert lp["months"] == 21 and lp["extra"]["months"] == 17 and lp["extra"]["savedInterest"] > 0
     assert call(client, auth, "add_valuation", account="Family car", value=19000, note="KBB")["balance"] == 19000
     t = call(client, auth, "add_transaction", account="Checking", amount=-25, merchant="Bakery", category="Groceries")
     assert t["amount"] == -25

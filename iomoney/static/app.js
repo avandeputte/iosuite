@@ -364,6 +364,7 @@ async function showOverview(page) {
   put(page, h('div', { class: 'pagehead' }, h('h1', null, 'Overview'), h('span', { class: 'grow' }), segs,
     canAdd() ? h('button', { class: 'pillbtn addacct', onclick: () => accountDialog() }, icon('add'), h('span', null, 'Account')) : null));
   put(page, flagNote());
+  put(page, await lowNote());
   put(page, syncNote());
   put(page, h('div', { class: 'hero' },
     h('div', null, h('div', { class: 'lbl' }, 'Net worth'), h('div', { class: 'big num' }, money(nw.netWorth, nw.currency))),
@@ -555,6 +556,8 @@ async function showAccount(page, r) {
       ['Yearly change', d.yearlyRate != null ? `${d.yearlyRate}%` : null], ['Loan', a.loan ? h('a', { class: 'lnk', href: `#/account/${a.loan.id}` }, a.loan.name) : null]].filter(([, v]) => v != null && v !== '');
     if (facts.length || d.notes) put(page, h('div', { class: 'box' }, h('h2', null, icon('tune'), 'Details'), h('div', { class: 'kvs' }, facts.flatMap(([k, v]) => [h('span', null, k), h('span', null, v)])), d.notes ? h('p', { class: 'notes' }, d.notes) : null));
   }
+  if (a.kind === 'cash' && tx && !a.closed) put(page, await forecastBox(a));
+  if (a.kind === 'loan' && !a.closed) put(page, await payoffBox(a));
   if (!thing) put(page, await infoBox(a));
   if (a.kind === 'investment') await drawHoldings(page, a.id, a);
   if (valued) {
@@ -572,6 +575,97 @@ async function showAccount(page, r) {
     put(page, h('h2', null, 'Recent transactions'), txList(t.items, false),
       t.total > t.items.length ? h('div', { class: 'more' }, h('a', { class: 'pillbtn', href: `#/transactions?account=${a.id}` }, `All ${t.total}`)) : null);
   }
+}
+/** "Forecast" on a cash account's page: where its balance goes over the coming weeks from its recurring transactions
+    and steady transfers, the lowest point against the balance it should not go under, and what is to come. */
+async function forecastBox(a) {
+  const days = store.get('fcdays') || '60';
+  let f;
+  try { f = await api(`api/accounts/${a.id}/forecast?days=${days}`); } catch { return null; }
+  const segs = h('div', { class: 'segs' }, [['30', '30 days'], ['60', '60 days'], ['90', '90 days']].map(([d, l]) => h('button', { class: d === days ? 'on' : null, onclick: () => { store.set('fcdays', d); onRoute(); } }, l)));
+  const floorBtn = a.writable ? h('button', { class: 'pillbtn tiny', onclick: () => floorDialog(a) }, icon('edit', 'xs'), f.floor != null ? `Keep above ${money(f.floor, f.currency)}` : 'Set a lowest balance') : (f.floor != null ? h('span', { class: 'muted small' }, `Keep above ${money(f.floor, f.currency)}`) : null);
+  const head = h('h2', null, icon('trend'), 'Forecast', h('span', { class: 'grow' }), floorBtn, segs);
+  if (!f.events.length) {
+    return h('div', { class: 'box forecast' }, head, h('p', { class: 'muted' }, 'Nothing known to come: the forecast uses the recurring transactions kept for this account (Recurring page) and the transfers it makes at a steady pace.',
+      f.leftOut.length ? ` Left out, as ${f.leftOut.length === 1 ? 'its' : 'their'} last payment did not come: ${f.leftOut.join(', ')}.` : '',
+      f.unassigned ? ` ${f.unassigned} recurring transaction${f.unassigned === 1 ? ' is' : 's are'} kept for any account: give ${f.unassigned === 1 ? 'it' : 'them'} this account to count ${f.unassigned === 1 ? 'it' : 'them'}.` : ''));
+  }
+  const under = f.floor != null ? `under ${money(f.floor, f.currency)}` : 'under zero';
+  const lowLine = f.below
+    ? h('div', { class: 'note warnnote' }, icon('warning', 's'), h('span', { class: 'grow' }, `${f.belowOn === today() ? `It is ${under} now` : `It would go ${under} on ${fmtDay(f.belowOn, true)}`}; the lowest point is ${money(f.low.value, f.currency)} on ${fmtDay(f.low.day, true)}.`))
+    : h('p', { class: 'muted small' }, `Lowest point: ${money(f.low.value, f.currency)} on ${fmtDay(f.low.day, true)} · ${money(f.end, f.currency)} after ${f.days} days`);
+  const row = (e) => h('li', null, h('div', { class: 'r' }, h('span', { class: 'day' }, fmtDay(e.day)),
+    h('span', { class: 'main' }, h('b', null, e.name, e.late ? h('span', { class: 'tag warn', title: 'It was due a few days ago and has not been seen yet: expected now' }, 'Late') : null),
+      h('small', null, { recurring: 'Recurring', subscription: 'Subscription', transfer: 'Transfer at a steady pace' }[e.kind])),
+    h('span', { class: `num ${e.amount < 0 ? '' : 'pos'}` }, `${e.approximate ? '≈ ' : ''}${money(e.amount, f.currency)}`),
+    h('span', { class: `num bal ${e.balance < (f.floor != null ? f.floor : 0) ? 'neg' : 'muted'}` }, money(e.balance, f.currency))));
+  return h('div', { class: 'box forecast' }, head, lowLine, lineChart(f.points, { height: 160, cur: f.currency }),
+    h('ul', { class: 'rows fc' }, h('li', { class: 'fchead' }, h('div', { class: 'r' }, h('span', { class: 'day' }, 'Day'), h('span', { class: 'main' }, 'To come'), h('span', { class: 'num' }, 'Amount'), h('span', { class: 'num bal' }, 'Balance'))), f.events.map(row)),
+    h('p', { class: 'muted small' }, 'Everyday spending is not counted: this is the most the account will hold.',
+      f.leftOut.length ? ` Left out, as ${f.leftOut.length === 1 ? 'its' : 'their'} last payment did not come: ${f.leftOut.join(', ')}.` : '',
+      f.unassigned ? ` ${f.unassigned} recurring transaction${f.unassigned === 1 ? '' : 's'} kept for any account ${f.unassigned === 1 ? 'is' : 'are'} left out.` : ''));
+}
+/** "Payoff" on a loan's page: from its interest rate and monthly payment, when it is paid off and the interest
+    still to pay; with more paid a month, what that saves. */
+async function payoffBox(a) {
+  let p;
+  try { p = await api(`api/accounts/${a.id}/payoff`); } catch { return null; }
+  const edit = a.writable ? h('button', { class: 'pillbtn tiny', onclick: () => loanDialog(a, p) }, icon('edit', 'xs'), 'Rate and payment') : null;
+  const head = h('h2', null, icon('loan'), 'Payoff', h('span', { class: 'grow' }), edit);
+  if (p.needs.length) {
+    return h('div', { class: 'box payoff' }, head, h('p', { class: 'muted' }, p.needs[0] === 'rate' ? 'Give the loan’s interest rate to see when it is paid off and the interest still to pay.'
+      : 'Give what is paid a month: its balance has no history yet to work it out from.'));
+  }
+  const span = (m) => (m >= 12 ? `${Math.floor(m / 12)} year${m >= 24 ? 's' : ''}${m % 12 ? ` ${m % 12} month${m % 12 === 1 ? '' : 's'}` : ''}` : `${m} month${m === 1 ? '' : 's'}`);
+  const monthOf = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const stat = (l, v, sub) => h('div', { class: 'stat' }, h('div', { class: 'lbl' }, l), h('div', { class: 'val num' }, v), sub ? h('small', { class: 'muted' }, sub) : null);
+  const cards = h('div', { class: 'cards' },
+    stat('Rate', `${p.rate}%`, 'a year'),
+    stat('Payment', `${p.paymentEstimated ? '≈ ' : ''}${money(p.payment, p.currency)}`, p.paymentEstimated ? 'a month, from how the balance went down' : 'a month'),
+    p.never ? stat('Paid off', 'Never', 'the payment does not cover the interest') : stat('Paid off', monthOf(p.payoff), `in ${span(p.months)}`),
+    p.never ? null : stat('Interest left', money(p.interest, p.currency), `${money(p.total, p.currency)} in all`));
+  const extra = inp(store.get(`extra${a.id}`) || '', { inputmode: 'decimal', placeholder: '100', style: { maxWidth: '120px' } });
+  const result = h('p', { class: 'extraout' });
+  const run = async () => {
+    const v = extra.value.trim();
+    store.set(`extra${a.id}`, v);
+    if (!v || !(parseFloat(v) > 0)) { result.replaceChildren(); return; }
+    try {
+      const x = (await api(`api/accounts/${a.id}/payoff?extra=${encodeURIComponent(v)}`)).extra;
+      if (!x || x.never) { result.textContent = 'Even so, the payment does not cover the interest.'; return; }
+      put(result, h('b', null, `Paid off ${monthOf(x.payoff)}`), p.never ? ` (in ${span(x.months)}), with ${money(x.interest, p.currency)} of interest.`
+        : [` · ${span(x.savedMonths)} sooner · `, h('span', { class: 'num pos' }, money(x.savedInterest, p.currency)), ' less interest']);
+    } catch (e) { result.textContent = e.message || String(e); }
+  };
+  let timer = null;
+  extra.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { result.replaceChildren(); run(); }, 350); });
+  if (extra.value) run();
+  return h('div', { class: 'box payoff' }, head, cards,
+    h('div', { class: 'extrarow' }, h('label', null, 'Paying', extra, 'more a month'), result));
+}
+async function loanDialog(a, p) {
+  const d = a.details || {};
+  const rate = inp(d.rate != null ? d.rate : '', { inputmode: 'decimal', placeholder: '6.25' });
+  const pay = inp(d.payment != null ? d.payment : '', { inputmode: 'decimal', placeholder: p && p.paymentEstimated ? `about ${p.payment}` : '' });
+  const body = h('div', null, h('div', { class: 'grid' }, fld('Interest rate (% a year)', rate), fld('Monthly payment', pay)),
+    h('p', { class: 'muted small' }, 'The payment without what goes to escrow (taxes, insurance). Left empty, it is worked out from how the balance went down over the past three months.'));
+  setTimeout(() => rate.focus(), 50);
+  if (!await dialog(`${a.name}: rate and payment`, body, [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }])) return;
+  try { await api(`api/accounts/${a.id}`, { method: 'PATCH', json: { details: { rate: rate.value.trim(), payment: pay.value.trim() } } }); await refreshSummary(); toast('Saved'); onRoute(); } catch (e) { fail(e); }
+}
+async function floorDialog(a) {
+  const v = inp(a.details && a.details.floor != null ? a.details.floor : '', { inputmode: 'decimal', placeholder: '500' });
+  const body = h('div', null, fld('Lowest balance', v, true), h('p', { class: 'muted small' }, 'The forecast warns, here and on the overview, when the balance would go under it. Left empty: under zero.'));
+  setTimeout(() => v.focus(), 50);
+  if (!await dialog(`${a.name}: keep above`, body, [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }])) return;
+  try { await api(`api/accounts/${a.id}`, { method: 'PATCH', json: { details: { floor: v.value.trim() } } }); await refreshSummary(); toast('Saved'); onRoute(); } catch (e) { fail(e); }
+}
+/** The overview: the cash accounts that would go under their lowest balance in the next 30 days. */
+async function lowNote() {
+  let w = [];
+  try { w = (await api('api/forecast?days=30')).items || []; } catch { return null; }
+  return w.map((x) => h('div', { class: 'note warnnote' }, icon('warning', 's'),
+    h('span', { class: 'grow' }, h('a', { class: 'lnk', href: `#/account/${x.accountId}` }, x.name), `${x.belowOn === today() ? ' is under' : ' would go under'} ${x.floor != null ? money(x.floor, x.currency) : 'zero'}${x.belowOn === today() ? ' now' : ` on ${fmtDay(x.belowOn, true)}`} (lowest: ${money(x.low.value, x.currency)} on ${fmtDay(x.low.day, true)}), counting what is known to come.`)));
 }
 async function quietBank(a, quiet) {
   try { await api(`api/accounts/${a.id}`, { method: 'PATCH', json: { flagStale: !quiet } }); await refreshSummary(); toast(quiet ? 'It won’t be flagged' : 'It will be flagged when behind'); onRoute(); } catch (e) { fail(e); }

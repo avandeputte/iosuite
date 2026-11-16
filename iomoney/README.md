@@ -113,6 +113,17 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   when one was due, between half and twice the amount) as changed. Flagged ones are listed first on the Recurring
   page (To check: Use the new amount, Dismiss, It stopped), counted in the sidebar and on the overview, and carry
   `flag` in the API and MCP. A flag goes when the next payment comes, the amount is updated or it is dismissed.
+- **Cash forecast**: on a cash account's page, its balance over the next 30, 60 or 90 days from what is known to
+  come: the recurring transactions kept for that account, and the transfers it makes at a steady pace (a card paid
+  every month, money moved to savings; the middle amount of the last three), each on the days its pace gives from
+  its last payment. One a few days late is expected today; one whose payment did not come is left out and named.
+  With a lowest balance for the account (zero without one), the forecast says when it would go under it, there and
+  on the overview. Everyday spending and the recurring transactions kept for any account are not counted.
+  `GET /api/accounts/{id}/forecast`, `GET /api/forecast`; MCP `cash_forecast`.
+- **Loan payoff**: on a loan's page, from its interest rate (percent a year) and monthly payment (given, or worked
+  out from how the balance went down over the past three months plus a month's interest): when it is paid off, the
+  interest still to pay, and what paying more a month saves (months and interest). Interest is counted by the month
+  on what is owed. `GET /api/accounts/{id}/payoff?extra=`; MCP `loan_payoff`.
 - **Subscriptions**: Netflix, Max, YouTube, Spotify, Disney+, iCloud, Amazon Prime and other services (or a category
   like Streaming or Subscriptions) are marked as subscriptions, found after two payments already; the Recurring page
   shows them in a section of their own with what they cost a month and a year. Any recurring one can be marked or

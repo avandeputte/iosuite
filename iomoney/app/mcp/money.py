@@ -5,7 +5,7 @@ from typing import Literal, Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import __version__, config, model, monarch, quotes, recurring, transfers
+from app import __version__, config, forecast, model, monarch, payoff, quotes, recurring, transfers
 from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, clamp, find_account, guard, link, need_admin, server, who
 
 
@@ -357,10 +357,13 @@ def add_account(name: str, kind: str, balance: float = 0, currency: Optional[str
 @server.tool(annotations=WRITES)
 def update_account(account: str, name: Optional[str] = None, hidden: Optional[bool] = None, in_net_worth: Optional[bool] = None,
                    balance: Optional[float] = None, loan: Optional[str] = None, yearly_rate: Optional[float] = None,
-                   track: Optional[str] = None) -> dict:
+                   track: Optional[str] = None, interest_rate: Optional[float] = None, monthly_payment: Optional[float] = None,
+                   lowest_balance: Optional[float] = None) -> dict:
     """Change an account (id or name): its name, hidden, counted in the net worth, the balance (manual accounts),
-    the loan against a house or a car (the loan's id or name; '' for none), its yearly change in percent, and what
-    is followed: track 'value' (the balance or value alone, its transactions out of sight) or 'transactions'."""
+    the loan against a house or a car (the loan's id or name; '' for none), its yearly change in percent, what
+    is followed: track 'value' (the balance or value alone, its transactions out of sight) or 'transactions'; a
+    loan's interest_rate (percent a year) and monthly_payment (for loan_payoff); a cash account's lowest_balance
+    (cash_forecast warns under it)."""
     u = who()
     a = find_account(u, account)
     b = {}
@@ -369,8 +372,10 @@ def update_account(account: str, name: Optional[str] = None, hidden: Optional[bo
             b[k] = v
     if loan is not None:
         b["loanId"] = find_account(u, loan)["id"] if loan else None
-    if yearly_rate is not None:
-        b["details"] = {"yearlyRate": yearly_rate}
+    details = {k: v for k, v in (("yearlyRate", yearly_rate), ("rate", interest_rate), ("payment", monthly_payment),
+                                 ("floor", lowest_balance)) if v is not None}
+    if details:
+        b["details"] = details
     return _acct(u, guard(model.update_account, u, a, b))
 
 
@@ -405,6 +410,36 @@ def recurring_transactions() -> dict:
     u = who()
     _need_role(u)
     return {"items": recurring.items(u), "found": recurring.found(u)}
+
+
+@server.tool(annotations=READ_ONLY)
+def loan_payoff(account: str, extra_per_month: float = 0) -> dict:
+    """When a loan (id or name) is paid off and the interest still to pay, from its interest rate and monthly payment
+    (set with update_account: interest_rate, monthly_payment; the payment is worked out from how the balance went
+    down when not given); with extra_per_month, what paying that much more a month saves (months and interest).
+    needs says what is missing (rate, payment)."""
+    u = who()
+    a = find_account(u, account)
+    if a["is_asset"]:
+        raise ToolError("A payoff is for what is owed: a loan or a card")
+    return guard(payoff.payoff, u, a, extra_per_month or None)
+
+
+@server.tool(annotations=READ_ONLY)
+def cash_forecast(account: Optional[str] = None, days: int = 60) -> dict:
+    """Where a cash account's balance goes over the coming days, from the recurring transactions kept for it (bills,
+    subscriptions, paychecks) and the transfers it makes at a steady pace (a card paid monthly): each event with the
+    balance after it, the lowest point, and whether it goes under the balance it should not go under (floor; zero
+    without one). Everyday spending is not counted. account: its id or name; left out: the cash accounts that would go
+    under in that time (warnings)."""
+    u = who()
+    _need_role(u)
+    days = clamp(days, 7, 366)
+    if not account:
+        return {"warnings": forecast.warnings(u, days), "accounts": [{"id": a["id"], "name": a["name"]} for a in forecast.accounts(u)]}
+    f = forecast.forecast(u, find_account(u, account), days)
+    f.pop("points")
+    return f
 
 
 @server.tool(annotations=WRITES)
