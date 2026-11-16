@@ -522,6 +522,19 @@ async def change_recurring(rid: int, request: Request):
     return recurring.public(recurring.update(u, recurring.item(u, rid), b), u)
 
 
+@router.get("/api/transactions/{tid}/recurring", dependencies=[access.signed_in])
+def transaction_recurring(tid: int, request: Request):
+    """The recurring transaction this one is (item), or one to add from it (suggestion: how often and the usual
+    amount from the transactions like it), with whether you may change it."""
+    u = _u(request)
+    t = model.transaction(u, tid)
+    out = recurring.for_transaction(u, t)
+    a = model.account_row(t["account_id"])
+    out["writable"] = shared_users.can_write(u) if a["owner_id"] is None else model.can_write(u, a)
+    out["frequencies"] = [{"value": f, "label": recurring.FREQ_LABEL[f]} for f in recurring.FREQS]
+    return out
+
+
 @router.delete("/api/recurring/{rid}", dependencies=[access.signed_in])
 def remove_recurring(rid: int, request: Request):
     u = _u(request)

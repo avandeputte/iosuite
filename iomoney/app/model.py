@@ -594,7 +594,7 @@ def tx_public(t: dict, u: dict = None) -> dict:
     out = {"id": t["id"], "accountId": t["account_id"], "account": t.get("account_name"), "day": t["day"].isoformat(),
            "amount": n2(t["amount"]), "currency": t.get("currency"), "merchant": t["merchant"], "description": t["description"],
            "category": t["category"], "group": t["category_group"], "notes": t["notes"], "tags": tags,
-           "pending": bool(t["pending"]), "hidden": bool(t["hidden"]), "recurring": bool(t["recurring"]),
+           "pending": bool(t["pending"]), "hidden": bool(t["hidden"]),
            "edited": bool(t["edited"]), "source": t["source"], "reconciled": bool(t.get("reconciled"))}
     if u is not None:
         out["writable"] = can_write(u, t)
@@ -650,8 +650,10 @@ def find_transactions(u: dict, q: str = "", account: int = None, category: str =
 
 def with_transfers(items: list[dict], u: dict) -> list[dict]:
     """Each transaction that is half of a transfer gets transfer: {id, accountId, account, how} (the other half; its
-    account left out when it is someone else's private one)."""
-    from app import transfers
+    account left out when it is someone else's private one); and each gets recurring: the household's recurring
+    transaction it is ({id, name, subscription}), or None."""
+    from app import recurring, transfers
+    recurring.mark(items, u)
     halves = transfers.halves_of([t["id"] for t in items])
     others = {}
     if halves:

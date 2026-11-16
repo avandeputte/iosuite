@@ -381,6 +381,7 @@ a.thing:hover { box-shadow: var(--shadow); }
 .banner.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); }
 
 /* Recurring and Categories */
+.txs .p .rec { display: inline-flex; vertical-align: middle; margin-left: 6px; color: var(--c-green); }
 .recurhead { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 26px 0 6px; font-size: 18px; }
 .recurhead .small { font-size: var(--fs-s); font-weight: 400; margin-left: auto; }
 .recur .main .tag { margin-left: 8px; vertical-align: middle; }

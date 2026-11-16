@@ -291,6 +291,46 @@ def delete(u: dict, r: dict) -> None:
     db.ex("DELETE FROM mny_recurring WHERE id = %s", (r["id"],))
 
 
+# ---- from one transaction
+
+def mark(items: list[dict], u: dict) -> list[dict]:
+    """Each transaction (as tx_public gives it) with recurring: {id, name, subscription} when it is one of the
+    household's recurring transactions this person sees, else None."""
+    kept = [r for r in db.q("SELECT * FROM mny_recurring") if _sees(u, r)] if items else []
+    for t in items:
+        probe = {"account_id": t["accountId"], "amount": t["amount"], "merchant": t["merchant"], "description": t["description"]}
+        r = next((r for r in kept if _hits(r, probe)), None)
+        t["recurring"] = {"id": r["id"], "name": r["name"], "subscription": bool(r["subscription"])} if r else None
+    return items
+
+
+def for_transaction(u: dict, t: dict, today: dt.date = None) -> dict:
+    """{item: the recurring transaction it is (as public), or None; suggestion: one to add from it (name, pattern,
+    account, way, amount, how often and whether the amount varies from the transactions like it, its date, category,
+    subscription)}."""
+    today = today or dt.date.today()
+    probe = {"account_id": t["account_id"], "amount": t["amount"], "merchant": t["merchant"], "description": t["description"]}
+    r = next((r for r in db.q("SELECT * FROM mny_recurring") if _sees(u, r) and _hits(r, probe)), None)
+    if r:
+        return {"item": public(r, u, today), "suggestion": None}
+    flow = "out" if Decimal(t["amount"]) < 0 else "in"
+    lab = _label(t) or (t["merchant"] or t["description"] or "").lower()[:120]
+    like = [x for x in db.q("SELECT day, amount, merchant, description FROM mny_transactions WHERE account_id = %s AND hidden = 0 "
+                            "AND day BETWEEN %s AND %s AND " + ("amount < 0" if flow == "out" else "amount > 0"),
+                            (t["account_id"], today - dt.timedelta(days=LOOK_BACK), today)) if _label(x) == lab]
+    by_day = {x["day"]: abs(Decimal(x["amount"])) for x in like} or {t["day"]: abs(Decimal(t["amount"]))}
+    days = sorted(by_day)
+    freq = _freq_of([(b - a).days for a, b in zip(days, days[1:])]) or "monthly"
+    amts = list(by_day.values())
+    med = Decimal(statistics.median(amts)).quantize(model.CENT) if len(amts) > 2 else abs(Decimal(t["amount"]))
+    name = t["merchant"] or lab
+    return {"item": None, "suggestion": {
+        "name": name, "pattern": lab, "accountId": t["account_id"], "flow": flow, "amount": model.n2(med),
+        "approximate": med > 0 and (max(amts) - min(amts)) / med > Decimal("0.02"), "frequency": freq,
+        "day": t["day"].isoformat(), "category": t["category"], "subscription": flow == "out" and looks_subscription(name, lab, t["category"]),
+        "count": len(days)}}
+
+
 # ---- found in the transactions
 
 def _key(account_id, flow: str, pattern: str) -> str:
