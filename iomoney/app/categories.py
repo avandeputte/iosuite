@@ -43,6 +43,11 @@ def items(u: dict) -> list[dict]:
                 f"JOIN mny_accounts a ON a.id = t.account_id WHERE {where} AND a.track = 'transactions' "
                 f"AND t.category IS NOT NULL GROUP BY t.category", args)
     out = {r["category"]: {"category": r["category"], "group": r["grp"], "count": r["n"], "kept": False} for r in rows}
+    for r in db.q(f"SELECT s.category, MAX(s.category_group) AS grp, count(*) AS n FROM mny_splits s "
+                  f"JOIN mny_transactions t ON t.id = s.transaction_id JOIN mny_accounts a ON a.id = t.account_id "
+                  f"WHERE {where} AND a.track = 'transactions' AND s.category IS NOT NULL GROUP BY s.category", args):
+        c = out.setdefault(r["category"], {"category": r["category"], "group": r["grp"], "count": 0, "kept": False})
+        c["count"] += r["n"]  # the parts of split transactions
     for r in db.q("SELECT name, grp FROM mny_categories"):
         c = out.setdefault(r["name"], {"category": r["name"], "group": None, "count": 0, "kept": True})
         c["kept"] = True
@@ -60,7 +65,8 @@ def _name(v, what: str = "The name") -> str:
 
 def _exists(name: str) -> bool:
     return bool(db.one("SELECT 1 AS x FROM mny_categories WHERE name = %s", (name,))
-                or db.one("SELECT 1 AS x FROM mny_transactions WHERE category = %s LIMIT 1", (name,)))
+                or db.one("SELECT 1 AS x FROM mny_transactions WHERE category = %s LIMIT 1", (name,))
+                or db.one("SELECT 1 AS x FROM mny_splits WHERE category = %s LIMIT 1", (name,)))
 
 
 def _group_now(name: str) -> str | None:
@@ -94,6 +100,7 @@ def _move(old: str, new: str | None, grp: str | None) -> int:
     db.ex("UPDATE mny_transactions SET category = %s, category_group = %s, "
           "words = TRIM(REPLACE(CONCAT(' ', words, ' '), CONCAT(' ', %s, ' '), CONCAT(' ', %s, ' '))) WHERE category = %s",
           (new, grp if new else None, model.words(old), model.words(new) if new else "", old))
+    db.ex("UPDATE mny_splits SET category = %s, category_group = %s WHERE category = %s", (new, grp if new else None, old))
     db.ex("UPDATE mny_rules SET set_category = %s WHERE set_category = %s", (new, old))
     db.ex("UPDATE mny_recurring SET category = %s WHERE category = %s", (new, old))
     # what a sync brings in later under the old name (or under a name that became the old one)
@@ -119,6 +126,7 @@ def change(u: dict, b: dict) -> dict:
             db.ex("DELETE FROM mny_categories WHERE name = %s", (old,))
         db.ex("INSERT INTO mny_categories (name, grp) VALUES (%s, %s) ON DUPLICATE KEY UPDATE grp = VALUES(grp)", (new, grp))
         db.ex("UPDATE mny_transactions SET category_group = %s WHERE category = %s", (grp, new))
+        db.ex("UPDATE mny_splits SET category_group = %s WHERE category = %s", (grp, new))
     return {"category": new, "group": grp, "moved": moved}
 
 

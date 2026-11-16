@@ -712,12 +712,14 @@ def _tx_filter(u: dict, q: str = "", account: int = None, category: str = None, 
     if account:
         where += " AND t.account_id = %s"
         args.append(int(account))
-    if category:
+    if category:  # a split transaction (app/splits.py) by its parts' categories, not its own
+        whole = "NOT EXISTS (SELECT 1 FROM mny_splits s WHERE s.transaction_id = t.id)"
         if category == "-":
-            where += " AND (t.category IS NULL OR t.category = '')"
+            where += (f" AND (((t.category IS NULL OR t.category = '') AND {whole}) OR EXISTS (SELECT 1 FROM mny_splits s "
+                      "WHERE s.transaction_id = t.id AND (s.category IS NULL OR s.category = '')))")
         else:
-            where += " AND t.category = %s"
-            args.append(category)
+            where += f" AND ((t.category = %s AND {whole}) OR EXISTS (SELECT 1 FROM mny_splits s WHERE s.transaction_id = t.id AND s.category = %s))"
+            args += [category, category]
     if start:
         where += " AND t.day >= %s"
         args.append(day(start))
@@ -773,10 +775,11 @@ def find_transactions(u: dict, q: str = "", account: int = None, category: str =
 
 def with_transfers(items: list[dict], u: dict) -> list[dict]:
     """Each transaction that is half of a transfer gets transfer: {id, accountId, account, how} (the other half; its
-    account left out when it is someone else's private one); and each gets recurring: the household's recurring
-    transaction it is ({id, name, subscription}), or None."""
-    from app import recurring, transfers
+    account left out when it is someone else's private one); each gets recurring: the household's recurring
+    transaction it is ({id, name, subscription}), or None; and splits: its parts when it is split over categories."""
+    from app import recurring, splits, transfers
     recurring.mark(items, u)
+    splits.mark(items)
     halves = transfers.halves_of([t["id"] for t in items])
     others = {}
     if halves:
@@ -852,8 +855,8 @@ def update_transaction(u: dict, t: dict, b: dict) -> dict:
     if sets:
         db.ex(f"UPDATE mny_transactions SET {', '.join(sets)}, edited = 1 WHERE id = %s", (*args, t["id"]))
         n = tx_row(t["id"])
-        db.ex("UPDATE mny_transactions SET words = %s WHERE id = %s",
-              (words(n["merchant"], n["description"], n["category"], n["category_group"], n["notes"], n["account_name"]), t["id"]))
+        from app import splits
+        splits.rewords(t["id"])
         if t["source"] == "manual":
             _move_balance(t["account_id"], Decimal(n["amount"]) - Decimal(t["amount"]))
     return tx_row(t["id"])
@@ -898,15 +901,22 @@ def _not_transfer() -> str:
 def spending(u: dict, start, end) -> dict:
     """Money out and in between two days, by category (transfers between the household's own accounts left out),
     in the household's currency."""
+    from app import splits
     where, args = _tx_filter(u, start=start, end=end)
+    where += f" AND {_not_transfer()}"
     rows = db.q(f"SELECT t.category, MAX(t.category_group) AS grp, a.currency, SUM(CASE WHEN t.amount < 0 THEN -t.amount ELSE 0 END) AS out_, "
                 f"SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END) AS in_, count(*) AS n "
-                f"FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id WHERE {where} AND {_not_transfer()} "
+                f"FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id WHERE {where} AND {splits.WHOLE} "
                 f"GROUP BY t.category, a.currency", args)
+    # a split transaction counts by its parts
+    rows = list(rows) + [{"category": p["category"], "grp": p["grp"], "currency": p["currency"], "n": 1,
+                          "out_": -p["amount"] if p["amount"] < 0 else 0, "in_": p["amount"] if p["amount"] > 0 else 0}
+                         for p in splits.by_category(where, args)]
     cats: dict = {}
     for r in rows:
         fx = rate(r["currency"])
         c = cats.setdefault(r["category"] or "", {"category": r["category"], "group": r["grp"], "out": Decimal(0), "in": Decimal(0), "count": 0})
+        c["group"] = c["group"] or r["grp"]
         c["out"] += Decimal(r["out_"]) * fx
         c["in"] += Decimal(r["in_"]) * fx
         c["count"] += r["n"]

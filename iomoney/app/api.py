@@ -14,7 +14,7 @@ from iosuite_shared import users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
 
-from app import access, categories, db, forecast, model, monarch, payoff, quotes, recurring, transfers
+from app import access, categories, db, forecast, model, monarch, payoff, quotes, recurring, splits, transfers
 
 router = APIRouter()
 
@@ -279,6 +279,17 @@ async def delete_category(request: Request):
 
 
 # ------------------------------------------------------------------ transfers between the household's own accounts
+
+@router.put("/api/transactions/{tid}/splits", dependencies=[access.signed_in])
+async def split_transaction(tid: int, request: Request):
+    """{items: [{amount, category?, notes?}]}: split the transaction over categories: two parts and more, each with
+    its share (a positive number, or signed as the transaction), together the whole amount; the spending by category
+    counts the parts in its place. {items: []}: whole again. The transaction comes back with its splits."""
+    u = _u(request)
+    b = await json_body(request)
+    t = await run_in_threadpool(lambda: splits.put(u, model.transaction(u, tid), b.get("items")))
+    return model.with_transfers([model.tx_public(t, u)], u)[0]
+
 
 @router.get("/api/transactions/{tid}/transfer", dependencies=[access.signed_in])
 def transaction_transfer(tid: int, request: Request):

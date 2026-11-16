@@ -5,7 +5,7 @@ from typing import Literal, Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import __version__, config, forecast, model, monarch, payoff, quotes, recurring, transfers
+from app import __version__, config, forecast, model, monarch, payoff, quotes, recurring, splits, transfers
 from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, clamp, find_account, guard, link, need_admin, server, who
 
 
@@ -114,6 +114,16 @@ def update_transaction(transaction_id: int, category: Optional[str] = None, note
                            "reconciled": reconciled}.items() if v is not None}
     t = guard(model.update_transaction, u, guard(model.transaction, u, transaction_id), b)
     return model.tx_public(t)
+
+
+@server.tool(annotations=WRITES)
+def split_transaction(transaction_id: int, parts: list[dict]) -> dict:
+    """Split a transaction over categories (one warehouse or online order with groceries, clothes and a gift): parts
+    [{amount, category, notes}], two and more, each amount its share as a positive number, together the whole amount.
+    The spending by category then counts the parts in its place. An empty list makes it whole again."""
+    u = who()
+    t = guard(splits.put, u, guard(model.transaction, u, transaction_id), parts)
+    return splits.mark([model.tx_public(t)])[0]
 
 
 @server.tool(annotations=ADDS)

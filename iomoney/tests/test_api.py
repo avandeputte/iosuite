@@ -398,6 +398,51 @@ def test_transactions_by_amount(client):
     assert client.get("/api/transactions", params={"amount": "lots"}).status_code == 400
 
 
+def test_a_transaction_split_over_categories(client, as_user):
+    a = add(client)
+    today = dt.date.today()
+    tx = lambda amt, m, **b: client.post(f"/api/accounts/{a['id']}/transactions", json={"amount": amt, "merchant": m, "day": today.isoformat(), **b}).json()  # noqa: E731
+    club = tx(-200, "Warehouse club", category="Shopping")
+    tx(-30, "Grocer", category="Groceries")
+    assert club["splits"] == []
+    put = lambda items: client.put(f"/api/transactions/{club['id']}/splits", json={"items": items})  # noqa: E731
+    assert put([{"amount": 200, "category": "Groceries"}]).status_code == 400  # one part is no split
+    r = put([{"amount": 120, "category": "Groceries"}, {"amount": 50, "category": "Clothing"}])
+    assert r.status_code == 400 and "170" in r.text
+    assert put([{"amount": 120, "category": "Groceries"}, {"amount": 0, "category": "Clothing"}]).status_code == 400
+    t = put([{"amount": 120, "category": "Groceries", "notes": "party food"}, {"amount": "50.00", "category": "Clothing"},
+             {"amount": -30, "category": None}]).json()
+    assert [(p["amount"], p["category"]) for p in t["splits"]] == [(-120, "Groceries"), (-50, "Clothing"), (-30, None)]
+    assert t["amount"] == -200 and t["category"] == "Shopping" and t["edited"] and t["splits"][0]["group"] is None
+    # the spending counts the parts, not the whole
+    s = client.get(f"/api/spending?start={today}&end={today}").json()
+    by = {c["category"]: c for c in s["categories"]}
+    assert s["spent"] == 230 and by["Groceries"]["spent"] == 150 and by["Groceries"]["count"] == 2
+    assert by["Clothing"]["spent"] == 50 and by[None]["spent"] == 30 and "Shopping" not in by
+    # found by its parts' categories and notes, not by its own category
+    find = lambda q: [x["merchant"] for x in client.get(f"/api/transactions?{q}").json()["items"]]  # noqa: E731
+    assert find("category=Clothing") == ["Warehouse club"] and set(find("category=Groceries")) == {"Warehouse club", "Grocer"}
+    assert find("category=Shopping") == [] and find("category=-") == ["Warehouse club"] and find("q=party") == ["Warehouse club"]
+    cats = {c["category"]: c["count"] for c in client.get("/api/categories").json()["items"]}
+    assert cats["Clothing"] == 1 and cats["Groceries"] == 2
+    # a category renamed takes the parts along; the note still found after another change
+    assert client.put("/api/categories", json={"name": "Clothing", "newName": "Clothes"}).status_code == 200
+    assert find("category=Clothes") == ["Warehouse club"]
+    client.patch(f"/api/transactions/{club['id']}", json={"notes": "membership renewed"})
+    assert find("q=party") == ["Warehouse club"] and find("q=renewed") == ["Warehouse club"]
+    # its amount changed since (by hand here; a pending one that posts with a tip): the rest stays under its own category
+    client.patch(f"/api/transactions/{club['id']}", json={"amount": -210})
+    by = {c["category"]: c for c in client.get(f"/api/spending?start={today}&end={today}").json()["categories"]}
+    assert by["Shopping"]["spent"] == 10 and by["Groceries"]["spent"] == 150
+    # a viewer may not; whole again with no parts
+    as_user("vi", "viewer")
+    assert put([]).status_code == 403
+    sign_in(client, "alex")
+    assert put([]).json()["splits"] == []
+    by = {c["category"]: c for c in client.get(f"/api/spending?start={today}&end={today}").json()["categories"]}
+    assert by["Shopping"]["spent"] == 210 and "Clothes" not in by
+
+
 def test_manual_transactions_and_categories(client):
     a = add(client)
     db.ex("UPDATE mny_accounts SET source = 'monarch', external_id = 'm1' WHERE id = %s", (a["id"],))  # one from Monarch takes them too

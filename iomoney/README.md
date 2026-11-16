@@ -83,6 +83,11 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   **Link** and **Not a transfer** (off the list for good), a search, and filters by account and reason. Pairs that
   share a transaction are shown together as one choice, and two identical transactions on one side are pointed out
   as a likely duplicate.
+- **Split**: a transaction can be split over categories (a warehouse club's bill: groceries, clothes, a gift), from
+  its dialog: two parts and more, each with its share, a category and a note, together the whole amount. The
+  transaction stays one line in its account; the spending by category counts its parts, a search by category or by a
+  note's words finds it, and the list shows its categories with a split mark. If its amount changes later, what the
+  parts no longer cover counts under its own category. `PUT /api/transactions/{id}/splits`; MCP `split_transaction`.
 - **Reconciled**: each transaction can be ticked as reconciled with the bank's statement (the tick at the end of its
   row, or its dialog); the list filters on it, and **Mark these reconciled** ticks every one shown. The sync leaves it
   as it is, and it does not count as a change to the transaction.

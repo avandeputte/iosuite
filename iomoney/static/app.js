@@ -19,6 +19,7 @@ const ICONS = {
   car: 'M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z',
   bank: 'M4 10v7h3v-7H4zm6 0v7h3v-7h-3zM2 22h19v-3H2v3zm14-12v7h3v-7h-3zm-4.5-9L2 6v2h19V6l-9.5-5z',
   card: 'M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z',
+  split: 'M14 4l2.29 2.29-2.88 2.88 1.42 1.42 2.88-2.88L20 10V4h-6zm-4 0H4v6l2.29-2.29 4.71 4.7V20h2v-8.41l-5.29-5.3L10 4z',
   loan: 'M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z',
   gem: 'M12 2 2 9l10 13L22 9 12 2zm0 3.2L18.6 9H5.4L12 5.2z',
   sync: 'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z',
@@ -991,6 +992,7 @@ async function categories() {
 const fmtTxDay = (s) => { const d = dateOf(s); return d.toLocaleDateString(undefined, d.getFullYear() === new Date().getFullYear() ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: '2-digit' }); };
 function txCat(t) {
   if (t.transfer) return h('span', { class: 'xfer', title: `A transfer ${t.amount < 0 ? 'to' : 'from'} ${t.transfer.account}${t.transfer.how === 'hand' ? ' (linked by hand)' : ''}` }, icon('link', 'xs'), `${t.amount < 0 ? 'To' : 'From'} ${t.transfer.account}`);
+  if (t.splits && t.splits.length) return h('span', { class: 'split', title: t.splits.map((p) => `${p.category || 'Uncategorized'} ${money(p.amount, t.currency)}`).join(' · ') }, icon('split', 'xs'), [...new Set(t.splits.map((p) => p.category || 'Uncategorized'))].join(', '));
   return t.category ? h('span', null, t.category) : h('span', { class: 'muted' }, 'Uncategorized');
 }
 function txList(items, showAccount = true, showBank = store.get('txbank') === '1') {
@@ -1083,12 +1085,20 @@ async function txDialog(t, account) {
     reconciled: h('input', { type: 'checkbox', checked: t.reconciled ? true : null, disabled: ro ? true : null }),
     day: inp(t.day, { type: 'date', disabled: ro || !manual ? true : null }), amount: inp(t.amount, { inputmode: 'decimal', placeholder: '-12.50 out, 100 in', disabled: ro || !manual ? true : null }),
     account: h('select', { class: 't', disabled: !isNew ? true : null }, (isNew ? manualAccts : S.accounts).map((a) => h('option', { value: a.id, selected: a.id === t.accountId ? true : null }, a.name))) };
+  // split over categories: its parts, or the way to split it
+  const parts = t.splits || [];
+  const sbox = isNew ? null : parts.length
+    ? h('div', { class: 'splitbox' }, h('div', { class: 'splithead' }, icon('split', 's'), h('b', null, 'Split over categories'), h('span', { class: 'grow' }),
+      !ro ? h('button', { class: 'pillbtn tiny', onclick: () => { closeDialogs(); splitDialog(t); } }, 'Change') : null),
+      h('ul', null, parts.map((p) => h('li', null, h('span', null, p.category || 'Uncategorized', p.notes ? h('small', { class: 'muted' }, ` ${p.notes}`) : null), h('span', { class: 'num' }, money(p.amount, t.currency))))),
+      Math.abs(parts.reduce((x, p) => x + p.amount, 0) - t.amount) > 0.004 ? h('p', { class: 'muted small warn' }, `The parts no longer add up to ${money(t.amount, t.currency)}: the rest counts under ${t.category || 'no category'}.`) : null)
+    : (!ro && t.amount ? h('button', { class: 'lnkbtn', onclick: () => { closeDialogs(); splitDialog(t); } }, icon('split', 'xs'), 'Split over categories') : null);
   const xbox = isNew ? null : h('div', { class: 'xferbox' });
   let moved = false;
   if (xbox) drawTransfer(xbox, t, () => { moved = true; });
   const body = h('div', null, dl, h('div', { class: 'grid' }, fld('Payee', f.merchant, true), fld('Amount', f.amount), fld('Date', f.day), fld('Category', f.category), fld('Account', f.account), fld('Notes', f.notes, true)),
     h('div', { class: 'chiprow', style: { marginTop: '10px', gap: '18px' } }, h('label', { class: 'check' }, f.hidden, 'Hidden: left out of the sums'),
-      !isNew ? h('label', { class: 'check' }, f.reconciled, 'Reconciled with the statement') : null), xbox,
+      !isNew ? h('label', { class: 'check' }, f.reconciled, 'Reconciled with the statement') : null), sbox, xbox,
     t.description && t.description !== t.merchant ? h('p', { class: 'muted small' }, 'At the bank: ', t.description) : null,
     t.source === 'monarch' ? h('p', { class: 'muted small' }, 'From Monarch Money. A change here stays here: Monarch itself is not changed.') : null,
     isNew ? h('p', { class: 'muted small' }, 'Added here, by hand. In an account from Monarch Money it stays beside Monarch’s own transactions, and the balance stays Monarch’s.') : null);
@@ -1122,6 +1132,47 @@ async function txDialog(t, account) {
     await api(isNew ? `api/accounts/${f.account.value}/transactions` : `api/transactions/${t.id}`, { method: isNew ? 'POST' : 'PATCH', json: b });
     S.cats = []; toast(isNew ? 'Added' : 'Saved'); onRoute();
   } catch (e) { fail(e); }
+}
+
+/** Split a transaction over categories: its parts, each with its share, a category and a note; what is left to
+    give out is shown as the amounts are typed, and it saves once nothing is. */
+async function splitDialog(t) {
+  const cats = await categories();
+  const total = Math.abs(t.amount);
+  const cents = (v) => Math.round((parseFloat(String(v).replace(/[,$\s]/g, '')) || 0) * 100);
+  const list = h('div', { class: 'splitrows' });
+  const left = h('p', { class: 'splitleft' });
+  const rows = [];
+  const update = () => {
+    const rest = Math.round(total * 100) - rows.reduce((x, r) => x + Math.abs(cents(r.amount.value)), 0);
+    left.textContent = rest === 0 ? 'Everything is given out.' : rest > 0 ? `${money(rest / 100, t.currency)} left to give out` : `${money(-rest / 100, t.currency)} too much`;
+    left.classList.toggle('warn', rest !== 0);
+    return rest;
+  };
+  const addRow = (p = {}) => {
+    const r = { amount: inp(p.amount != null ? Math.abs(p.amount).toFixed(2) : '', { inputmode: 'decimal', placeholder: '0.00', 'aria-label': 'Amount' }),
+      category: inp(p.category, { list: 'splitcats', placeholder: 'Category', 'aria-label': 'Category' }), notes: inp(p.notes, { placeholder: 'Note', maxlength: 255, 'aria-label': 'Note' }) };
+    r.el = h('div', { class: 'splitrow' }, r.amount, r.category, r.notes,
+      h('button', { class: 'iconbtn', title: 'Remove this part', 'aria-label': 'Remove this part', onclick: () => { rows.splice(rows.indexOf(r), 1); r.el.remove(); update(); } }, icon('delete', 's')));
+    r.amount.addEventListener('input', update);
+    // the last part takes what is left when its amount is entered empty
+    r.amount.addEventListener('focus', () => { if (!r.amount.value) { const rest = update(); if (rest > 0) { r.amount.value = (rest / 100).toFixed(2); r.amount.select(); update(); } } });
+    rows.push(r); list.append(r.el);
+  };
+  if (t.splits && t.splits.length) t.splits.forEach(addRow);
+  else { addRow({ amount: total, category: t.category }); addRow(); }
+  update();
+  const body = h('div', null, h('datalist', { id: 'splitcats' }, cats.map((c) => h('option', { value: c.category }))),
+    h('p', { class: 'muted small' }, `${t.merchant || t.description || 'This transaction'}, ${fmtDay(t.day, true)}: ${money(t.amount, t.currency)}. The spending by category counts the parts in its place.`),
+    list, h('div', { class: 'splitfoot' }, h('button', { class: 'pillbtn tiny', onclick: () => { addRow(); update(); } }, icon('add', 'xs'), 'Part'), left));
+  const had = t.splits && t.splits.length;
+  const ok = await dialog('Split over categories', body, [had ? { label: 'Make it whole', value: 'whole', danger: true } : null, { label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }].filter(Boolean), 'wide');
+  if (!ok) return;
+  const items = ok === 'whole' ? [] : rows.filter((r) => cents(r.amount.value)).map((r) => ({ amount: Math.abs(cents(r.amount.value)) / 100, category: r.category.value.trim() || null, notes: r.notes.value.trim() || null }));
+  try {
+    const n = await api(`api/transactions/${t.id}/splits`, { method: 'PUT', json: { items } });
+    S.cats = []; toast(n.splits.length ? 'Split' : 'Whole again'); onRoute();
+  } catch (e) { fail(e); Object.assign(t, { splits: ok === 'whole' ? t.splits : items.map((p) => ({ ...p, amount: (t.amount < 0 ? -1 : 1) * p.amount })) }); splitDialog(t); }
 }
 
 /** In a transaction's dialog: the other half of its transfer (with Unlink), or the transactions that could be it
