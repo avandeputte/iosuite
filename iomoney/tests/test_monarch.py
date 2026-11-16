@@ -217,6 +217,28 @@ def test_a_pending_one_is_followed_until_it_posts(client, mm):
     assert client.get("/api/transactions?q=garage").json()["items"][0]["pending"] is False
 
 
+def test_one_account_synced_again(client, mm):
+    put_keys()
+    assert client.post("/api/monarch/sync").json()["ok"]
+    accts = {a["name"]: a for a in client.get("/api/accounts").json()["items"]}
+    t = grocer(client)
+    client.patch(f"/api/transactions/{t['id']}", json={"category": "Party"})
+    # a year-old one Monarch has now (fetched only with the account's two years), and one gone there
+    FakeMM.transactions = [tx("t1", 3, -54.2, "Grocer"), tx("t0", 300, -75, "Old shop"), tx("v1", 300, -9, "Card shop", account={"id": "102"}),
+                           tx("t9", 1500, -20, "Very old shop")]
+    r = client.post("/api/monarch/sync", json={"accountId": accts["Checking"]["id"], "wait": 30}).json()
+    assert r["ok"] and r["message"].startswith("Only Checking") and r["transactions"] == 2  # two years as left out
+    items = {t["merchant"]: t for t in client.get("/api/transactions").json()["items"]}
+    assert set(items) == {"Grocer", "Old shop"}  # the Visa's not fetched; To savings, gone from Monarch, removed
+    assert items["Grocer"]["category"] == "Party"  # changed here, kept
+    r = client.post("/api/monarch/sync", json={"accountId": accts["Checking"]["id"], "years": 0, "wait": 30}).json()
+    assert r["ok"] and r["transactions"] == 3 and "since 1990" in r["message"]  # all Monarch has
+    assert client.get("/api/transactions?q=very").json()["total"] == 1
+    # it does not move the next sync's window: a regular sync still looks back from the last regular one
+    assert db.one("SELECT MAX(started_at) AS t FROM mny_syncs WHERE ok = 1 AND message NOT LIKE 'Only %%'")["t"] is not None
+    assert client.post("/api/monarch/sync", json={"accountId": accts["Mortgage"]["id"] + 1000}).status_code == 400
+
+
 def test_categories_renamed_here_follow_the_syncs(client, mm):
     put_keys()
     assert client.post("/api/monarch/sync").json()["ok"]
