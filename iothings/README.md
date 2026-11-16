@@ -45,7 +45,7 @@ single-page vanilla JS app, with everything stored in MariaDB / MySQL (the files
   by place and thing. Keep it away from the house and make a new one now and then. Photos are made smaller so the
   file stays easy to copy; a file that is neither a picture nor a PDF is named so it can be found here. It is made in
   the background; the last one is kept until the next one or a restart. DejaVu Sans writes it when the system has it
-  (Docker and the Proxmox installer add `fonts-dejavu-core`), Helvetica otherwise.
+  (setup.sh and every update install `fonts-dejavu-core` when it is missing and they run as root), Helvetica otherwise.
 - **Homebox, straight from the server** (editors, Import and export › From a Homebox server): give Homebox's address
   and the email and password you sign in to it with, and ioThings reads everything through Homebox's API: the things
   with all their details, the places, the labels with their colours, the own fields, the **photos, manuals, receipts
