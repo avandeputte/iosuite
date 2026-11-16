@@ -74,9 +74,14 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
 - **Transactions by hand** in any account that follows its transactions, one from Monarch too (a cash payment, one
   the bank has not sent yet): kept through the syncs, and in an account kept by hand each one moves the balance.
 - **Recurring**: the bills, subscriptions and paychecks, found by ioMoney itself (Monarch's recurring transactions are
-  not brought in): the same payee in the same account, money out or in, at least three times (a yearly one twice) at a
-  steady pace (every week, two weeks, twice a month, monthly, every three months, yearly) with an amount that stays
-  about the same and the last one recent enough. What is found is offered on the Recurring page: **Add**, or **Not
+  not brought in) in the past two years: the same payee in the same account, money out or in, at least three times (a
+  yearly one twice) at a steady pace (every week, two weeks, twice a month, monthly, every two months, every three
+  months, every six months, yearly), the last one recent enough. A payee is known by its name or by the bank's text, so
+  one Monarch renamed stays one (its recurring transaction remembers every name, "aes loan|aes student loans"); one
+  payee's payments are split by amount, so two loans paid to the same bank are two; most of the gaps must be in the
+  band and most of the amounts near the usual one, so a bonus, a late payment or a price change does not spoil it, and
+  a utility whose amount swings is found as one that varies. A payment to a loan or an investment account (the car
+  loan, the mortgage, a 529) counts even when linked as a transfer; a card's payment does not. What is found is offered on the Recurring page: **Add**, or **Not
   recurring** (not offered again); one is also added by hand (its name, the words its payee has, the account, the usual
   amount and whether it varies, how often, a day it falls on, a category), changed or removed. Editors change the
   household's; a member those of their own accounts. In the transaction list a recurring one has a small icon by its

@@ -236,6 +236,62 @@ def test_recurring_found_added_and_shown_as_bills(client, as_user):
     assert "Sam's gym" not in {x["merchant"] for x in client.get(f"/api/bills?start={months_ago(1)}&end={months_ago(-1)}").json()["items"]}
 
 
+def test_recurring_found_despite_outliers_renames_and_shared_payees(client):
+    """What a real household's transactions look like: a bonus among the paychecks, a payee Monarch renamed while the
+    bank's text stayed, two loans paid to one bank, a loan's payment linked as a transfer, a bill every two months, a
+    yearly one seen twice in two years, a utility whose amount swings, a one-off tiny charge among a phone bill's."""
+    chk = add(client)
+    card = add(client, name="Card", kind="credit", balance=0)
+    loan = add(client, name="Car loan", kind="loan", balance=9000, track="transactions")
+    today = dt.date.today()
+    d = lambda n: (today - dt.timedelta(days=n)).isoformat()  # noqa: E731
+
+    def tx(acct, day, amount, merchant, description=None):
+        return db.ex("INSERT INTO mny_transactions (account_id, source, day, amount, merchant, description, words) "
+                     "VALUES (%s, 'manual', %s, %s, %s, %s, %s)", (acct["id"], day, amount, merchant, description, model.words(merchant, description)))
+    for i in range(20):  # every other Friday; a bonus once, a raise lately
+        tx(chk, d(4 + 14 * i), 24000 if i == 9 else 3600 if i < 2 else 3200, "Acme Corp", "PAYROLL ACME CORP ACH CREDIT")
+    for i in range(12):  # two car loans at one bank, renamed by Monarch half way; the bank's text stays
+        name = "Big Bank" if i < 6 else "Car Loan Payment"
+        tx(chk, months_ago(i), -563.14, name, "*2903 EXT TRNSFR BIGBANK ACH WEB-RECUR")
+        tx(chk, (dt.date.fromisoformat(months_ago(i)) - dt.timedelta(days=2)).isoformat(), -368.88, name, "*2903 EXT TRNSFR BIGBANK ACH WEB-RECUR")
+    for i in range(10):  # the mortgage, linked as a transfer to the loan account; the card's payment, linked too
+        o = tx(chk, months_ago(i), -1182.59, "Mortgage", "PYMT MORTGAGE ACH DEBIT")
+        db.ex("INSERT INTO mny_transfers (out_id, in_id) VALUES (%s, %s)", (o, tx(loan, months_ago(i), 1182.59, "Payment")))
+        o = tx(chk, months_ago(i), -700 - i, "Card payment", "AUTOPAY CARD")
+        db.ex("INSERT INTO mny_transfers (out_id, in_id) VALUES (%s, %s)", (o, tx(card, months_ago(i), 700 + i, "Thank you")))
+    for i in range(5):
+        tx(card, months_ago(2 * i), -45, "Mobile Co")  # every two months
+    for n in (20, 385, 750):
+        tx(card, d(n), -99.99, "Office Suite")  # yearly, seen three times in two years
+    for i, amt in enumerate([31.2, 88.4, 140.0, 219.5, 180.1, 64.9, 42.0, 35.5]):
+        tx(chk, months_ago(i), -amt, "City Water", "UTILITYPMT CITYWATER WEB")  # the amount swings with the seasons
+    for i in range(8):
+        tx(chk, months_ago(i), -0.17 if i == 2 else -20, "Phone Co", "PHONECO AUTO PAY")
+    found = client.get("/api/recurring").json()["found"]
+    by = {}
+    for x in found:
+        by.setdefault(x["name"], []).append(x)
+    pay = by["Acme Corp"][0]
+    assert pay["frequency"] == "biweekly" and pay["flow"] == "in" and pay["amount"] == 3200 and pay["count"] >= 17
+    loans = sorted(by["Big Bank"], key=lambda x: x["amount"])
+    assert [x["amount"] for x in loans] == [-563.14, -368.88] and all(x["frequency"] == "monthly" and not x["approximate"] for x in loans)
+    assert loans[0]["pattern"] == "big bank|car loan payment" and loans[0]["count"] == 12
+    assert by["Mortgage"][0]["amount"] == -1182.59  # a loan's payment is a bill
+    assert "Card payment" not in by and "Payment" not in by and "Thank you" not in by  # a card's payment is not
+    assert by["Mobile Co"][0]["frequency"] == "bimonthly"
+    assert by["Office Suite"][0]["frequency"] == "yearly"
+    assert by["City Water"][0]["approximate"] and by["City Water"][0]["frequency"] == "monthly"
+    assert by["Phone Co"][0]["amount"] == -20 and not by["Phone Co"][0]["approximate"]
+    # added, its payments under both names are its own
+    assert client.post("/api/recurring", json={"found": loans[0]["key"]}).status_code == 201
+    item = next(x for x in client.get("/api/recurring").json()["items"] if x["name"] == "Big Bank")
+    assert item["last"]["amount"] == -563.14
+    old = [t for t in client.get("/api/transactions?q=car+loan+payment&limit=50").json()["items"] if t["amount"] == -563.14]
+    assert old and all(t["recurring"]["name"] == "Big Bank" for t in old)
+    assert len([x for x in client.get("/api/recurring").json()["found"] if x["name"] == "Big Bank"]) == 1  # the other loan
+
+
 def test_manual_transactions_and_categories(client):
     a = add(client)
     db.ex("UPDATE mny_accounts SET source = 'monarch', external_id = 'm1' WHERE id = %s", (a["id"],))  # one from Monarch takes them too
