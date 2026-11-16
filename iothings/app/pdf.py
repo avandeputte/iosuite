@@ -4,13 +4,14 @@ burns down and the insurer asks what was in it.
 What is in it:
 - a first page: when it was made, how many things, what they cost all together, and that per place;
 - a list of every thing (place, quantity, bought on, price, serial number), each name a link to its pages;
-- each thing on its own pages: every detail, its own fields, who it is for, its photos, its maintenance log, then its
-  receipts, warranty cards and manuals: pictures shown as they are, PDFs put in whole right after the thing's page.
-  A file that is neither (a .docx, a picture this server cannot read) is named, so it can be found in ioThings.
+- each thing on its own pages: every detail, its own fields, who it is for, its photos, then its receipts: a picture
+  shown as it is, a PDF put in whole right after the thing's page. Only what a claim needs (Alex, 2026-11-16): no
+  manuals, warranty cards, other files or maintenance log. A photo or receipt that is neither a picture this server
+  reads nor a PDF is named, so it can be found in ioThings.
 The PDF's outline (the bookmarks of a PDF reader) has each place and each thing.
 
-Photos are made smaller (PHOTO_SIDE) so a few hundred things stay a file one can mail or copy; receipts and warranty
-cards keep more of their size (PAPER_SIDE), so the small print stays readable. PDFs go in as they are.
+Photos are made smaller (PHOTO_SIDE) so a few hundred things stay a file one can mail or copy; receipts keep more of
+their size (PAPER_SIDE), so the small print stays readable. PDFs go in as they are.
 
 Making it takes a while (every photo is read from the database), so it is made in the background: start() begins it,
 progress() says how far it got and, when done, file() gives the PDF. One at a time; the last one made is kept (in a
@@ -35,7 +36,7 @@ from pypdf.errors import PdfReadError
 
 from iosuite_shared.errors import Invalid
 
-from app import db, files, model, upkeep
+from app import db, files, model
 
 log = logging.getLogger("iothings")
 
@@ -246,9 +247,9 @@ def build(archived: bool = False, out_path: str | None = None, step=None) -> dic
     total = sum((Decimal(str(r["purchase_price"])) for r in things if r["purchase_price"] is not None), Decimal(0))
     priced = sum(1 for r in things if r["purchase_price"] is not None)
     insured = sum(1 for r in things if r["insured"])
-    papers = {r["item_id"]: r["n"] for r in db.q("SELECT item_id, COUNT(*) AS n FROM thg_files WHERE kind IN ('receipt', 'warranty') GROUP BY item_id")}
+    papers = {r["item_id"]: r["n"] for r in db.q("SELECT item_id, COUNT(*) AS n FROM thg_files WHERE kind = 'receipt' GROUP BY item_id")}
     _table(pdf, [("Things", str(len(things))), ("Paid for them", f"{_money(total, cur)} (the {priced} with a price)"),
-                 ("With a receipt or warranty", str(sum(1 for r in things if papers.get(r["id"])))), ("Marked insured", str(insured))])
+                 ("With a receipt", str(sum(1 for r in things if papers.get(r["id"])))), ("Marked insured", str(insured))])
     by_place: dict = {}
     for r in things:
         p = by_place.setdefault(r["place"] or "No place", [0, Decimal(0)])
@@ -302,7 +303,7 @@ def build(archived: bool = False, out_path: str | None = None, step=None) -> dic
             pdf.line_of(r["place"], 10, grey=True)
         pdf.ln(2)
         _table(pdf, _details(r, cur, tags, people))
-        listed = files.listed(r["id"])
+        listed = [f for f in files.listed(r["id"]) if f["kind"] in ("photo", "receipt")]  # what a claim needs
         pics, papers_here, pdfs, other = [], [], [], []
         for f in listed:
             raw, mime, name = files.content(r["id"], f["id"])
@@ -317,12 +318,6 @@ def build(archived: bool = False, out_path: str | None = None, step=None) -> dic
                 other.append(f)
         _photos(pdf, pics)
         nfiles += len(pics)
-        lines = upkeep.log_of(r["id"])
-        if lines:
-            pdf.room(14)
-            pdf.line_of("Maintenance log", 11, bold=True, h=7)
-            _table(pdf, [(_day(dt.date.fromisoformat(ln["date"])), ln["title"] + (f" ({_money(ln['cost'], cur)})" if ln["cost"] else "") + (f": {ln['notes']}" if ln["notes"] else ""))
-                         for ln in lines])
         good = []
         for f, raw in sorted(pdfs, key=lambda x: PAPERS.index(x[0]["kind"]) if x[0]["kind"] in PAPERS else 9):
             try:
@@ -340,7 +335,7 @@ def build(archived: bool = False, out_path: str | None = None, step=None) -> dic
         if other:
             pdf.room(8 + 5 * len(other))
             pdf.ln(1)
-            pdf.line_of("Also kept in ioThings (not in this PDF)", 10, bold=True, h=6)
+            pdf.line_of("Kept in ioThings, not readable here", 10, bold=True, h=6)
             for f in other:
                 pdf.line_of(f"{NAMES.get(f['kind'], 'File')}: {f['name']}", 9, grey=True)
                 missing.append(f"{r['name']}: {f['name']}")

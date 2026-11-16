@@ -1,5 +1,6 @@
-"""The whole inventory as one PDF: a summary, the list, each thing with its details, photos and log, its receipt as a
-picture, its manual (a PDF) put in whole after its page, and a file that is neither named; archived things only when
+"""The whole inventory as one PDF for an insurance claim: a summary, the list, each thing with its details, its photos,
+its receipt as a picture and its receipt as a PDF (put in whole after its page); no manuals, warranty cards, other files
+or maintenance log; archived things only when
 asked."""
 import io
 
@@ -16,12 +17,12 @@ def png(w=800, h=600, colour=(200, 60, 40)) -> bytes:
     return out.getvalue()
 
 
-def manual(pages: int) -> bytes:
+def paper(pages: int, what: str = "Manual") -> bytes:
     d = FPDF()
     for i in range(pages):
         d.add_page()
         d.set_font("Helvetica", size=14)
-        d.cell(0, 10, f"Manual page {i + 1}")
+        d.cell(0, 10, f"{what} page {i + 1}")
     return bytes(d.output())
 
 
@@ -43,7 +44,9 @@ def test_the_inventory_as_one_pdf(client):
                                          "insured": True, "fields": [{"name": "Size", "value": "65 in"}]}).json()
     add_file(client, tv["id"], "front.png", png(), "image/png")
     add_file(client, tv["id"], "receipt.png", png(600, 1200, (250, 250, 250)), "image/png", "receipt")
-    add_file(client, tv["id"], "manual.pdf", manual(3), "application/pdf", "manual")
+    add_file(client, tv["id"], "manual.pdf", paper(3), "application/pdf", "manual")
+    add_file(client, tv["id"], "invoice.pdf", paper(2, "Invoice"), "application/pdf", "receipt")
+    add_file(client, tv["id"], "warranty.png", png(500, 300, (10, 200, 10)), "image/png", "warranty")
     add_file(client, tv["id"], "notes.docx", b"PK\x03\x04 not really", "application/octet-stream", "other")
     client.post(f"/api/items/{tv['id']}/maintenance", json={"date": "2025-06-01", "title": "Wall mount checked", "cost": 40})
     sofa = client.post("/api/items", json={"name": "Sofa", "location": "Home / Living room", "purchasePrice": 1200}).json()
@@ -59,7 +62,7 @@ def test_the_inventory_as_one_pdf(client):
         j = client.get("/api/export-pdf").json()
     assert j["state"] == "done" and j["ready"], j
     assert (j["things"], j["files"]) == (2, 3), j
-    assert j["missing"] == ["Télévision OLED: notes.docx"], j
+    assert j["missing"] == [], j
     got = client.get("/api/export-pdf/file")
     assert got.status_code == 200 and got.headers["content-type"] == "application/pdf"
     assert "home-inventory-" in got.headers["content-disposition"]
@@ -67,14 +70,15 @@ def test_the_inventory_as_one_pdf(client):
     reader = PdfReader(io.BytesIO(raw))
     words = text_of(raw)
     assert "Home inventory" in words and "3,099.99" in words, "the total of what was paid"
-    assert "SN-TV-1" in words and "65 in" in words and "Wall mount checked" in words
+    assert "SN-TV-1" in words and "65 in" in words
+    assert "Wall mount checked" not in words and "Manual page" not in words and "warranty.png" not in words and "notes.docx" not in words
     assert "Old drill" not in words, "archived things only when asked"
-    assert "Manual page 3" in words, "the manual is in it, whole"
+    assert "Invoice page 2" in words, "the receipt PDF is in it, whole"
     pages = [p.extract_text() or "" for p in reader.pages]
     tv_page = next(i for i, t in enumerate(pages) if "SN-TV-1" in t)
-    first_manual = next(i for i, t in enumerate(pages) if "Manual page 1" in t)
+    first_receipt = next(i for i, t in enumerate(pages) if "Invoice page 1" in t)
     sofa_page = next(i for i, t in enumerate(pages) if t.strip().startswith("Sofa") or "\nSofa\n" in t and i > tv_page)
-    assert tv_page < first_manual < sofa_page or sofa_page < tv_page < first_manual, "the manual comes right after its thing"
+    assert tv_page < first_receipt < sofa_page or sofa_page < tv_page < first_receipt, "the receipt comes right after its thing"
     outline = [o.title for o in reader.outline if not isinstance(o, list)]
     assert outline[:2] == ["Summary", "Everything"] and "Home / Living room" in outline
 

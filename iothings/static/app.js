@@ -252,6 +252,14 @@ function drawNav() {
   const link = (v, href, ic, label, n, on, hueVar, depth) => h('a', { href, 'data-v': v, class: on ? 'on' : null, style: { ...(hueVar ? { '--hue': `var(${hueVar})` } : {}), ...(depth ? { paddingLeft: `${12 + depth * 14}px` } : {}) } },
     icon(ic), h('span', { class: 'nl' }, label), n ? h('span', { class: 'n' }, n) : null);
   const sec = (label, btn) => h('div', { class: 'navsec' }, h('span', null, label), btn || null);
+  // Places, Family and Labels fold away (remembered on this device); folded, a section still shows the one you are on
+  const folded = new Set((store.get('navfold') || '').split(',').filter(Boolean));
+  const fold = (key, label, n, btn) => h('div', { class: `navsec${folded.has(key) ? ' folded' : ''}` },
+    h('button', { class: 'fold', 'aria-expanded': String(!folded.has(key)), title: folded.has(key) ? `Show the ${label.toLowerCase()}` : `Fold the ${label.toLowerCase()} away`,
+      onclick: () => { folded.has(key) ? folded.delete(key) : folded.add(key); store.set('navfold', [...folded].join(',')); drawNav(); } },
+    icon('next', 's'), h('span', null, label), folded.has(key) && n ? h('span', { class: 'fn' }, n) : null), btn || null);
+  const shown = (key, list, on) => folded.has(key) ? list.filter(on) : list;
+  const labelLink = (t) => { const a = link('label', `#/label/${t.id}`, 'tag', t.name, t.count || null, r.view === 'label' && r.id === t.id, t.color ? null : '--c-slate'); if (t.color) a.style.setProperty('--hue', t.color); return a; };
   const brandName = () => [h('span', { class: 'io' }, 'io'), h('span', { class: 'nm' }, 'Things')];
   nav.replaceChildren(...[
     h('div', { class: 'navhead' },
@@ -266,20 +274,18 @@ function drawNav() {
     Object.entries(VIEWS).map(([k, [label, ic, hv]]) => link(k, `#/${k}`, ic, label, viewCount(k), r.view === k, hv)),
     h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), h('span', { class: 'nl' }, 'More')),
     S.locations.length || canAdd() ? [h('div', { class: 'navgap' }),
-      sec('Places', canAdd() ? h('button', { class: 'iconbtn', title: 'New place', 'aria-label': 'New place', onclick: () => placeDialog(null) }, icon('add', 's')) : null),
-      S.locations.map((l) => link('place', `#/place/${l.id}`, l.depth ? 'subdir' : 'place', l.name, l.count || null, r.view === 'place' && r.id === l.id, '--c-indigo', l.depth))] : null,
-    S.family.length ? [h('div', { class: 'navgap' }), sec('Family'),
-      S.family.map((m) => h('a', { href: `#/person/${m.id}`, 'data-v': 'person', class: `who${r.view === 'person' && r.id === m.id ? ' on' : ''}`, title: `${possessive(m.displayName)} things` },
+      fold('places', 'Places', S.locations.length, canAdd() ? h('button', { class: 'iconbtn', title: 'New place', 'aria-label': 'New place', onclick: () => placeDialog(null) }, icon('add', 's')) : null),
+      shown('places', S.locations, (l) => r.view === 'place' && r.id === l.id).map((l) => link('place', `#/place/${l.id}`, l.depth ? 'subdir' : 'place', l.name, l.count || null, r.view === 'place' && r.id === l.id, '--c-indigo', l.depth))] : null,
+    S.family.length ? [h('div', { class: 'navgap' }), fold('family', 'Family', S.family.length),
+      shown('family', S.family, (m) => r.view === 'person' && r.id === m.id).map((m) => h('a', { href: `#/person/${m.id}`, 'data-v': 'person', class: `who${r.view === 'person' && r.id === m.id ? ' on' : ''}`, title: `${possessive(m.displayName)} things` },
         memberBadge(m, true), h('span', { class: 'nl' }, m.displayName), m.count ? h('span', { class: 'n' }, m.count) : null))] : null,
-    S.labels.length ? [h('div', { class: 'navgap' }), sec('Labels'),
-      S.labels.slice(0, 30).map((t) => link('label', `#/label/${t.id}`, 'tag', t.name, t.count || null, r.view === 'label' && r.id === t.id, t.color ? null : '--c-slate'))] : null,
+    S.labels.length ? [h('div', { class: 'navgap' }), fold('labels', 'Labels', S.labels.length),
+      shown('labels', S.labels.slice(0, 30), (t) => r.view === 'label' && r.id === t.id).map(labelLink)] : null,
     canAdd() ? [h('div', { class: 'navgap' }), sec('Add'),
       link('new', '#/new', 'add', 'New thing', null, r.view === 'new', '--c-blue'),
       link('import', '#/import', 'download', 'Import and export', null, r.view === 'import', '--c-teal')] : null,
     h('div', { class: 'navfoot' }, link('settings', '#/settings', 'settings', 'Settings', null, r.view === 'settings')),
   ].flat(3).filter(Boolean));
-  // a label's own colour on its icon
-  nav.querySelectorAll('a[data-v="label"]').forEach((a, i) => { const t = S.labels[i]; if (t && t.color) a.style.setProperty('--hue', t.color); });
   applySidebar();
   $('.navmore')?.classList.toggle('on', ['place', 'label', 'person', 'import', 'new', 'settings', 'search', 'places'].includes(r.view));
 }
@@ -893,9 +899,9 @@ async function showImport(page) {
     }
     if (j.state === 'failed') { fill(pdfOut, h('p', { class: 'err' }, `The PDF could not be made: ${j.error}`)); return; }
     fill(pdfOut,
-      h('div', { class: 'draftnote' }, icon('check', 's'), `Ready: ${j.things} things on ${j.pages} pages, with ${j.files} photos and papers (${mb(j.size)}), made ${(j.finished || '').replace('T', ' ').slice(0, 16)}.`),
+      h('div', { class: 'draftnote' }, icon('check', 's'), `Ready: ${j.things} things on ${j.pages} pages, with ${j.files} photos and receipts (${mb(j.size)}), made ${(j.finished || '').replace('T', ' ').slice(0, 16)}.`),
       h('p', null, h('a', { class: 'pillbtn primary', href: 'api/export-pdf/file', download: '' }, icon('download', 's'), 'Download the PDF')),
-      j.missing && j.missing.length ? [h('p', { class: 'muted small' }, `Not in the PDF (not a picture or a PDF), still kept in ioThings (${j.missing.length}):`),
+      j.missing && j.missing.length ? [h('p', { class: 'muted small' }, `Photos and receipts not in the PDF (not a picture or a PDF this server reads), still kept in ioThings (${j.missing.length}):`),
         h('ul', { class: 'muted small' }, j.missing.map((x) => h('li', null, x)))] : null);
   };
   const pollPdf = async (quiet) => { if (!document.body.contains(pdfOut)) return; try { showPdf(await api('api/export-pdf'), quiet); } catch (e) { if (!quiet) fill(pdfOut, h('p', { class: 'err' }, e.message)); } };
@@ -918,7 +924,7 @@ async function showImport(page) {
       h('div', { class: 'exports chiprow' }, h('a', { class: 'pillbtn', href: 'api/export.csv', download: '' }, icon('download', 's'), 'Everything'),
         h('a', { class: 'pillbtn', href: 'api/export.csv?archived=false', download: '' }, icon('download', 's'), 'Only what you still have'))),
     h('div', { class: 'box' }, h('h2', null, icon('print'), 'For your insurer: everything in one PDF'),
-      h('p', null, 'Every thing with all its details, its photos, its maintenance log, and its receipts, warranties and manuals, in one PDF with a list and a total at the front. Keep it somewhere other than this house (a cloud drive, a USB stick at work, an email to yourself), and make a new one now and then: if there is a fire or a theft, it is what you need for the claim.'),
+      h('p', null, 'Every thing with all its details, its photos and its receipts (what an insurance claim needs: no manuals or warranty cards), in one PDF with a list and a total at the front. Keep it somewhere other than this house (a cloud drive, a USB stick at work, an email to yourself), and make a new one now and then: if there is a fire or a theft, it is what you need for the claim.'),
       h('label', { class: 'check' }, pdfOld, h('span', null, 'Put the archived and sold things in too')),
       h('p', null, h('button', { class: 'pillbtn primary', onclick: makePdf }, icon('print', 's'), 'Make the PDF')), pdfOut));
   if (canEditAll()) poll();  // an import that is running (or just ran) shows where it is
