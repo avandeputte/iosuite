@@ -10,10 +10,11 @@ import datetime as dt
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
+from iosuite_shared import users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
 
-from app import access, db, model, monarch, quotes, transfers
+from app import access, categories, db, model, monarch, quotes, recurring, transfers
 
 router = APIRouter()
 
@@ -215,7 +216,33 @@ def delete_transaction(tid: int, request: Request):
 
 @router.get("/api/categories", dependencies=[access.signed_in])
 def list_categories(request: Request):
-    return {"items": model.categories(_u(request))}
+    """Every category (those the transactions have, those added here) with its group and how many transactions."""
+    u = _u(request)
+    return {"items": model.categories(u), "writable": shared_users.can_write(u)}
+
+
+@router.post("/api/categories", dependencies=[access.signed_in])
+async def add_category(request: Request):
+    """{name, group?}: a new category."""
+    u = _u(request)
+    return JSONResponse(categories.add(u, await json_body(request)), status_code=201)
+
+
+@router.put("/api/categories", dependencies=[access.signed_in])
+async def change_category(request: Request):
+    """{name, newName?, group?}: rename it (into one there is already: the two merged) or move it to another group;
+    its transactions, rules and recurring transactions follow, and so does what Monarch sends later."""
+    u = _u(request)
+    b = await json_body(request)
+    return await run_in_threadpool(categories.change, u, b)
+
+
+@router.post("/api/categories/delete", dependencies=[access.signed_in])
+async def delete_category(request: Request):
+    """{name, moveTo?}: its transactions take moveTo, or no category."""
+    u = _u(request)
+    b = await json_body(request)
+    return await run_in_threadpool(categories.delete, u, b)
 
 
 # ------------------------------------------------------------------ transfers between the household's own accounts
@@ -458,18 +485,60 @@ async def refresh_quotes(request: Request):
     return await run_in_threadpool(go)
 
 
-# ------------------------------------------------------------------ bills (ioCalendar shows them)
+# ------------------------------------------------------------------ recurring transactions, and the bills ioCalendar shows
+
+@router.get("/api/recurring", dependencies=[access.signed_in])
+def list_recurring(request: Request):
+    """The household's recurring transactions (each with its next date and the last payment), and what was found in
+    the transactions that looks recurring and is not in the list (found), with whether you may change them."""
+    u = _u(request)
+    return {"items": recurring.items(u), "found": recurring.found(u), "writable": shared_users.can_write(u),
+            "frequencies": [{"value": f, "label": recurring.FREQ_LABEL[f]} for f in recurring.FREQS]}
+
+
+@router.post("/api/recurring", dependencies=[access.signed_in])
+async def add_recurring(request: Request):
+    """{name, pattern (words its payee or bank's text has; the name as left out), accountId?, flow: out|in, amount,
+    approximate?, frequency, day (a day it fell on), category?}; or {found: key}: what was found, added."""
+    u = _u(request)
+    b = await json_body(request)
+    r = await run_in_threadpool(lambda: recurring.add_found(u, b["found"]) if b.get("found") else recurring.create(u, b))
+    return JSONResponse(recurring.public(r, u), status_code=201)
+
+
+@router.post("/api/recurring/not", dependencies=[access.signed_in])
+async def not_recurring(request: Request):
+    """{key}: what was found is not recurring; not offered again."""
+    u = _u(request)
+    b = await json_body(request)
+    recurring.dismiss(u, b.get("key"))
+    return {"ok": True}
+
+
+@router.patch("/api/recurring/{rid}", dependencies=[access.signed_in])
+async def change_recurring(rid: int, request: Request):
+    u = _u(request)
+    b = await json_body(request)
+    return recurring.public(recurring.update(u, recurring.item(u, rid), b), u)
+
+
+@router.delete("/api/recurring/{rid}", dependencies=[access.signed_in])
+def remove_recurring(rid: int, request: Request):
+    u = _u(request)
+    recurring.delete(u, recurring.item(u, rid))
+    return {"ok": True}
+
 
 @router.get("/api/bills", dependencies=[access.signed_in])
 def list_bills(request: Request, start: str = None, end: str = None):
-    """The bills (Monarch Money's recurring transactions) between start and end (YYYY-MM-DD; this month as left
-    out), the ones paid from your private accounts included: what ioCalendar shows on their days."""
+    """Each date a recurring transaction falls on between start and end (YYYY-MM-DD; this month as left out), paid
+    or not, those of your private accounts included: what ioCalendar shows on their days."""
     if not (start and end):
         start, end = _month_bounds(None)
     s, e = model.day(start), model.day(end)
     if (e - s).days > 400:
         raise Invalid("At most 400 days at a time")
-    return {"currency": model.home_currency(), "items": model.bills(_u(request), s, e)}
+    return {"currency": model.home_currency(), "items": recurring.bills(_u(request), s, e)}
 
 
 # ------------------------------------------------------------------ Monarch Money and the settings (admins)

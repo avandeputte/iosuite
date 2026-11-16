@@ -15,7 +15,7 @@ quotes, and what the house and the cars are worth after their loans.
 ## What it does
 
 - **Monarch Money**: every account Monarch has (bank accounts, credit cards, investments, loans, the house it values
-  from Zillow, the cars) with its balance history, two years of transactions, the holdings and the coming bills,
+  from Zillow, the cars) with its balance history, two years of transactions and the holdings,
   copied in every six hours. ioMoney only reads: nothing is changed in Monarch. A sync runs in the background and the
   page shows how far it is (the first one, with two years of transactions, takes minutes).
 - **A new account in Monarch?** When Monarch reports an account ioMoney does not know, ioMoney asks whether it is new
@@ -40,6 +40,15 @@ quotes, and what the house and the cars are worth after their loans.
   **Link transfers** in Settings › Money goes through every transaction (card payments, bank transfers, loan
   payments), then opens Transfers to check, a full-width page of what still looks like a transfer, both sides in full, with
   why it was not linked: Link, or Not a transfer; ties are grouped and likely duplicates pointed out.
+- **Transactions by hand** in any account that follows its transactions, one from Monarch too: a cash payment, or one
+  the bank has not sent yet.
+- **Recurring**: ioMoney finds the bills and paychecks itself (the same payee at a steady pace, every week to every
+  year, with about the same amount) and offers them: add the ones that are, say "Not recurring" to the others, or add
+  one by hand. Each shows when it is next due and the last payment.
+- **Subscriptions**: Netflix, Max, YouTube, Spotify, Disney+, iCloud, Amazon Prime and other services get a section of
+  their own on the Recurring page, with what they cost a month and a year.
+- **Categories**: add, rename, merge, move to another group or delete a category; its transactions and rules follow,
+  and so does what Monarch sends later under the old name.
 - **Reconciled**: tick each transaction as checked against the bank's statement, filter on it, or tick every one shown.
 - **Bank details** on each account: account and routing numbers (hidden until shown, with copy), IBAN, customer
   service phone, website, address and notes, to have at hand. AI assistants only get the phone, website and address.
@@ -69,7 +78,7 @@ and portfolio tracker for accounts you keep by hand.
 ## With the other apps
 
 - **ioStart**: a tile on the start page, and one sign-in for all the apps.
-- **ioCalendar**: the coming bills from Monarch Money show on the day they are due, to the people with a role in ioMoney.
+- **ioCalendar**: the recurring bills and paychecks show on the day they are due (ticked once paid), to the people with a role in ioMoney.
 - **Linked items**: link the house or a car to the events, tasks, notes, contacts and photos about it.
 
 ## Install

@@ -1,5 +1,5 @@
-"""ioMoney, when it is part of the suite: the household's coming bills (Monarch Money's recurring transactions, the
-power bill, the mortgage, a subscription) show on the day they are due, beside the events.
+"""ioMoney, when it is part of the suite: the household's coming bills (the recurring transactions ioMoney keeps: the
+power bill, the mortgage, a subscription, a paycheck) show on the day they are due, beside the events.
 
 Nothing to set up: ioMoney is found in the suite's list of apps. As with the tasks (app/tasks.py), the bills are asked
 for on the viewer's behalf (iosuite_shared.links.as_viewer, with the viewer's own credentials), so ioMoney answers only

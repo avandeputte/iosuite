@@ -40,7 +40,7 @@ def test_mcp_money(client, as_user):
     names = {t["name"] for t in rpc(client, "tools/list", auth=auth)[1]["result"]["tools"]}
     assert {"overview", "net_worth_history", "search_transactions", "spending", "cash_flow", "categories", "update_transaction",
             "add_transaction", "portfolio", "get_quote", "add_holding", "update_holding", "delete_holding", "add_account",
-            "update_account", "add_valuation", "bills", "sync_monarch", "diagnostics", "rules", "add_rule", "test_rule", "update_rule",
+            "update_account", "add_valuation", "bills", "recurring_transactions", "sync_monarch", "diagnostics", "rules", "add_rule", "test_rule", "update_rule",
             "delete_rule", "apply_rules", "link_transfers", "link_transaction", "unlink_transaction", "transfer_rules",
             "add_transfer_rule", "delete_transfer_rule", "monarch_new_accounts", "resolve_new_account"} <= names
     a = call(client, auth, "add_account", name="Checking", kind="cash", balance=1200)

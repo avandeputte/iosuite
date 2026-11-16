@@ -1,5 +1,6 @@
 """The REST API: accounts and who sees them, the net worth and its history, transactions and the spending, holdings
-and the portfolio (quotes from a stand-in for Yahoo Finance), house and car values with their loan, and the bills."""
+and the portfolio (quotes from a stand-in for Yahoo Finance), house and car values with their loan, the recurring transactions ioMoney finds (subscriptions among them) and the bills
+ioCalendar shows, and the categories."""
 import datetime as dt
 import json
 
@@ -162,19 +163,95 @@ def test_house_values_estimate_and_equity(client):
     assert client.patch(f"/api/accounts/{house['id']}", json={"loanId": house["id"]}).status_code == 400  # not a loan
 
 
-def test_bills_follow_the_account(client, as_user):
+def months_ago(n):
+    from app import recurring
+    t = dt.date.today()
+    return recurring._add_months(t, -n, t.day).isoformat()
+
+
+def test_recurring_found_added_and_shown_as_bills(client, as_user):
     a = add(client)
-    today = dt.date.today()
-    db.ex("INSERT INTO mny_bills (ext_key, day, merchant, amount, account_id, seen_at) VALUES ('s1:x', %s, 'Power co', -80, %s, NOW())", (today, a["id"]))
-    db.ex("INSERT INTO mny_bills (ext_key, day, merchant, amount, seen_at) VALUES ('s2:x', %s, 'Streaming', -15, NOW())", (today,))
-    b = client.get(f"/api/bills?start={today}&end={today}").json()["items"]
-    assert [x["merchant"] for x in b] == ["Power co", "Streaming"] and b[0]["account"] == "Checking"
+    post = lambda **b: client.post(f"/api/accounts/{a['id']}/transactions", json=b)  # noqa: E731
+    for n, amt in ((3, -82), (2, -79.5), (1, -80.4)):
+        assert post(day=months_ago(n), amount=amt, merchant="Power co", category="Utilities").status_code == 201
+    for n in (2, 1):
+        post(day=months_ago(n), amount=-15.49, merchant="NETFLIX.COM")
+    for d in (56, 42, 28, 14):
+        post(day=(dt.date.today() - dt.timedelta(days=d)).isoformat(), amount=2000, merchant="ACME PAYROLL")
+    for d, amt in ((40, -12), (33, -140), (21, -61), (9, -7)):
+        post(day=(dt.date.today() - dt.timedelta(days=d)).isoformat(), amount=amt, merchant="Grocer")
+    r = client.get("/api/recurring").json()
+    assert r["items"] == [] and r["writable"]
+    f = {x["name"]: x for x in r["found"]}
+    assert set(f) == {"Power co", "NETFLIX.COM", "ACME PAYROLL"}  # the grocer's amounts are all over the place
+    assert f["Power co"]["frequency"] == "monthly" and f["Power co"]["approximate"] and f["Power co"]["category"] == "Utilities"
+    assert f["Power co"]["subscription"] is False and f["NETFLIX.COM"]["subscription"] is True  # a known service, twice is enough
+    assert f["ACME PAYROLL"]["frequency"] == "biweekly" and f["ACME PAYROLL"]["flow"] == "in" and f["ACME PAYROLL"]["amount"] == 2000
+    for name in ("Power co", "NETFLIX.COM"):
+        assert client.post("/api/recurring", json={"found": f[name]["key"]}).status_code == 201
+    assert client.post("/api/recurring/not", json={"key": f["ACME PAYROLL"]["key"]}).json()["ok"]
+    r = client.get("/api/recurring").json()
+    assert r["found"] == []  # added, or not recurring: not offered again
+    items = {x["name"]: x for x in r["items"]}
+    nf = items["NETFLIX.COM"]
+    assert nf["subscription"] and nf["perMonth"] == -15.49 and nf["last"]["amount"] == -15.49 and nf["source"] == "found"
+    assert months_ago(0) <= items["Power co"]["next"] <= months_ago(-1) and items["Power co"]["amount"] == -80.4
+    # by hand: a known service is a subscription on its own, and the gym is marked as one
+    s = client.post("/api/recurring", json={"name": "Spotify", "amount": 11.99, "day": months_ago(0)}).json()
+    assert s["subscription"] and s["flow"] == "out" and s["pattern"] == "spotify"
+    g = client.post("/api/recurring", json={"name": "Gym", "amount": 360, "frequency": "yearly", "day": months_ago(1), "subscription": True}).json()
+    assert g["subscription"] and g["perMonth"] == -30
+    assert client.patch(f"/api/recurring/{g['id']}", json={"subscription": False}).json()["subscription"] is False
+    assert client.post("/api/recurring", json={"name": "Water", "amount": 1, "frequency": "hourly"}).status_code == 400
+    # the bills ioCalendar shows: last month's power bill paid, this month's due
+    b = client.get(f"/api/bills?start={months_ago(1)}&end={months_ago(-1)}").json()["items"]
+    power = [x for x in b if x["merchant"] == "Power co"]
+    assert [x["paid"] for x in power][:2] == [True, False] and power[0]["amount"] == -80.4 and power[0]["account"] == "Checking"
+    assert any(x["merchant"] == "Spotify" and x["subscription"] and not x["paid"] for x in b)
+    assert client.delete(f"/api/recurring/{s['id']}").json()["ok"]
+    # a person's own account: its recurring ones are theirs; the household's are the editors'
     as_user("sam", "member")
+    assert client.post("/api/recurring", json={"name": "Water", "amount": 30}).status_code == 403
     mine = add(client, name="Sam's", household=False)
-    db.ex("INSERT INTO mny_bills (ext_key, day, merchant, amount, account_id, seen_at) VALUES ('s3:x', %s, 'Gym', -30, %s, NOW())", (today, mine["id"]))
-    assert len(client.get(f"/api/bills?start={today}&end={today}").json()["items"]) == 3
+    sg = client.post("/api/recurring", json={"name": "Sam's gym", "amount": 30, "accountId": mine["id"]})
+    assert sg.status_code == 201 and sg.json()["writable"]
+    assert {x["name"] for x in client.get("/api/recurring").json()["items"]} == {"Power co", "NETFLIX.COM", "Gym", "Sam's gym"}
     sign_in(client, "alex")
-    assert len(client.get(f"/api/bills?start={today}&end={today}").json()["items"]) == 2  # Sam's gym is Sam's
+    as_user("ed", "editor")
+    assert client.post("/api/recurring", json={"name": "Ed's gym", "amount": 30, "accountId": mine["id"]}).status_code == 400  # not one Ed sees
+    assert client.delete(f"/api/recurring/{sg.json()['id']}").status_code == 404
+    sign_in(client, "alex")
+    assert "Sam's gym" not in {x["merchant"] for x in client.get(f"/api/bills?start={months_ago(1)}&end={months_ago(-1)}").json()["items"]}
+
+
+def test_manual_transactions_and_categories(client):
+    a = add(client)
+    db.ex("UPDATE mny_accounts SET source = 'monarch', external_id = 'm1' WHERE id = %s", (a["id"],))  # one from Monarch takes them too
+    t = client.post(f"/api/accounts/{a['id']}/transactions", json={"amount": -20, "merchant": "Corner shop", "category": "Groceries"}).json()
+    assert t["source"] == "manual" and t["category"] == "Groceries"
+    assert client.get(f"/api/accounts/{a['id']}").json()["balance"] == 1000.5  # Monarch's balance stays Monarch's
+    client.post(f"/api/accounts/{a['id']}/transactions", json={"amount": -5, "merchant": "Bakery", "category": "Bread"})
+    assert client.post("/api/categories", json={"name": "Pets", "group": "Home"}).status_code == 201
+    assert client.post("/api/categories", json={"name": "Pets"}).status_code == 400
+    c = {x["category"]: x for x in client.get("/api/categories").json()["items"]}
+    assert c["Pets"]["group"] == "Home" and c["Pets"]["count"] == 0 and c["Groceries"]["count"] == 1
+    client.post("/api/rules", json={"pattern": "corner", "setCategory": "Groceries"})
+    # renamed (and put in a group): its transactions and rules follow
+    r = client.put("/api/categories", json={"name": "Groceries", "newName": "Food", "group": "Everyday"}).json()
+    assert r["moved"] == 1
+    t = next(x for x in client.get("/api/transactions").json()["items"] if x["id"] == t["id"])
+    assert t["category"] == "Food" and t["group"] == "Everyday"
+    assert client.get("/api/rules").json()["items"][0]["setCategory"] == "Food"
+    assert client.get("/api/transactions?q=food").json()["total"] == 1
+    # merged into another, then deleted with its transactions moved
+    assert client.put("/api/categories", json={"name": "Bread", "newName": "Food"}).json()["moved"] == 1
+    c = {x["category"]: x for x in client.get("/api/categories").json()["items"]}
+    assert "Bread" not in c and c["Food"]["count"] == 2 and c["Food"]["group"] == "Everyday"
+    assert client.post("/api/categories/delete", json={"name": "Food", "moveTo": "Food"}).status_code == 400
+    assert client.post("/api/categories/delete", json={"name": "Food", "moveTo": "Pets"}).json()["moved"] == 2
+    c = {x["category"]: x for x in client.get("/api/categories").json()["items"]}
+    assert "Food" not in c and c["Pets"]["count"] == 2
+    assert client.post("/api/categories/delete", json={"name": "Nope"}).status_code == 404
 
 
 def test_settings_and_admin_only(client, as_user):

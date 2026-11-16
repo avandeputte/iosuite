@@ -1,6 +1,7 @@
 """The Monarch Money sync against a stand-in for the library: the sign-in kept with the suite's keys, accounts (the
-house and the car among them) with their history, transactions (changes made here kept), holdings, bills, and a
-session Monarch no longer takes."""
+house and the car among them) with their history, transactions (changes made here kept, categories renamed here
+followed), holdings (not Monarch's recurring transactions: ioMoney finds those itself), and a session Monarch no
+longer takes."""
 import datetime as dt
 
 import pytest
@@ -63,12 +64,6 @@ class FakeMM:
                       "security": {"ticker": "AAPL", "name": "Apple Inc.", "type": "equity", "currentPrice": 200}, "holdings": []}},
             {"node": {"id": "h2", "quantity": 100, "basis": None, "totalValue": 2000,
                       "security": {"ticker": None, "name": "Target date fund", "type": "mutual_fund", "closingPrice": 20}, "holdings": []}}]}}}
-
-    async def get_recurring_transactions(self, start, end):
-        return {"recurringTransactionItems": [
-            {"stream": {"id": "s1", "frequency": "monthly", "amount": -120, "isApproximate": True, "merchant": {"name": "Power Co"}},
-             "date": (TODAY + dt.timedelta(days=5)).isoformat(), "isPast": False, "transactionId": None, "amount": -118.5,
-             "category": {"name": "Utilities"}, "account": {"id": "101"}}]}
 
 
 def acct(i, name, typ, bal, asset=True, **kw):
@@ -145,8 +140,7 @@ def test_first_sync_copies_everything(client, mm):
     p = client.get("/api/portfolio").json()
     by = {x["symbol"] or x["name"]: x for x in p["items"]}
     assert by["AAPL"]["value"] == 10000 and by["AAPL"]["gain"] == 3000 and by["Target date fund"]["kind"] == "fund"
-    b = client.get(f"/api/bills?start={TODAY}&end={TODAY + dt.timedelta(days=10)}").json()["items"]
-    assert b == [{**b[0], "merchant": "Power Co", "amount": -118.5, "approximate": True, "account": "Checking", "paid": False}]
+    assert client.get("/api/recurring").json()["items"] == []  # Monarch's recurring ones are not brought in
     assert client.delete(f"/api/accounts/{accts['Checking']['id']}").status_code == 403  # hide it instead
 
 
@@ -208,6 +202,22 @@ def test_rules_run_over_what_monarch_sends(client, mm):
     assert client.post("/api/monarch/sync").json()["ok"]
     assert client.get(f"/api/accounts/{accts['Checking']['id']}").json()["track"] == "value"
     assert client.get("/api/transactions").json()["total"] == 0
+
+
+def test_categories_renamed_here_follow_the_syncs(client, mm):
+    put_keys()
+    assert client.post("/api/monarch/sync").json()["ok"]
+    assert client.put("/api/categories", json={"name": "Groceries", "newName": "Food shopping", "group": "Everyday"}).json()["moved"] == 2  # the grocer and the pending cafe
+    assert client.post("/api/categories/delete", json={"name": "Transfer"}).json()["moved"] == 1
+    FakeMM.transactions.append(tx("t9", 1, -9, "Grocer two"))
+    assert client.post("/api/monarch/sync").json()["ok"]
+    by = {t["merchant"]: t for t in client.get("/api/transactions?hidden=true").json()["items"]}
+    assert by["Grocer"]["category"] == "Food shopping" and by["Grocer two"]["category"] == "Food shopping"
+    assert by["Grocer two"]["group"] == "Everyday" and by["To savings"]["category"] is None
+    # the name taken again here: Monarch's comes in under it once more
+    assert client.post("/api/categories", json={"name": "Groceries"}).status_code == 201
+    assert client.post("/api/monarch/sync").json()["ok"]
+    assert grocer(client)["category"] == "Groceries"
 
 
 def test_an_account_made_again_in_monarch_is_not_there_twice(client, mm):

@@ -140,7 +140,7 @@ label.check { display: inline-flex; align-items: flex-start; gap: 6px; cursor: p
 
 /* ---- narrow screens: the sidebar slides in; phones get a bottom bar with the smart lists and More */
 @media (max-width: 860px) {
-  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav a[data-v="acct"], #nav a[data-v="assets"], #nav a[data-v="rules"] { display: none !important; }
+  #menubtn, #navscrim, .navhead, .navgap, .navsec, .navfoot, #nav a[data-v="acct"], #nav a[data-v="assets"], #nav a[data-v="rules"], #nav a[data-v="recurring"] { display: none !important; }
   #suitebtn:not([hidden]) { display: inline-flex; margin: 0; }
   #topbar { gap: 6px; padding: 0 8px; left: 0; padding-top: env(safe-area-inset-top); height: calc(var(--topbar) + env(safe-area-inset-top)); }
   #nav { top: auto; bottom: 0; left: 0; right: 0; width: auto; height: calc(56px + env(safe-area-inset-bottom)); flex-direction: row; justify-content: space-around;
@@ -379,3 +379,22 @@ a.thing:hover { box-shadow: var(--shadow); }
 .pagehead .iconbtn.rename { width: 30px; height: 30px; color: var(--fg2); margin-left: -6px; }
 .banner { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-radius: 10px; background: var(--bg2); margin: 0 0 12px; }
 .banner.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); }
+
+/* Recurring and Categories */
+.recurhead { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 26px 0 6px; font-size: 18px; }
+.recurhead .small { font-size: var(--fs-s); font-weight: 400; margin-left: auto; }
+.recur .main .tag { margin-left: 8px; vertical-align: middle; }
+.recur .r { align-items: flex-start; }
+.recur .amt { min-width: 110px; text-align: right; }
+.recur .when { min-width: 120px; color: var(--fg2); font-size: var(--fs-s); text-align: right; }
+.recur .found b { font-weight: 500; }
+.catgrp { margin-top: 18px; }
+.catgrp h3 { font-size: var(--fs-s); color: var(--fg2); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 6px; }
+@media (max-width: 700px) {
+  .recur .when { display: none; }
+  .recurhead .grow { display: none; }
+  .recurhead .small { flex-basis: 100%; margin-left: 32px; }
+  .recur.found .r { flex-wrap: wrap; }
+  .recur.found .main { flex: 1 1 60%; min-width: 0; }
+  .recur.found .acts { flex-basis: 100%; justify-content: flex-end; }
+}

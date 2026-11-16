@@ -19,7 +19,7 @@ def diagnostics() -> dict:
     try:
         out["database"] = {"host": f"{config.DB_HOST}:{config.DB_PORT}", "name": config.DB_NAME,
                            "server": db.one("SELECT version() AS v")["v"], "schema": db.schema_version(),
-                           **{t: db.one(f"SELECT count(*) AS n FROM mny_{t}")["n"] for t in ("accounts", "transactions", "holdings", "quotes", "bills")}}
+                           **{t: db.one(f"SELECT count(*) AS n FROM mny_{t}")["n"] for t in ("accounts", "transactions", "holdings", "quotes", "recurring")}}
         out["monarch"] = monarch.status()
     except Exception as e:  # noqa: BLE001
         out["database"] = {"error": str(e)[:200]}

@@ -678,8 +678,6 @@ def _move_balance(aid: int, delta: Decimal) -> None:
 
 def create_transaction(u: dict, a: dict, b: dict) -> dict:
     _need(can_write(u, a))
-    if a["source"] == "monarch":
-        raise Forbidden("Transactions of a Monarch Money account come from Monarch")
     if a.get("track") != "transactions":
         raise Invalid("This account follows its value alone: change it to follow its transactions first")
     on = day(b.get("day") or dt.date.today().isoformat())
@@ -760,11 +758,9 @@ def delete_transaction(u: dict, t: dict) -> None:
 
 
 def categories(u: dict) -> list[dict]:
-    where, args = _visible(u)
-    rows = db.q(f"SELECT t.category, MAX(t.category_group) AS grp, count(*) AS n FROM mny_transactions t "
-                f"JOIN mny_accounts a ON a.id = t.account_id WHERE {where} AND a.track = 'transactions' AND t.category IS NOT NULL "
-                f"GROUP BY t.category ORDER BY t.category", args)
-    return [{"category": r["category"], "group": r["grp"], "count": r["n"]} for r in rows]
+    """Every category (app/categories.py): those the transactions have and those added here."""
+    from app import categories as cats
+    return cats.items(u)
 
 
 def _not_transfer() -> str:
@@ -1001,19 +997,6 @@ def write_estimates() -> int:
     return n
 
 
-# ---- bills (Monarch Money's recurring transactions), for ioCalendar
-
-def bills(u: dict, start, end) -> list[dict]:
-    where, args = _visible(u)
-    rows = db.q(f"SELECT b.*, a.name AS account_name, a.currency FROM mny_bills b LEFT JOIN mny_accounts a ON a.id = b.account_id "
-                f"WHERE b.day BETWEEN %s AND %s AND (b.account_id IS NULL OR {where}) ORDER BY b.day, b.merchant",
-                (day(start), day(end), *args)) if role_rank(u) >= 1 else []
-    return [{"id": r["id"], "day": r["day"].isoformat(), "merchant": r["merchant"], "amount": n2(r["amount"]),
-             "currency": r["currency"] or home_currency(), "approximate": bool(r["approximate"]), "frequency": r["frequency"],
-             "category": r["category"], "accountId": r["account_id"], "account": r["account_name"], "paid": bool(r["paid"])}
-            for r in rows]
-
-
 # ---- rules: the household's, renaming and categorizing transactions as they come in
 
 RULE_FIELDS = ("either", "merchant", "description")  # what is matched: the payee, the bank's own text, or either
@@ -1184,6 +1167,9 @@ def _rule_changes(rs: list[dict], t: dict) -> dict:
 
 
 def _group_of_category(name: str) -> str | None:
+    k = db.one("SELECT grp FROM mny_categories WHERE name = %s", (name,))
+    if k and k["grp"]:
+        return k["grp"]
     g = db.one("SELECT category_group AS g, count(*) AS n FROM mny_transactions WHERE category = %s AND category_group IS NOT NULL "
                "GROUP BY category_group ORDER BY n DESC LIMIT 1", (name,))
     return g["g"] if g else None
