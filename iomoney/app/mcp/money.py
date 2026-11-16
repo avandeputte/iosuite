@@ -25,12 +25,14 @@ def _acct(u: dict, a: dict) -> dict:
 @server.tool(annotations=READ_ONLY)
 def overview() -> dict:
     """Who you are, the household's currency, the net worth now (assets, what is owed, by kind), the accounts with
-    their balances, and when Monarch Money was last synced. Start here."""
+    their balances, when Monarch Money was last synced, and banksBehind: the accounts whose link to the bank Monarch
+    reports as broken or more than two days behind (check them in Monarch Money). Start here."""
     u = who()
     _need_role(u)
     return {"you": {"name": u["name"], "role": u.get("role")}, "currency": model.home_currency(),
             "netWorth": model.net_worth(u), "accounts": [_acct(u, a) for a in model.accounts(u)],
-            "monarchLastSync": monarch.status()["lastGood"], "version": __version__, "webApp": config.PUBLIC_URL or None}
+            "monarchLastSync": monarch.status()["lastGood"], "banksBehind": model.stale_accounts(u),
+            "version": __version__, "webApp": config.PUBLIC_URL or None}
 
 
 @server.tool(annotations=READ_ONLY)

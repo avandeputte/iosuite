@@ -275,13 +275,26 @@ function drawNav() {
       .map(([k, [label, ic, hv]]) => link(k, k === 'overview' ? '#/' : `#/${k}`, ic, label, null, r.view === k, hv)),
     h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), h('span', { class: 'nl' }, 'More')),
     byGroup(shown).map((g) => [h('div', { class: 'navgap' }), sec(g.label),
-      g.list.map((a) => link('acct', `#/account/${a.id}`, a.household ? KIND_LOOK[a.kind][0] : 'lock', a.name, null, r.view === 'account' && r.id === a.id, KIND_LOOK[a.kind][1]))]),
+      g.list.map((a) => behindMark(link('acct', `#/account/${a.id}`, a.household ? KIND_LOOK[a.kind][0] : 'lock', a.name, null, r.view === 'account' && r.id === a.id, KIND_LOOK[a.kind][1]), a))]),
     canAdd() ? [h('div', { class: 'navgap' }), link('acct', '#/accounts/new', 'add', 'Add an account', null, false, '--c-green')] : null,
     h('div', { class: 'navfoot' }, link('settings', '#/settings', 'settings', 'Settings', null, r.view === 'settings')),
   ].flat(4).filter(Boolean));
   nav.querySelector('a[href="#/accounts/new"]')?.addEventListener('click', (e) => { e.preventDefault(); accountDialog(); });
   applySidebar();
   $('.navmore')?.classList.toggle('on', ['assets', 'rules', 'account', 'settings'].includes(r.view));
+}
+/** An account whose link to its bank Monarch Money reports as cut, needing its sign-in fixed or over two days behind:
+    a warning mark (with why) on its row. */
+const behind = (a) => (a.bank && a.bank.stale ? a.bank : null);
+function behindMark(el, a) {
+  const b = behind(a);
+  if (b) { el.classList.add('behind'); el.title = `${a.name}: ${b.why}`; el.append(h('span', { class: 'bwarn', 'aria-label': b.why }, icon('warning', 'xs'))); }
+  return el;
+}
+function behindText(b) {
+  if (b.stale === 'disconnected') return `Monarch Money's link to the bank was cut${b.disconnectedAt ? ` ${ago(b.disconnectedAt)}` : ''}`;
+  if (b.stale === 'update') return 'Monarch Money needs the bank sign-in fixed';
+  return `Monarch Money last heard from the bank ${ago(b.refreshedAt)}`;
 }
 /** Phones: what the bottom bar has no room for (the assets, the rules, the accounts, settings). */
 function moreSheet() {
@@ -378,6 +391,7 @@ function acctRow(a) {
   return h('li', { class: a.closed || !a.inNetWorth ? 'off' : null }, h('a', { href: `#/account/${a.id}` },
     h('span', { class: 'main' }, h('b', null, a.name), h('small', null, [a.institution, a.subtype, a.mask ? `…${a.mask}` : null].filter(Boolean).join(' · ') || kindLabel(a.kind))),
     !a.household ? h('span', { class: 'tag priv', title: 'Yours alone' }, 'Private') : null,
+    behind(a) ? h('span', { class: 'tag warn', title: behindText(a.bank) }, icon('warning', 'xs'), a.bank.stale === 'old' ? 'Behind' : 'Link broken') : null,
     a.estimate != null ? h('span', { class: 'tag est', title: 'Estimated from the last value and its yearly change' }, 'Est.') : null,
     !followsTx(a) && !THINGS.includes(a.kind) && a.kind !== 'investment' ? h('span', { class: 'tag', title: 'Its value alone is followed, not its transactions' }, 'Value') : null,
     h('span', { class: 'end' }, h('span', { class: `num ${a.isAsset ? '' : 'neg'}` }, money(a.isAsset ? shown : -Math.abs(shown), a.currency)),
@@ -393,6 +407,14 @@ function syncNote() {
       h('span', { class: 'grow' }, m.newAccounts === 1 ? 'Monarch Money reports an account ioMoney does not know. Is it new, or one you have that was made again in Monarch?'
         : `Monarch Money reports ${m.newAccounts} accounts ioMoney does not know. Are they new, or ones you have that were made again in Monarch?`),
       h('button', { class: 'pillbtn primary', onclick: () => newAccountsDialog() }, 'Review')));
+  }
+  if (m.stale && m.stale.length) {
+    const one = m.stale.length === 1;
+    out.push(h('div', { class: 'note warnnote behindnote' }, icon('warning', 's'),
+      h('div', { class: 'grow' },
+        h('div', null, one ? 'Monarch Money may have lost its link to the bank for this account:' : `Monarch Money may have lost its link to the bank for ${m.stale.length} accounts:`),
+        h('ul', null, m.stale.map((x) => h('li', null, h('a', { class: 'lnk', href: `#/account/${x.id}` }, x.name), x.institution ? ` (${x.institution})` : '', `: ${behindText(x)}`))),
+        h('small', { class: 'muted' }, `Check ${one ? 'its' : 'their'} connection in Monarch Money (Settings › Institutions); the next sync here picks up the change.`))));
   }
   if (m.running) {
     if (admin) watchSync();
@@ -492,6 +514,8 @@ async function showAccount(page, r) {
     a.writable && tx ? ['add', 'Add a transaction', () => txDialog(null, a)] : null,
     tx ? ['receipt', 'Its transactions', `#/transactions?account=${a.id}`] : null,
     a.source === 'monarch' && may('admin') ? ['sync', 'Sync this account again', () => resyncAccount(a)] : null,
+    a.writable && a.bank && a.bank.linked && !a.closed ? (a.bank.quiet ? ['warning', 'Flag it when the bank link is behind', () => quietBank(a, false)]
+      : ['warning', 'Don’t flag its bank link', () => quietBank(a, true)]) : null,
     a.writable && a.source === 'manual' ? ['delete', 'Delete', () => removeAccount(a)] : null,
   ]) }, icon('more'));
   put(page, h('div', { class: 'pagehead' }, h('span', { class: 'sic', style: { '--hue': `var(${KIND_LOOK[a.kind][1]})`, color: 'var(--hue)' } }, icon(KIND_LOOK[a.kind][0])),
@@ -505,7 +529,13 @@ async function showAccount(page, r) {
     a.estimate != null ? h('div', { class: 'chg muted' }, h('span', { class: 'tag est' }, 'Estimated'), ` from ${money(a.balance, a.currency)} and ${a.details.yearlyRate}% a year`) : null,
     a.equity != null ? h('div', { class: 'chg' }, 'Equity ', amt(a.equity), h('small', { class: 'muted' }, ` after ${a.loan.name} (${money(a.loan.balance, a.loan.currency)})`)) : null,
     a.currency !== CUR() ? h('div', { class: 'chg muted num' }, money(a.value, CUR())) : null));
-  if (a.source === 'monarch') put(page, h('p', { class: 'muted small', style: { margin: '-6px 0 12px' } }, icon('sync', 'xs'), ` From Monarch Money, updated ${ago(a.balanceAt)}`));
+  if (a.source === 'monarch') {
+    const b = a.bank;
+    if (behind(a)) put(page, h('div', { class: 'note warnnote' }, icon('warning', 's'), h('span', { class: 'grow' }, `${behindText(b)}. Its balance and transactions may be out of date: check its connection in Monarch Money (Settings › Institutions).`)));
+    put(page, h('p', { class: 'muted small', style: { margin: '-6px 0 12px' } }, icon('sync', 'xs'), ` From Monarch Money, updated ${ago(a.balanceAt)}`,
+      b && b.linked && b.refreshedAt && !behind(a) ? ` · Monarch last heard from the bank ${ago(b.refreshedAt)}` : null,
+      b && b.quiet ? ' · not flagged when behind' : null));
+  }
   const days = store.get('range') || '365';
   const hist = await api(`api/accounts/${a.id}/history?days=${days}`);
   put(page, lineChart((hist.items || []).map((p) => ({ ...p, value: a.isAsset ? p.value : -p.value }))));
@@ -533,6 +563,9 @@ async function showAccount(page, r) {
     put(page, h('h2', null, 'Recent transactions'), txList(t.items, false),
       t.total > t.items.length ? h('div', { class: 'more' }, h('a', { class: 'pillbtn', href: `#/transactions?account=${a.id}` }, `All ${t.total}`)) : null);
   }
+}
+async function quietBank(a, quiet) {
+  try { await api(`api/accounts/${a.id}`, { method: 'PATCH', json: { flagStale: !quiet } }); await refreshSummary(); toast(quiet ? 'It won’t be flagged' : 'It will be flagged when behind'); onRoute(); } catch (e) { fail(e); }
 }
 // what is kept to deal with the account's bank: [field, label, how it is typed in]; the numbers are shown hidden
 const INFO = [['accountNumber', 'Account number', { autocomplete: 'off', spellcheck: 'false' }], ['routingNumber', 'Routing number', { inputmode: 'numeric', autocomplete: 'off' }],

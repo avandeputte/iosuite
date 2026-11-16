@@ -18,6 +18,10 @@ quotes, and what the house and the cars are worth after their loans.
   from Zillow, the cars) with its balance history, two years of transactions and the holdings,
   copied in every six hours. ioMoney only reads: nothing is changed in Monarch. A sync runs in the background and the
   page shows how far it is (the first one, with two years of transactions, takes minutes).
+- **A bank link behind?** When Monarch has not heard from an account's bank in more than two days, or says the
+  link was cut or the bank sign-in needs fixing, ioMoney flags the account (on the overview, in the sidebar and on its
+  page) so you can check its connection in Monarch. An account that rarely changes can be left out from its menu
+  (Don't flag its bank link).
 - **A new account in Monarch?** When Monarch reports an account ioMoney does not know, ioMoney asks whether it is new
   or an account you have that was deleted and made again in Monarch (often needed when a bank's link breaks), with the
   likeliest one picked. An existing one keeps its name and history, and its transactions are matched, so none is there

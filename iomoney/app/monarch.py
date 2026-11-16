@@ -198,6 +198,32 @@ def _put_account(acc: dict, today: dt.date) -> tuple[int, bool]:
     return aid, new
 
 
+def _utc(v) -> dt.datetime | None:
+    """One of Monarch's times ("2026-11-15T08:12:33.123+00:00"), in UTC without its zone; None when there is none."""
+    if not v:
+        return None
+    try:
+        t = dt.datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t.astimezone(dt.timezone.utc).replace(tzinfo=None) if t.tzinfo else t
+
+
+def _put_link(aid: int, acc: dict, now: dt.datetime) -> None:
+    """What Monarch says of the account's link to its bank: when it last heard from the bank, whether the bank sign-in
+    needs fixing there, whether the link was cut (model.bank_link flags it). Linked: kept up to date from a bank, not
+    typed in at Monarch, not a value Monarch looks up (a house's) and its updates not turned off."""
+    cred = acc.get("credential") or {}
+    linked = 1 if cred and not acc.get("isManual") and not acc.get("syncDisabled") else 0
+    status = ((cred.get("institution") or {}).get("status") or None)
+    db.ex("INSERT INTO mny_bank_links (account_id, linked, refreshed_at, update_required, disconnected_at, institution_status, "
+          "seen_at) VALUES (%s, %s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE linked = VALUES(linked), "
+          "refreshed_at = VALUES(refreshed_at), update_required = VALUES(update_required), "
+          "disconnected_at = VALUES(disconnected_at), institution_status = VALUES(institution_status), seen_at = VALUES(seen_at)",
+          (aid, linked, _utc(acc.get("displayLastUpdatedAt")), 1 if cred.get("updateRequired") else 0,
+           _utc(cred.get("disconnectedFromDataProviderAt")), str(status)[:32] if status else None, now))
+
+
 async def _history(mm, ext: str, aid: int, is_asset: bool) -> int:
     try:
         snaps = await mm.get_account_history(int(ext) if ext.isdigit() else ext)
@@ -495,6 +521,7 @@ async def _run(full: bool, only: int = None, years: int = 2) -> dict:
     ask = bool(db.one("SELECT 1 AS x FROM mny_accounts WHERE source = 'monarch' LIMIT 1"))
     said_new = {r["external_id"] for r in db.q("SELECT external_id FROM mny_monarch_new WHERE decision = 'new'")}
     listed = [str(a["id"]) for a in accts]
+    now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     for n, acc in enumerate(accts, 1):
         _at("Accounts and their history", n)
         ext = str(acc["id"])
@@ -503,6 +530,7 @@ async def _run(full: bool, only: int = None, years: int = 2) -> dict:
             n_held += 1
             continue
         aid, new = _put_account(acc, today)
+        _put_link(aid, acc, now)
         ids[ext] = aid
         if new:
             await _history(mm, ext, aid, bool(acc.get("isAsset", True)))

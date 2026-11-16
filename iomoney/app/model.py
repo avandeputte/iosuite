@@ -297,7 +297,64 @@ def _growth(pct: Decimal, years: Decimal) -> Decimal:
     return Decimal(str(math.pow(float(1 + pct / 100), float(years))))
 
 
-def account_public(a: dict, u: dict, extra: dict = None) -> dict:
+# an account Monarch Money has not heard from its bank about for longer than this is flagged: its link to the bank
+# may be broken (a changed password, a new security question, the bank's own outage)
+STALE_HOURS = 48
+STALE_WHY = {"disconnected": "Monarch Money's link to the bank was cut", "update": "Monarch Money needs the bank sign-in fixed",
+             "old": "Monarch Money has not heard from the bank in over two days"}
+
+
+def bank_links(aids) -> dict:
+    """{account id: its mny_bank_links row} for the accounts given."""
+    aids = [int(x) for x in aids]
+    if not aids:
+        return {}
+    return {r["account_id"]: r for r in db.q(f"SELECT * FROM mny_bank_links WHERE account_id IN ({db.marks(len(aids))})", aids)}
+
+
+def _utc_iso(t) -> str | None:
+    return t.isoformat() + "Z" if t else None
+
+
+def bank_link(a: dict, r: dict | None) -> dict | None:
+    """An account from Monarch Money's link to its bank, as Monarch reported it at the last sync: when Monarch last
+    heard from the bank (refreshedAt, UTC), and stale: why it is flagged (disconnected, update: the bank sign-in needs
+    fixing in Monarch, old: not heard from in over STALE_HOURS by the time of that sync), or None. Not flagged: closed,
+    not linked to a bank (typed in at Monarch, a value Monarch looks up, its updates turned off) or asked to be quiet."""
+    if a["source"] != "monarch" or not r:
+        return None
+    hours = None
+    if r["refreshed_at"]:
+        hours = max(0, int((r["seen_at"] - r["refreshed_at"]).total_seconds() // 3600))
+    why = None
+    if r["linked"] and not a["closed"] and not r["quiet"]:
+        why = ("disconnected" if r["disconnected_at"] else "update" if r["update_required"]
+               else "old" if hours is not None and hours > STALE_HOURS else None)
+    return {"linked": bool(r["linked"]), "refreshedAt": _utc_iso(r["refreshed_at"]), "checkedAt": _utc_iso(r["seen_at"]),
+            "hoursBehind": hours, "updateRequired": bool(r["update_required"]),
+            "disconnectedAt": _utc_iso(r["disconnected_at"]), "institutionStatus": r["institution_status"],
+            "quiet": bool(r["quiet"]), "stale": why, "why": STALE_WHY.get(why)}
+
+
+def stale_accounts(u: dict) -> list[dict]:
+    """The accounts this person sees (not hidden) whose link to the bank Monarch Money reports as broken or behind."""
+    rows = [a for a in accounts(u) if a["source"] == "monarch" and not a["closed"]]
+    links = bank_links([a["id"] for a in rows])
+    out = []
+    for a in rows:
+        b = bank_link(a, links.get(a["id"]))
+        if b and b["stale"]:
+            out.append({"id": a["id"], "name": a["name"], "institution": a["institution"], "stale": b["stale"],
+                        "why": b["why"], "refreshedAt": b["refreshedAt"]})
+    return out
+
+
+def quiet_bank_link(aid: int, quiet: bool) -> None:
+    db.ex("UPDATE mny_bank_links SET quiet = %s WHERE account_id = %s", (1 if quiet else 0, aid))
+
+
+def account_public(a: dict, u: dict, extra: dict = None, links: dict = None) -> dict:
+    """links: bank_links() of the accounts listed (otherwise this one's is looked up)."""
     label, _asset, _m = KINDS.get(a["kind"], (a["kind"], a["is_asset"], ()))
     fx = rate(a["currency"])
     loan = None
@@ -314,6 +371,8 @@ def account_public(a: dict, u: dict, extra: dict = None) -> dict:
         "loan": loan, "writable": can_write(u, a), "position": a["position"], "group": GROUP_OF.get(a["kind"], "asset"),
         "track": a.get("track") or "transactions",
     }
+    if a["source"] == "monarch":
+        out["bank"] = bank_link(a, (links if links is not None else bank_links([a["id"]])).get(a["id"]))
     if a["kind"] in THINGS:
         e = estimate(a)
         out["estimate"] = n2(e)
@@ -327,7 +386,7 @@ def account_public(a: dict, u: dict, extra: dict = None) -> dict:
 
 
 ACCOUNT_FIELDS = ("name", "institution", "kind", "subtype", "balance", "currency", "inNetWorth", "hidden", "closed",
-                  "mask", "details", "loanId", "position", "household", "track")
+                  "mask", "details", "loanId", "position", "household", "track", "flagStale")
 
 
 def track(v, kind: str) -> str:
@@ -402,6 +461,8 @@ def update_account(u: dict, a: dict, b: dict) -> dict:
     if "details" in b:
         d = _details(b["details"], a.get("details"))
         put("details", json.dumps(d) if d else None)
+    if "flagStale" in b and monarch:
+        quiet_bank_link(a["id"], not flag(b["flagStale"]))
     if "loanId" in b:
         put("loan_id", _loan(u, b["loanId"]))
     if "track" in b:
