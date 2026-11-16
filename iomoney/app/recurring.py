@@ -18,6 +18,10 @@ days from it.
 Subscriptions (Netflix, Max, YouTube, Spotify, iCloud, a gym...) are recurring transactions too, marked as one: found
 by the service's name (or a category like Streaming or Subscriptions), or marked by hand; the Recurring page shows them
 in their own section with what they cost a month and a year.
+
+Flags: one in the list whose payment did not come when its pace says it should have (missed: a paycheck, a bill), or
+whose latest payment had another amount (changed: a subscription's price went up), is flagged until the next payment
+comes, its amount is updated, or someone sets the flag aside.
 """
 import datetime as dt
 import re
@@ -41,6 +45,7 @@ MONTHS = {"monthly": 1, "bimonthly": 2, "quarterly": 3, "semiannual": 6, "yearly
 LOOK_BACK = 800        # days of transactions looked at to find them: two years and more, so a yearly one is seen twice
 NEAR = {"weekly": 2, "biweekly": 3}  # how far from its date a payment still counts (5 days for the rest)
 VARIES = Decimal("0.35")  # an approximate amount: a payment within 35% of it is one
+GRACE = {"weekly": 2, "biweekly": 2, "semimonthly": 3, "yearly": 7}  # days past its pace before one is missed (5 for the rest)
 PER_MONTH = {"weekly": Decimal(52) / 12, "biweekly": Decimal(26) / 12, "semimonthly": Decimal(2),
              **{f: Decimal(1) / n for f, n in MONTHS.items()}}
 
@@ -181,6 +186,68 @@ def _payments(r: dict, start: dt.date, end: dt.date) -> list[dict]:
     return [t for t in rows if _hits(r, t)]
 
 
+# ---- flags: a payment that did not come, an amount that changed
+
+def _changed_by(r: dict) -> Decimal:
+    """How far from the usual amount a payment is another amount: what varies, beyond its reach; a fixed one, a
+    quarter or 1%."""
+    want = Decimal(r["amount"])
+    return _reach(r) if r["approximate"] else max(Decimal("0.25"), want * Decimal("0.01"))
+
+
+def flag_of(r: dict, paid: list[dict], today: dt.date) -> dict | None:
+    """What is off with a recurring transaction, from its payments so far (paid: _payments, by day), or None:
+    {kind: "changed", day, from, to, transactionId}: the latest payment, or one like it (its words, when one was due,
+    between half and twice the amount) had another amount; {kind: "missed", since (the last payment's day), expected
+    (about when the next was due), days (how late)}: none came for longer than its pace allows. Not one set aside
+    (mny_recurring_ok) for that day."""
+    if not paid:
+        return None
+    last = paid[-1]
+    want, freq = Decimal(r["amount"]), r["frequency"]
+    lo, hi = BANDS[freq]
+    near = NEAR.get(freq, 5)
+    sign = -1 if r["flow"] == "out" else 1
+    out = None
+    if last["day"] < today:
+        where = "t.hidden = 0 AND t.day > %s AND t.day <= %s AND ABS(t.amount) BETWEEN %s AND %s AND t.amount " + ("< 0" if r["flow"] == "out" else "> 0")
+        args = [last["day"], today, want / 2, want * 2]
+        if r["account_id"]:
+            where += " AND t.account_id = %s"
+            args.append(r["account_id"])
+        cands = [t for t in db.q(f"SELECT t.id, t.account_id, t.day, t.amount, t.merchant, t.description FROM mny_transactions t "
+                                 f"WHERE {where} ORDER BY t.day", args)
+                 if _says(r, t) and lo - near <= (t["day"] - last["day"]).days <= hi + near]
+        if cands:
+            c = min(cands, key=lambda t: abs(abs(Decimal(t["amount"])) - want))  # the nearest amount: a price moves a little
+            out = {"kind": "changed", "day": c["day"], "from": model.n2(sign * want), "to": model.n2(c["amount"]), "transactionId": c["id"]}
+    if not out and abs(abs(Decimal(last["amount"])) - want) > _changed_by(r):
+        out = {"kind": "changed", "day": last["day"], "from": model.n2(sign * want), "to": model.n2(last["amount"]), "transactionId": last["id"]}
+    if not out:
+        late = (today - last["day"]).days - hi - GRACE.get(freq, 5)
+        if late > 0:
+            out = {"kind": "missed", "day": last["day"], "since": last["day"].isoformat(),
+                   "expected": _step(last["day"], freq, 1, last["day"].day).isoformat(), "days": late}
+    if out and db.one("SELECT 1 AS x FROM mny_recurring_ok WHERE recurring_id = %s AND kind = %s AND day = %s", (r["id"], out["kind"], out["day"])):
+        return None
+    if out:
+        out["day"] = out["day"].isoformat()
+    return out
+
+
+def set_aside(u: dict, r: dict, b: dict) -> None:
+    """{kind: missed|changed, day}: the flag looked at, not shown again for that day."""
+    _need_change(u, r["account_id"])
+    if b.get("kind") not in ("missed", "changed"):
+        raise Invalid("The kind: missed or changed")
+    db.ex("INSERT IGNORE INTO mny_recurring_ok (recurring_id, kind, day) VALUES (%s, %s, %s)", (r["id"], b["kind"], model.day(b.get("day"))))
+
+
+def flags(u: dict, today: dt.date = None) -> list[dict]:
+    """The recurring transactions this person sees that are flagged (as public, each with its flag)."""
+    return [x for x in items(u, today) if x["flag"]]
+
+
 # ---- the list
 
 def _row(rid) -> dict | None:
@@ -232,13 +299,13 @@ def public(r: dict, u: dict, today: dt.date = None) -> dict:
             "next": nxt.isoformat() if nxt else None, "category": r["category"], "source": r["source"],
             "subscription": bool(r["subscription"]), "perMonth": model.n2(sign * per_month(r["amount"], r["frequency"])),
             "last": {"day": last["day"].isoformat(), "amount": model.n2(last["amount"])} if last else None,
-            "writable": _may_change(u, r["account_id"])}
+            "flag": flag_of(r, paid, today), "writable": _may_change(u, r["account_id"])}
 
 
-def items(u: dict) -> list[dict]:
+def items(u: dict, today: dt.date = None) -> list[dict]:
     """The household's recurring transactions this person sees, the next one due first."""
     rows = [r for r in db.q("SELECT * FROM mny_recurring ORDER BY name") if _sees(u, r)]
-    out = [public(r, u) for r in rows]
+    out = [public(r, u, today) for r in rows]
     out.sort(key=lambda x: (x["next"] or "9999", x["name"].lower()))
     return out
 

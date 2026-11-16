@@ -53,6 +53,7 @@ def summary(request: Request):
             "monarch": {"configured": monarch.configured(), "lastGood": monarch.status()["lastGood"], "running": monarch.running(),
                         "newAccounts": monarch.held_count() if model.is_admin(u) else 0,
                         "stale": model.stale_accounts(u)} if model.role_rank(u) else None,
+            "recurringFlags": len(recurring.flags(u)),
             "may": {"read": model.role_rank(u) >= 1, "own": model.may_add(u, False), "household": model.may_add(u, True),
                     "admin": model.is_admin(u)}}
 
@@ -494,7 +495,8 @@ async def refresh_quotes(request: Request):
 
 @router.get("/api/recurring", dependencies=[access.signed_in])
 def list_recurring(request: Request):
-    """The household's recurring transactions (each with its next date and the last payment), and what was found in
+    """The household's recurring transactions (each with its next date, the last payment and its flag: a payment
+    missed, or one whose amount changed), and what was found in
     the transactions that looks recurring and is not in the list (found), with whether you may change them."""
     u = _u(request)
     return {"items": recurring.items(u), "found": recurring.found(u), "writable": shared_users.can_write(u),
@@ -525,6 +527,16 @@ async def change_recurring(rid: int, request: Request):
     u = _u(request)
     b = await json_body(request)
     return recurring.public(recurring.update(u, recurring.item(u, rid), b), u)
+
+
+@router.post("/api/recurring/{rid}/ok", dependencies=[access.signed_in])
+async def recurring_flag_ok(rid: int, request: Request):
+    """{kind: missed|changed, day}: the item's flag (as its flag gives them) looked at: not shown again for that day."""
+    u = _u(request)
+    b = await json_body(request)
+    r = recurring.item(u, rid)
+    recurring.set_aside(u, r, b)
+    return recurring.public(r, u)
 
 
 @router.get("/api/transactions/{tid}/recurring", dependencies=[access.signed_in])

@@ -236,6 +236,48 @@ def test_recurring_found_added_and_shown_as_bills(client, as_user):
     assert "Sam's gym" not in {x["merchant"] for x in client.get(f"/api/bills?start={months_ago(1)}&end={months_ago(-1)}").json()["items"]}
 
 
+def test_recurring_flags_a_missed_payment_and_a_changed_amount(client):
+    a = add(client)
+    ago = lambda d: (dt.date.today() - dt.timedelta(days=d)).isoformat()  # noqa: E731
+    post = lambda **b: client.post(f"/api/accounts/{a['id']}/transactions", json=b)  # noqa: E731
+    # a paycheck every two weeks whose last one is 30 days back; a streaming service whose price went up; a gym that
+    # still comes as always; a power bill that varies
+    for d in (72, 58, 44, 30):
+        post(day=ago(d), amount=2000, merchant="ACME PAYROLL")
+    for d, amt in ((92, -15.49), (61, -15.49), (31, -15.49), (1, -17.99)):
+        post(day=ago(d), amount=amt, merchant="Streamflix")
+    for d in (64, 33, 3):
+        post(day=ago(d), amount=-40, merchant="Gym")
+    for d, amt in ((65, -80), (35, -95), (5, -70)):
+        post(day=ago(d), amount=amt, merchant="Power co")
+    post(day=ago(2), amount=-25, merchant="Streamflix gift shop")  # its words too, further from the usual amount
+    mk = lambda **b: client.post("/api/recurring", json=b).json()  # noqa: E731
+    pay = mk(name="ACME PAYROLL", amount=2000, flow="in", frequency="biweekly", day=ago(30), accountId=a["id"])
+    mk(name="Streamflix", amount=15.49, day=ago(31), accountId=a["id"], subscription=True)
+    gym = mk(name="Gym", amount=40, day=ago(3), accountId=a["id"])
+    power = mk(name="Power co", amount=80, approximate=True, day=ago(5), accountId=a["id"])
+    assert gym["flag"] is None and power["flag"] is None  # as always, and within what varies
+    items = {x["name"]: x for x in client.get("/api/recurring").json()["items"]}
+    f = items["ACME PAYROLL"]["flag"]
+    assert f["kind"] == "missed" and f["since"] == ago(30) and f["expected"] == ago(16) and f["days"] == 13
+    f = items["Streamflix"]["flag"]
+    assert f["kind"] == "changed" and f["from"] == -15.49 and f["to"] == -17.99 and f["day"] == ago(1)
+    assert client.get("/api/summary").json()["recurringFlags"] == 2
+    # a price that moved a little (within the usual reach) is a change too
+    post(day=ago(0), amount=-40.75, merchant="Gym")
+    g = next(x for x in client.get("/api/recurring").json()["items"] if x["name"] == "Gym")
+    assert g["flag"]["kind"] == "changed" and g["flag"]["to"] == -40.75
+    # the new price taken: no flag; the paycheck's flag set aside: gone until the next one is late
+    assert client.patch(f"/api/recurring/{gym['id']}", json={"amount": 40.75}).json()["flag"] is None
+    r = client.post(f"/api/recurring/{pay['id']}/ok", json={"kind": "missed", "day": items["ACME PAYROLL"]["flag"]["day"]})
+    assert r.status_code == 200 and r.json()["flag"] is None
+    assert client.post(f"/api/recurring/{pay['id']}/ok", json={"kind": "late", "day": ago(30)}).status_code == 400
+    assert client.get("/api/summary").json()["recurringFlags"] == 1
+    # the paycheck comes: no flag either way
+    post(day=ago(0), amount=2000, merchant="ACME PAYROLL")
+    assert next(x for x in client.get("/api/recurring").json()["items"] if x["name"] == "ACME PAYROLL")["flag"] is None
+
+
 def test_recurring_found_despite_outliers_renames_and_shared_payees(client):
     """What a real household's transactions look like: a bonus among the paychecks, a payee Monarch renamed while the
     bank's text stayed, two loans paid to one bank, a loan's payment linked as a transfer, a bill every two months, a
