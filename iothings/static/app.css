@@ -147,6 +147,14 @@ label.check { display: inline-flex; align-items: flex-start; gap: 6px; cursor: p
 
 .chiprow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
+/* ---- Places, Family and Labels fold away: the section head is the button */
+.navsec .fold { display: inline-flex; align-items: center; gap: 4px; padding: 0; margin-left: -4px; border: 0; background: none; color: inherit;
+  font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.navsec .fold:hover { color: var(--fg); }
+.navsec .fold .ic { width: 14px; height: 14px; transform: rotate(90deg); transition: transform .15s; }
+.navsec.folded .fold .ic { transform: none; }
+.navsec .fold .fn { margin-left: 4px; font-weight: 400; letter-spacing: 0; }
+
 /* ---- a compact sidebar: a house has many places and labels, so the rows are shorter than the suite's (40px), the
    section heads closer, so most of them fit without scrolling (the phone's bottom bar below keeps its own sizes) */
 @media (min-width: 861px) {
