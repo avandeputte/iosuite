@@ -1,5 +1,5 @@
 ---
-description: Run an ioThing app, or the whole suite, with Docker Compose.
+description: Run an ioThing app, or the whole suite, with Docker Compose; the builder that writes the stack file for you.
 ---
 
 # Docker
@@ -19,6 +19,25 @@ Every app is published as a public image for amd64 and arm64:
 | ioThings | `ghcr.io/avandeputte/iosuite/iothings` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iothings/docker-compose.yml) |
 | ioMoney | `ghcr.io/avandeputte/iosuite/iomoney` | [docker-compose.yml](https://github.com/avandeputte/iosuite/blob/main/iomoney/docker-compose.yml) |
 
+## Build your stack
+
+The [Docker Compose builder](https://iosuite.iothing.net/compose/) asks which apps you want, whether MariaDB goes in
+the stack or you already run a server, the first admin, and how the suite is reached (one address or one per app,
+plain HTTP, a Caddy container that gets the certificates, or your own reverse proxy). It writes one
+`docker-compose.yml` with nothing left to edit:
+
+```sh
+docker compose up -d
+docker compose logs setup     # what was set up; it ends with ok
+```
+
+The file's `setup` service runs before the apps at every start (`iosuite-shared stack`, which every image holds): it
+makes the databases and users that are missing, the first admin, and writes how the suite is reached into the Shared
+ioSuite database (the one-address switch and the reverse proxy addresses), so there is nothing to click afterwards.
+What a suite admin changes under Settings later stays until the file says something new. The page works in your
+browser alone: nothing you type is sent anywhere. To add or remove an app later, open your file on the page again;
+it holds its own answers.
+
 ## One app
 
 ```sh
@@ -35,6 +54,8 @@ a container can be replaced at will. Every image comes with a health check.
 To share the accounts with apps you run elsewhere, give the container the same `IOSUITE_DB_*` settings as the others.
 
 ## The whole suite in one stack
+
+The builder above writes this for your own answers. By hand:
 
 [`docker-compose.yml`](https://github.com/avandeputte/iosuite/blob/main/docker-compose.yml) in
 the ioSuite repository starts a MariaDB with a database per app, and ioStart, ioCalendar, ioTask, ioRecipe, ioThings, ioMoney, ioContact, ioNote, ioHealth

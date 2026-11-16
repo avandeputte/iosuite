@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docker Compose builder — ioThing suite</title>
+<meta name="description" content="Pick the apps, answer a few questions and get one docker-compose.yml for the ioThing suite: the apps, MariaDB, the first admin and HTTPS. Start it and the server is ready. Everything stays in your browser.">
+<link rel="canonical" href="https://iosuite.iothing.net/compose/">
+<link rel="icon" type="image/svg+xml" href="/img/icon.svg">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Docker Compose builder — ioThing suite">
+<meta property="og:description" content="Pick the apps, answer a few questions, start one file: the whole suite, ready to sign in.">
+<meta property="og:url" content="https://iosuite.iothing.net/compose/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+
+<header>
+  <nav class="nav wrap" aria-label="Main">
+    <a class="brand" href="/">
+      <img src="/img/icon.svg" alt="" width="34" height="34">
+      <b><span class="io">io</span>Thing <span class="suite">suite</span></b>
+    </a>
+    <a class="link" href="/#apps">All apps</a>
+    <a class="link" href="/#install">Other ways to install</a>
+    <a class="link" href="/docs/start/docker/">Docker in the guide</a>
+    <a class="gh" href="https://github.com/avandeputte/iosuite" rel="noopener">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      GitHub
+    </a>
+  </nav>
+</header>
+
+<main id="top">
+  <section class="chero">
+    <div class="wrap">
+      <span class="eyebrow">docker · one file</span>
+      <h1>Build your Docker stack</h1>
+      <p class="lede">Pick the apps and answer a few questions. You get one <code>docker-compose.yml</code> with nothing left to edit: start it, and the suite is running with its databases, your admin account and the addresses you chose.</p>
+      <p class="private"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V6H4a1.5 1.5 0 0 0-1.5 1.5v6A1.5 1.5 0 0 0 4 15h8a1.5 1.5 0 0 0 1.5-1.5v-6A1.5 1.5 0 0 0 12 6h-.5V4.500A3.500 3.500 0 0 0 8 1Zm2 5H6V4.500a2 2 0 1 1 4 0V6Z"/></svg>
+        The file is written in your browser. Nothing you type here is sent anywhere, and nothing is kept when you close the page.
+        <button type="button" class="linkish" id="open-btn">Open a file you made here before</button>
+        <input type="file" id="open-file" accept=".yml,.yaml,text/yaml,text/plain" hidden>
+      </p>
+      <noscript><p class="cwarn">This page writes the file with JavaScript. Without it, start from <a href="https://github.com/avandeputte/iosuite/blob/main/docker-compose.yml">the whole-suite example</a> and fill in its CHANGE ME values.</p></noscript>
+    </div>
+  </section>
+
+  <section class="cbuild">
+    <div class="wrap cgrid">
+      <form id="form" class="cform" autocomplete="off" novalidate>
+
+        <fieldset class="cstep">
+          <legend><span class="chip">1</span> The apps</legend>
+          <p class="hint">Each app runs in its own container. Add or remove one later by opening your file here again.</p>
+          <div class="pick" id="apps" role="group" aria-label="Apps to install"></div>
+          <p class="sub">Admin tools, seen by suite admins only</p>
+          <div class="pick pick-tools" id="tools" role="group" aria-label="Admin tools"></div>
+        </fieldset>
+
+        <fieldset class="cstep">
+          <legend><span class="chip">2</span> The database</legend>
+          <div class="choices">
+            <label class="choice"><input type="radio" name="db.mode" value="bundled"><b>Include MariaDB</b><small>A database container in the stack, with its data in a Docker volume. Nothing to set up.</small></label>
+            <label class="choice"><input type="radio" name="db.mode" value="existing"><b>Use a server I already run</b><small>MariaDB or MySQL on this machine or on your network.</small></label>
+          </div>
+          <div data-if="db.mode=existing">
+            <div class="row">
+              <label class="field grow"><span>Server</span><input type="text" data-k="db.host" placeholder="db.example.lan" spellcheck="false" autocapitalize="off"><small>Its name or address. On this same machine: <code>host.docker.internal</code></small></label>
+              <label class="field narrow"><span>Port</span><input type="text" data-k="db.port" inputmode="numeric"></label>
+            </div>
+            <div class="choices">
+              <label class="choice"><input type="radio" name="db.create" value="admin"><b>Create the databases for me</b><small>With an administrator login, the stack makes each app's database and the two users at its first start. Nothing is ever dropped.</small></label>
+              <label class="choice"><input type="radio" name="db.create" value="manual"><b>I create them myself</b><small>You get the SQL to run on the server, below the file.</small></label>
+            </div>
+            <div class="row" data-if="db.create=admin">
+              <label class="field"><span>Administrator</span><input type="text" data-k="db.adminUser" spellcheck="false" autocapitalize="off"></label>
+              <label class="field grow"><span>Its password</span><input type="password" data-k="db.adminPassword" autocomplete="new-password"><small>Used by the setup step only, never by an app.</small></label>
+            </div>
+            <div class="row">
+              <label class="field"><span>The apps' user</span><input type="text" data-k="db.user" spellcheck="false" autocapitalize="off"></label>
+              <label class="field grow"><span>Its password</span><input type="text" class="mono" data-k="db.password" spellcheck="false" autocapitalize="off"><small>One user for every app's own database (named after the app: <code>iocalendar</code>, <code>ionote</code>…).</small></label>
+            </div>
+            <div class="row">
+              <label class="field"><span>Shared ioSuite database</span><input type="text" data-k="db.sharedName" spellcheck="false" autocapitalize="off"></label>
+              <label class="field"><span>Its user</span><input type="text" data-k="db.sharedUser" spellcheck="false" autocapitalize="off"></label>
+              <label class="field grow"><span>Its password</span><input type="text" class="mono" data-k="db.sharedPassword" spellcheck="false" autocapitalize="off"></label>
+            </div>
+            <p class="hint">The Shared ioSuite database holds the accounts and the suite's settings. If ioThing apps elsewhere already use one, enter its name, user and password here and this stack shares their accounts.</p>
+          </div>
+        </fieldset>
+
+        <fieldset class="cstep">
+          <legend><span class="chip">3</span> The first admin</legend>
+          <div class="row">
+            <label class="field"><span>Name</span><input type="text" data-k="admin.user" spellcheck="false" autocapitalize="off"></label>
+            <label class="field grow"><span>Password</span>
+              <span class="with-btn"><input type="password" data-k="admin.password" id="admin-password" autocomplete="new-password" placeholder="8 characters or more"><button type="button" id="admin-show" aria-pressed="false">Show</button><button type="button" id="admin-make">Make one</button></span>
+            </label>
+          </div>
+          <p class="hint">A suite admin: an admin of every app, and the one who adds the family's accounts.</p>
+          <label class="field"><span>Time zone</span><input type="text" data-k="tz" list="zones" spellcheck="false"><datalist id="zones"></datalist></label>
+        </fieldset>
+
+        <fieldset class="cstep">
+          <legend><span class="chip">4</span> How it is reached</legend>
+          <div class="choices">
+            <label class="choice"><input type="radio" name="reach.layout" value="one"><b>One address for the suite</b><small>The start page answers, each app in a folder of it: <code>…/calendar/</code>, <code>…/notes/</code>. One port, one name, one certificate.</small></label>
+            <label class="choice"><input type="radio" name="reach.layout" value="each"><b>An address per app</b><small>Each app on its own port, or under its own name: <code>calendar.example.com</code>.</small></label>
+          </div>
+          <p class="cwarn" data-if="reach.layout=one&!apps.iostart">One address is the start page's doing: pick ioStart above, or choose an address per app.</p>
+
+          <p class="sub">HTTPS</p>
+          <div class="choices three">
+            <label class="choice"><input type="radio" name="reach.https" value="none"><b>None</b><small>Plain HTTP, for the home network.</small></label>
+            <label class="choice"><input type="radio" name="reach.https" value="caddy"><b>Include Caddy</b><small>A reverse proxy in the stack that gets and renews the certificates by itself.</small></label>
+            <label class="choice"><input type="radio" name="reach.https" value="proxy"><b>My own reverse proxy</b><small>Caddy, nginx, Traefik, a Cloudflare Tunnel… that you already run.</small></label>
+          </div>
+
+          <div class="row" data-if="reach.https=none">
+            <label class="field grow"><span>This server's name or address on your network <i data-if="layout=one">(optional)</i></span><input type="text" data-k="reach.address" placeholder="192.168.1.10" spellcheck="false" autocapitalize="off"><small data-if="layout=one">Empty: the suite takes the address you first open it at.</small><small data-if="layout=each">The start page and the apps link to each other with it.</small></label>
+            <label class="field narrow" data-if="layout=one"><span>Port</span><input type="text" data-k="reach.port" inputmode="numeric"></label>
+          </div>
+
+          <div data-if="reach.https=caddy|proxy">
+            <div class="row">
+              <label class="field grow" data-if="layout=one"><span>The suite's name</span><input type="text" data-k="reach.domain" placeholder="home.example.com" spellcheck="false" autocapitalize="off"></label>
+              <label class="field grow" data-if="layout=each"><span>Your domain</span><input type="text" data-k="reach.domain" placeholder="example.com" spellcheck="false" autocapitalize="off"><small>Each app gets a name under it, and one sign-in covers them all.</small></label>
+              <label class="field narrow" data-if="layout=one&reach.https=proxy"><span>Port</span><input type="text" data-k="reach.port" inputmode="numeric"></label>
+            </div>
+            <div class="names" id="names" data-if="layout=each"></div>
+            <label class="check" data-if="reach.https=caddy"><input type="checkbox" data-k="reach.internalCert"><span>This name only exists inside my network: let Caddy sign the certificate itself <small>(browsers warn until you trust it on each device)</small></span></label>
+            <div data-if="reach.https=proxy">
+              <div class="choices">
+                <label class="choice"><input type="radio" name="reach.proxyAt" value="here"><b>The proxy runs on this server</b><small>The apps' ports open on this machine only, so the proxy is the one way in.</small></label>
+                <label class="choice"><input type="radio" name="reach.proxyAt" value="other"><b>On another machine</b><small>The ports open on your network; the apps take the visitor's address from the proxy.</small></label>
+              </div>
+              <div class="row" data-if="reach.proxyAt=other">
+                <label class="field"><span>The proxy's address</span><input type="text" data-k="reach.proxyIp" placeholder="192.168.1.2" spellcheck="false"></label>
+                <label class="field grow"><span>This server's address, for the proxy <i>(optional)</i></span><input type="text" data-k="reach.address" placeholder="192.168.1.10" spellcheck="false" autocapitalize="off"></label>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="cstep" data-if="apps.iopix|apps.iocontact|apps.iobackup">
+          <legend><span class="chip">5</span> The apps' own questions</legend>
+          <div class="appq" data-if="apps.iopix">
+            <h3><img src="/img/iopix.svg" alt="" width="24" height="24"> ioPix</h3>
+            <label class="field"><span>The folder with the photos, on this server</span><input type="text" data-k="iopix.photos" placeholder="/srv/photos" spellcheck="false" autocapitalize="off"><small>ioPix reads the photos there and keeps small sidecar files beside them. It never moves or deletes a photo by itself.</small></label>
+            <label class="check"><input type="checkbox" data-k="iopix.ai"><span>Search by what is in the picture, objects and places <small>(about 1.6 GB of models, fetched at the first start)</small></span></label>
+          </div>
+          <div class="appq" data-if="apps.iocontact">
+            <h3><img src="/img/iocontact.svg" alt="" width="24" height="24"> ioContact</h3>
+            <div class="row">
+              <label class="check grow"><input type="checkbox" data-k="iocontact.ldap"><span>Open the LDAP directory, for mail apps that look addresses up <small>(read-only)</small></span></label>
+              <label class="field narrow" data-if="iocontact.ldap"><span>Port</span><input type="text" data-k="iocontact.ldapPort" inputmode="numeric"></label>
+            </div>
+          </div>
+          <div class="appq" data-if="apps.iobackup">
+            <h3><img src="/img/iobackup.svg" alt="" width="24" height="24"> ioBackup</h3>
+            <label class="field"><span>The folder that keeps the backups, on this server <i>(optional)</i></span><input type="text" data-k="iobackup.folder" placeholder="/srv/backups" spellcheck="false" autocapitalize="off"><small>Empty: a Docker volume. A folder on another disk is the safer place.</small></label>
+          </div>
+        </fieldset>
+
+        <details class="cstep cmore">
+          <summary>More: the version, the stack's network</summary>
+          <div class="row">
+            <label class="field"><span>Version</span><input type="text" data-k="tag" spellcheck="false" autocapitalize="off"><small><code>latest</code> follows the newest; a release such as <code>v3.13.0</code> stays on it.</small></label>
+            <label class="field"><span>The stack's own network</span><input type="text" data-k="subnet" spellcheck="false"><small>Change it only if it is in use on this server.</small></label>
+          </div>
+        </details>
+      </form>
+
+      <aside class="cout" aria-label="The file">
+        <div class="cstatus" id="status" aria-live="polite"></div>
+        <div class="term cfile">
+          <div class="term-head"><span>docker-compose.yml</span>
+            <span class="cbtns"><label class="cmask"><input type="checkbox" id="reveal"> show passwords</label><button class="copy" type="button" id="copy">copy</button></span>
+          </div>
+          <pre><code id="yaml"></code></pre>
+        </div>
+        <div class="cactions">
+          <button type="button" class="btn btn-primary" id="download">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1v8.600L4.700 6.300 3.300 7.700 8 12.400l4.700-4.700-1.400-1.400L8 9.600V1H8zM2 13h12v2H2v-2z"/></svg>
+            Download docker-compose.yml
+          </button>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="cthen">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">then</span>
+        <h2>Start it</h2>
+        <p>What is left to do, for the answers above.</p>
+      </div>
+      <ol class="csteps" id="steps"></ol>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="frow">
+        <span class="fbrand"><img src="/img/icon.svg" alt=""><span><span class="io">io</span>Thing suite</span></span>
+        <a href="/">Home</a>
+        <a href="/docs/">Docs</a>
+        <a href="/docs/start/docker/">Docker in the guide</a>
+        <a href="/docs/run/reverse-proxy/">Reverse proxy and HTTPS</a>
+        <a href="https://github.com/avandeputte/iosuite" rel="noopener">ioSuite on GitHub</a>
+      </div>
+      <p>Free and open source software, licensed under the GNU GPL v3 or later. An independent project. Docker, MariaDB, MySQL, Caddy and Cloudflare are trademarks of their owners.</p>
+    </div>
+  </footer>
+</main>
+
+<script src="compose.js"></script>
+<script src="page.js"></script>
+</body>
+</html>
