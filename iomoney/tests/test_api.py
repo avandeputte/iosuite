@@ -443,6 +443,52 @@ def test_a_transaction_split_over_categories(client, as_user):
     assert by["Shopping"]["spent"] == 210 and "Clothes" not in by
 
 
+PDF = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
+PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 40
+
+
+def test_receipts_kept_with_a_transaction(client, as_user):
+    from iosuite_shared import related
+    a = add(client)
+    tx = lambda amt, m: client.post(f"/api/accounts/{a['id']}/transactions", json={"amount": amt, "merchant": m}).json()  # noqa: E731
+    washer, grocer = tx(-899, "Corner Appliances"), tx(-30, "Grocer")
+    assert washer["receipts"] == []
+    up = lambda raw, name="": client.post(f"/api/transactions/{washer['id']}/receipts", params={"name": name}, content=raw)  # noqa: E731
+    assert up(b"").status_code == 400 and up(b"<html><script>alert(1)</script>", "receipt.pdf").status_code == 400  # told by its bytes, not its name
+    r = up(PDF, "invoice 2041.pdf")
+    assert r.status_code == 201
+    pdf = r.json()
+    assert pdf["name"] == "invoice 2041.pdf" and pdf["mime"] == "application/pdf" and pdf["size"] == len(PDF)
+    png = up(PNG, "../../slip").json()
+    assert png["mime"] == "image/png" and png["name"] == ".. .. slip"
+    assert up(PNG).json()["name"] == "receipt.png"
+    t = client.get(f"/api/transactions/{washer['id']}").json()  # one transaction, as the list gives it
+    assert [x["name"] for x in t["receipts"]] == ["invoice 2041.pdf", ".. .. slip", "receipt.png"] and t["merchant"] == "Corner Appliances"
+    got = client.get(pdf["url"].replace("api/", "/api/"))
+    assert got.content == PDF and got.headers["content-type"] == "application/pdf" and "inline" in got.headers["content-disposition"]
+    assert "attachment" in client.get(f"/api/receipts/{png['id']}?download=true").headers["content-disposition"]
+    # found with or without a receipt
+    find = lambda q: [x["merchant"] for x in client.get(f"/api/transactions?{q}").json()["items"]]  # noqa: E731
+    assert find("receipt=yes") == ["Corner Appliances"] and find("receipt=no") == ["Grocer"]
+    # a viewer sees them, and adds or removes none
+    as_user("vi", "viewer")
+    assert client.get(f"/api/receipts/{pdf['id']}").content == PDF
+    assert up(PDF).status_code == 403 and client.delete(f"/api/receipts/{pdf['id']}").status_code == 403
+    sign_in(client, "alex")
+    assert client.delete(f"/api/receipts/{png['id']}").json() == {"ok": True}
+    assert client.get(f"/api/receipts/{png['id']}").status_code == 404
+    assert len(client.get(f"/api/transactions/{washer['id']}").json()["receipts"]) == 2
+    # linked to a thing in ioThings: the link goes when the transaction does, and so do the receipts
+    related.add(("transaction", washer["id"]), ("item", 7))
+    related.add(("transaction", grocer["id"]), ("item", 8))
+    assert client.delete(f"/api/transactions/{washer['id']}").json() == {"ok": True}
+    assert related.of("item", 7) == [] and len(related.of("item", 8)) == 1
+    assert db.one("SELECT count(*) AS n FROM mny_receipts")["n"] == 0 and db.one("SELECT count(*) AS n FROM mny_receipt_parts")["n"] == 0
+    assert client.get(f"/api/receipts/{pdf['id']}").status_code == 404
+    assert client.delete(f"/api/accounts/{a['id']}").status_code == 200  # the account goes: its transactions' links too
+    assert related.of("item", 8) == []
+
+
 def test_manual_transactions_and_categories(client):
     a = add(client)
     db.ex("UPDATE mny_accounts SET source = 'monarch', external_id = 'm1' WHERE id = %s", (a["id"],))  # one from Monarch takes them too

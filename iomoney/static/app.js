@@ -19,6 +19,7 @@ const ICONS = {
   car: 'M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z',
   bank: 'M4 10v7h3v-7H4zm6 0v7h3v-7h-3zM2 22h19v-3H2v3zm14-12v7h3v-7h-3zm-4.5-9L2 6v2h19V6l-9.5-5z',
   card: 'M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z',
+  attach: 'M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z',
   split: 'M14 4l2.29 2.29-2.88 2.88 1.42 1.42 2.88-2.88L20 10V4h-6zm-4 0H4v6l2.29-2.29 4.71 4.7V20h2v-8.41l-5.29-5.3L10 4z',
   loan: 'M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z',
   gem: 'M12 2 2 9l10 13L22 9 12 2zm0 3.2L18.6 9H5.4L12 5.2z',
@@ -322,6 +323,7 @@ function route() {
   const [a, b, c] = p;
   if (!a) return { view: 'overview' };
   if (a === 'transactions') return { view: 'transactions', q };
+  if (a === 'transaction' && +b) return { view: 'transaction', id: +b };
   if (a === 'spending') return { view: 'spending', month: /^\d{4}-\d{2}$/.test(b || '') ? b : thisMonth() };
   if (a === 'portfolio') return { view: 'portfolio' };
   if (a === 'assets') return { view: 'assets' };
@@ -342,7 +344,7 @@ async function onRoute() {
     const page = h('div', { class: 'page wide' });
     if (!may('read') && r.view !== 'settings') noRole(page);
     else await ({ overview: showOverview, transactions: showTransactions, spending: showSpending, portfolio: showPortfolio,
-      assets: showAssets, rules: showRules, transfers: showTransfers, recurring: showRecurring, categories: showCategories, account: showAccount, settings: showSettings })[r.view](page, r);
+      assets: showAssets, rules: showRules, transaction: showTransaction, transfers: showTransfers, recurring: showRecurring, categories: showCategories, account: showAccount, settings: showSettings })[r.view](page, r);
     main.replaceChildren(page);
     if (!r.keepScroll) main.scrollTop = 0;
   } catch (e) { main.replaceChildren(h('div', { class: 'page' }, h('div', { class: 'empty' }, icon('warning'), h('p', null, e.message || String(e)), h('p', null, h('a', { class: 'lnk', href: '#/' }, 'Overview'))))); }
@@ -987,6 +989,14 @@ async function categories() {
   if (!S.cats.length) { try { S.cats = (await api('api/categories')).items || []; } catch { S.cats = []; } }
   return S.cats;
 }
+/** #/transaction/12 (a link from another app's item, say): the transactions of its account and month, with it open. */
+async function showTransaction(page, r) {
+  const t = await api(`api/transactions/${r.id}`);
+  const q = { account: String(t.accountId), month: t.day.slice(0, 7) };
+  history.replaceState(null, '', `#/transactions?${new URLSearchParams(q)}`);
+  await showTransactions(page, { view: 'transactions', q });
+  txDialog(t);
+}
 /** The transactions, one row each: date, payee, notes, category (or where a transfer went) and amount (and the
     account, where the list mixes them). On a phone the notes and the account give way, the category goes under the payee. */
 const fmtTxDay = (s) => { const d = dateOf(s); return d.toLocaleDateString(undefined, d.getFullYear() === new Date().getFullYear() ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: '2-digit' }); };
@@ -1006,6 +1016,7 @@ function txList(items, showAccount = true, showBank = store.get('txbank') === '1
       h('span', { class: 'd' }, fmtTxDay(t.day)),
       h('span', { class: 'p' }, h('b', null, t.merchant || t.description || '(no payee)'), t.pending ? h('span', { class: 'tag' }, 'Pending') : null,
         t.recurring ? h('span', { class: 'rec', title: `Recurring: ${t.recurring.name}${t.recurring.subscription ? ' (a subscription)' : ''}` }, icon(t.recurring.subscription ? 'play' : 'repeat', 'xs')) : null,
+        t.receipts && t.receipts.length ? h('span', { class: 'rcp', title: t.receipts.length === 1 ? 'A receipt is kept with it' : `${t.receipts.length} receipts are kept with it` }, icon('attach', 'xs')) : null,
         h('small', { class: 'cs' }, txCat(t))),
       showBank ? h('span', { class: 'b', title: t.description || null }, t.description || '') : null,
       h('span', { class: 'n', title: t.notes || null }, t.notes || ''),
@@ -1034,6 +1045,7 @@ async function showTransactions(page, r) {
   const params = new URLSearchParams({ limit, offset });
   for (const k of ['q', 'account', 'category', 'month', 'flow']) if (q[k]) params.set(k, q[k]);
   if (q.rec) params.set('reconciled', q.rec);
+  if (q.rcp) params.set('receipt', q.rcp);
   if (q.amt) params.set('amount', q.amt);
   if (q.hid) params.set('hidden', 'true');
   const [d, cats] = await Promise.all([api(`api/transactions?${params}`), categories()]);
@@ -1054,6 +1066,7 @@ async function showTransactions(page, r) {
     sel('category', [['', 'Every category'], ['-', 'Uncategorized'], ...cats.map((c) => [c.category, c.category])], 'Category'),
     sel('month', months, 'Month'), sel('flow', [['', 'In and out'], ['out', 'Money out'], ['in', 'Money in']], 'Direction'),
     sel('rec', [['', 'Reconciled or not'], ['no', 'Not reconciled'], ['yes', 'Reconciled']], 'Reconciled'),
+    sel('rcp', [['', 'With or without a receipt'], ['yes', 'With a receipt'], ['no', 'Without a receipt']], 'Receipts'),
     sel('hid', [['', 'Without the hidden'], ['1', 'With the hidden (dimmed)']], 'Hidden transactions'),
     h('label', { class: 'check', title: 'Show the bank’s own text for each transaction' },
       h('input', { type: 'checkbox', checked: store.get('txbank') === '1' ? true : null, onchange: (e) => { store.set('txbank', e.target.checked ? '1' : '0'); onRoute(); } }), 'At the bank column')));
@@ -1096,9 +1109,12 @@ async function txDialog(t, account) {
   const xbox = isNew ? null : h('div', { class: 'xferbox' });
   let moved = false;
   if (xbox) drawTransfer(xbox, t, () => { moved = true; });
+  const rbox = isNew ? null : h('div', { class: 'rcbox' });
+  if (rbox) drawReceipts(rbox, t, () => { moved = true; });
+  const lbox = isNew ? null : linkedTx(t);
   const body = h('div', null, dl, h('div', { class: 'grid' }, fld('Payee', f.merchant, true), fld('Amount', f.amount), fld('Date', f.day), fld('Category', f.category), fld('Account', f.account), fld('Notes', f.notes, true)),
     h('div', { class: 'chiprow', style: { marginTop: '10px', gap: '18px' } }, h('label', { class: 'check' }, f.hidden, 'Hidden: left out of the sums'),
-      !isNew ? h('label', { class: 'check' }, f.reconciled, 'Reconciled with the statement') : null), sbox, xbox,
+      !isNew ? h('label', { class: 'check' }, f.reconciled, 'Reconciled with the statement') : null), sbox, xbox, rbox, lbox,
     t.description && t.description !== t.merchant ? h('p', { class: 'muted small' }, 'At the bank: ', t.description) : null,
     t.source === 'monarch' ? h('p', { class: 'muted small' }, 'From Monarch Money. A change here stays here: Monarch itself is not changed.') : null,
     isNew ? h('p', { class: 'muted small' }, 'Added here, by hand. In an account from Monarch Money it stays beside Monarch’s own transactions, and the balance stays Monarch’s.') : null);
@@ -1132,6 +1148,72 @@ async function txDialog(t, account) {
     await api(isNew ? `api/accounts/${f.account.value}/transactions` : `api/transactions/${t.id}`, { method: isNew ? 'POST' : 'PATCH', json: b });
     S.cats = []; toast(isNew ? 'Added' : 'Saved'); onRoute();
   } catch (e) { fail(e); }
+}
+
+/** A picture from a phone's camera is far larger than a receipt needs: one over a megabyte is made smaller (its
+    long side 2000 points, a JPEG) before it is sent; anything else, and a picture the browser cannot draw, goes as it is. */
+async function shrunk(f) {
+  if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size < 1200000) return { body: f, name: f.name };
+  try {
+    const bmp = await createImageBitmap(f, { imageOrientation: 'from-image' });
+    const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+    const c = h('canvas', { width: Math.round(bmp.width * k), height: Math.round(bmp.height * k) });
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise((done) => c.toBlob(done, 'image/jpeg', 0.82));
+    if (blob && blob.size < f.size) return { body: blob, name: f.name.replace(/\.[^.]*$/, '') + '.jpg' };
+  } catch { /* sent as it is */ }
+  return { body: f, name: f.name };
+}
+const fmtSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+/** In a transaction's dialog: its receipts (pictures and PDFs), each opened with a click; whoever may change the
+    transaction adds one (picked, taken with the phone, or dropped here) and removes one. */
+function drawReceipts(box, t, changed) {
+  const list = t.receipts || [];
+  const can = !!t.writable;
+  const send = async (files) => {
+    let n = 0;
+    box.classList.add('busy');
+    for (const f of files) {
+      try {
+        const { body, name } = await shrunk(f);
+        const r = await api(`api/transactions/${t.id}/receipts?name=${encodeURIComponent(name)}`, { method: 'POST', body, headers: { 'Content-Type': 'application/octet-stream' } });
+        t.receipts = [...(t.receipts || []), r]; n += 1;
+      } catch (e) { fail(e); }
+    }
+    box.classList.remove('busy');
+    if (n) { changed(); toast(n === 1 ? 'Receipt kept' : `${n} receipts kept`); }
+    drawReceipts(box, t, changed);
+  };
+  const pick = h('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true, hidden: true, onchange: (e) => { if (e.target.files.length) send([...e.target.files]); } });
+  const remove = async (r) => {
+    if (!await confirmDialog('Remove the receipt', `Remove ${r.name}? It cannot be brought back.`, 'Remove', true)) return;
+    try { await api(`api/receipts/${r.id}`, { method: 'DELETE' }); t.receipts = t.receipts.filter((x) => x.id !== r.id); changed(); drawReceipts(box, t, changed); } catch (e) { fail(e); }
+  };
+  if (!list.length && !can) { box.replaceChildren(); return; }
+  box.replaceChildren(h('div', { class: 'splithead' }, icon('attach', 's'), h('b', null, list.length > 1 ? 'Receipts' : 'Receipt'), h('span', { class: 'grow' }),
+    can ? h('button', { class: 'pillbtn tiny', title: 'A picture or a PDF, up to 20 MB', onclick: () => pick.click() }, icon('add', 'xs'), 'Add') : null, pick),
+    list.length ? h('ul', { class: 'rcps' }, list.map((r) => h('li', null,
+      h('a', { class: 'rcpfile', href: r.url, target: '_blank', rel: 'noopener', title: `Open ${r.name}` },
+        /^image\/(jpeg|png|gif|webp)$/.test(r.mime) ? h('img', { src: r.url, alt: '', loading: 'lazy' }) : h('span', { class: 'rcpic' }, icon(r.mime === 'application/pdf' ? 'receipt' : 'attach')),
+        h('span', { class: 'rcpname' }, h('b', null, r.name), h('small', { class: 'muted' }, fmtSize(r.size)))),
+      can ? h('button', { class: 'iconbtn', title: 'Remove this receipt', 'aria-label': `Remove ${r.name}`, onclick: () => remove(r) }, icon('delete', 's')) : null)))
+      : h('p', { class: 'muted small' }, 'None kept yet: add a picture of the receipt or the PDF of the invoice, or drop it here.'));
+  if (can && !box.ondragover) {
+    box.ondragover = (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); box.classList.add('drop'); } };
+    box.ondragleave = () => box.classList.remove('drop');
+    box.ondrop = (e) => { e.preventDefault(); box.classList.remove('drop'); if (e.dataTransfer.files.length) send([...e.dataTransfer.files]); };
+  }
+}
+/** In a transaction's dialog: what it is linked to in the suite (the thing it paid for in ioThings, with its
+    warranty; a note, a contact…), and the picker that links another, opening on the things. */
+function linkedTx(t) {
+  const el = h('div', { class: 'linked' });
+  (async () => {
+    try { linkUi = linkUi || await import(new URL('api/related/ui.js', document.baseURI).href); } catch { return; }
+    linkUi.mount(el, { kind: 'transaction', id: t.id, toast, first: 'item', canEdit: !!t.writable, onOpen: closeDialogs,
+      empty: 'Nothing linked yet. Link the thing this paid for, so its price and warranty sit together; or a note, a contact…' });
+  })();
+  return el;
 }
 
 /** Split a transaction over categories: its parts, each with its share, a category and a note; what is left to
@@ -1800,7 +1882,7 @@ async function start() {
     if (e.ctrlKey || e.metaKey || e.altKey || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName) || document.querySelector('.signin, .dialog-back')) return;
     if (e.key === '/') { e.preventDefault(); q.focus(); }
   });
-  addEventListener('hashchange', () => { document.title = 'ioMoney'; onRoute(); });
+  addEventListener('hashchange', () => { document.title = 'ioMoney'; closeDialogs(); onRoute(); });
   await onRoute();
   loadSuite();
 }

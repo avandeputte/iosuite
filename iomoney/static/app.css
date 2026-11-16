@@ -437,6 +437,19 @@ a.thing:hover { box-shadow: var(--shadow); }
 .txs .split { display: inline-flex; align-items: center; gap: 4px; }
 .lnkbtn { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 0; background: none; border: 0; color: var(--accent); font: inherit; font-size: var(--fs-s); cursor: pointer; }
 .lnkbtn:hover { text-decoration: underline; }
+.rcbox:not(:empty) { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-m, 10px); }
+.rcbox.drop { border-color: var(--accent); background: var(--accent-bg, rgba(26,115,232,.08)); }
+.rcbox.busy { opacity: .6; pointer-events: none; }
+.rcbox p { margin: 6px 0 0; }
+.rcps { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rcps li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rcpfile { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; padding: 4px; border-radius: 8px; }
+.rcpfile:hover { background: var(--bg2); }
+.rcpfile img, .rcpfile .rcpic { width: 44px; height: 44px; flex: none; border-radius: 6px; object-fit: cover; background: var(--bg2); display: flex; align-items: center; justify-content: center; color: var(--fg2); }
+.rcpname { min-width: 0; display: flex; flex-direction: column; }
+.rcpname b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.txs .p .rcp { display: inline-flex; vertical-align: middle; margin-left: 6px; color: var(--fg2); }
+.dialog .linked { margin-top: 4px; }
 .splitbox { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-m, 10px); }
 .splithead { display: flex; align-items: center; gap: 8px; }
 .splitbox ul { list-style: none; margin: 6px 0 0; padding: 0; }

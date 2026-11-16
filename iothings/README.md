@@ -48,7 +48,8 @@ single-page vanilla JS app, with everything stored in MariaDB / MySQL (the files
 - **Notifications** (Settings › Account › Notifications): at your morning time, the upkeep that is due and is not an
   ioTask task (ioTask reminds of those itself), and the warranties ending.
 - **Linked**: a thing can be linked to events, tasks, notes, contacts, recipes and photos of the other apps, and they
-  to it; the start page's search finds things too.
+  to it; the start page's search finds things too. Linked to the ioMoney transaction that paid for it, the thing
+  shows the amount, the day and the account, and the transaction shows the thing with how long its warranty runs.
 - **Roles as in the other io apps**: viewers look; members (the default) add things, attach files and keep the upkeep
   and the log; editors change and delete everything, and keep the places and labels in order; admins also choose the
   currency (Settings › Things) and run the server. The same accounts, passwords and app passwords as the other io apps.

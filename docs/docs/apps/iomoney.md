@@ -67,6 +67,10 @@ quotes, and what the house and the cars are worth after their loans.
   and so does what Monarch sends later under the old name.
 - **Split a transaction** over several categories (one big-store bill: groceries, clothes, a gift): open it, choose
   Split over categories and give each part its share. The spending by category then counts the parts.
+- **Receipts**: keep the receipt with its transaction. Open the transaction and add a picture (on a phone, take it
+  with the camera) or a PDF, up to 20 MB each. The list marks the transactions that have one, and can show only those
+  with or without. Whoever sees the transaction sees its receipts. A receipt is deleted with its transaction; when
+  a pending transaction posts, its receipts move to the posted one.
 - **Reconciled**: tick each transaction as checked against the bank's statement, filter on it, or tick every one shown.
 - **Bank details** on each account: account and routing numbers (hidden until shown, with copy), IBAN, customer
   service phone, website, address and notes, to have at hand. AI assistants only get the phone, website and address.
@@ -98,6 +102,8 @@ and portfolio tracker for accounts you keep by hand.
 - **ioStart**: a tile on the start page, and one sign-in for all the apps.
 - **ioCalendar**: the recurring bills and paychecks show on the day they are due (ticked once paid), to the people with a role in ioMoney.
 - **Linked items**: link the house or a car to the events, tasks, notes, contacts and photos about it.
+- **ioThings**: link a transaction to the thing it paid for. The transaction then shows the thing with its warranty,
+  and the thing shows what was paid, when and from which account. Open the transaction, choose Link and find the thing.
 
 ## Install
 

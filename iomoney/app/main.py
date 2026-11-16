@@ -72,7 +72,7 @@ app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN
 
 
 def _limit_for(path: str, ctype: str) -> int:
-    return config.MAX_JSON_BYTES
+    return config.MAX_RECEIPT_BYTES if path.endswith("/receipts") else config.MAX_JSON_BYTES
 
 
 # 400 for bad input, the headers, no-store on the API, the body cap: the same in every app of the suite
