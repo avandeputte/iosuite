@@ -434,6 +434,20 @@ async function startSync(full, btn) {
   await refreshSummary(); onRoute();
 }
 
+/** One Monarch account's two years of transactions (and its history, its holdings) fetched again; what was changed
+    here stays, what Monarch no longer has (or hides) goes. */
+async function resyncAccount(a) {
+  const back = h('select', { class: 't' }, h('option', { value: '2' }, 'The past 2 years'), h('option', { value: '5' }, 'The past 5 years'), h('option', { value: '0' }, 'Everything Monarch has'));
+  const body = h('div', null, h('p', null, `Fetch ${a.name}’s transactions from Monarch Money again. Your changes here (categories, notes, payees) stay; what Monarch no longer has, or hides, is removed here.`),
+    fld('How far back', back));
+  if (!await dialog('Sync this account again', body, [{ label: 'Cancel', value: false }, { label: 'Sync it', value: true, primary: true }])) return;
+  try {
+    const r = await api('api/monarch/sync', { method: 'POST', json: { accountId: a.id, years: +back.value, wait: 20 } });
+    if (r.running) toast('Syncing in the background: Settings › Money shows how it goes');
+    else toast(r.message);
+  } catch (e) { fail(e); }
+  await refreshSummary(); onRoute();
+}
 /** The accounts Monarch reported that ioMoney did not know: one at a time, new or an account here (the likeliest
     chosen); "Later" leaves the rest waiting. */
 async function newAccountsDialog() {
@@ -477,6 +491,7 @@ async function showAccount(page, r) {
     a.writable && a.source === 'manual' && a.kind === 'investment' ? ['add', 'Add a holding', () => holdingDialog(null, a.id)] : null,
     a.writable && tx ? ['add', 'Add a transaction', () => txDialog(null, a)] : null,
     tx ? ['receipt', 'Its transactions', `#/transactions?account=${a.id}`] : null,
+    a.source === 'monarch' && may('admin') ? ['sync', 'Sync this account again', () => resyncAccount(a)] : null,
     a.writable && a.source === 'manual' ? ['delete', 'Delete', () => removeAccount(a)] : null,
   ]) }, icon('more'));
   put(page, h('div', { class: 'pagehead' }, h('span', { class: 'sic', style: { '--hue': `var(${KIND_LOOK[a.kind][1]})`, color: 'var(--hue)' } }, icon(KIND_LOOK[a.kind][0])),

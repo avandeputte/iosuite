@@ -259,10 +259,10 @@ async def _pages(mm, start: dt.date, end: dt.date, **kw):
         offset += PAGE
 
 
-async def _transactions(mm, ids: dict, since: dt.date, today: dt.date, groups: dict) -> int:
+async def _transactions(mm, ids: dict, since: dt.date, today: dt.date, groups: dict, **kw) -> int:
     seen, n = set(), 0
     cats = categories.maps()
-    async for page in _pages(mm, since, today):
+    async for page in _pages(mm, since, today, **kw):
         for t in page:
             aid = ids.get(str((t.get("account") or {}).get("id")))
             if not aid:
@@ -282,9 +282,10 @@ async def _transactions(mm, ids: dict, since: dt.date, today: dt.date, groups: d
             db.ex(f"DELETE FROM mny_transactions WHERE id IN ({db.marks(len(gone))})", gone)
     # the household's rules, over what just came in (Monarch's own payee and category, unless changed here by hand)
     _at("Rules and transfers", n)
-    model.apply_rules("t.source = 'monarch' AND t.day BETWEEN %s AND %s", (since, today))
+    scope, args = (f" AND t.account_id IN ({db.marks(len(aids))})", aids) if kw.get("account_ids") else ("", [])
+    model.apply_rules("t.source = 'monarch' AND t.day BETWEEN %s AND %s" + scope, (since, today, *args))
     from app import transfers
-    transfers.link("t.day BETWEEN %s AND %s", (since - dt.timedelta(days=transfers.DAYS), today))
+    transfers.link("t.day BETWEEN %s AND %s" + scope, (since - dt.timedelta(days=transfers.DAYS), today, *args))
     return n
 
 
@@ -475,7 +476,12 @@ async def _holdings(mm, ext: str, aid: int) -> int:
     return n
 
 
-async def _run(full: bool) -> dict:
+ONE = "Only "  # what an account's own sync's message starts with: it does not move the next sync's window
+
+
+async def _run(full: bool, only: int = None, years: int = 2) -> dict:
+    """only: the id here of one Monarch account whose transactions of the past years (0: all Monarch has), its
+    history and holdings are fetched again; the accounts' balances come in as always."""
     today = dt.date.today()
     _at("Signing in")
     mm = await _client()
@@ -508,7 +514,22 @@ async def _run(full: bool) -> dict:
         if mv["new_external_id"] in ids:
             _at("Matching the account's transactions")
             await _adopt(mm, mv, ids[mv["new_external_id"]], today, groups)
-    last = db.one("SELECT MAX(started_at) AS t FROM mny_syncs WHERE ok = 1")["t"]
+    if only:
+        ext = next((e for e, aid in ids.items() if aid == only), None)
+        if not ext:
+            raise LookupError("Monarch Money no longer lists this account")
+        _at("Its history")
+        acc = next(a for a in accts if str(a["id"]) == ext)
+        await _history(mm, ext, only, bool(acc.get("isAsset", True)))
+        _at("Its transactions")
+        since = dt.date(1990, 1, 1) if not years else today - dt.timedelta(days=round(365.25 * years))
+        n_tx = await _transactions(mm, {ext: only}, since, today, groups, account_ids=[ext])
+        if (acc.get("type") or {}).get("name") == "brokerage" or acc.get("holdingsCount"):
+            n_hold = await _holdings(mm, ext, only)
+        return {"accounts": 1, "transactions": n_tx, "holdings": n_hold, "held": 0, "only": acc.get("displayName"),
+                "since": since.isoformat()}
+    # an account's own sync (ONE) does not count: the others were not looked at then
+    last = db.one("SELECT MAX(started_at) AS t FROM mny_syncs WHERE ok = 1 AND message NOT LIKE %s", (ONE + "%",))["t"]
     since = today - dt.timedelta(days=INITIAL_DAYS) if full or not last else last.date() - dt.timedelta(days=OVERLAP_DAYS)
     # a transaction pending here is asked again until it posts (Monarch keeps its first date, often weeks before it
     # posts) or is gone (it posted under another id): otherwise it would stay pending here, beside its posted twin
@@ -536,7 +557,7 @@ def running() -> bool:
     return _lock.locked()
 
 
-def start(by: int = None, full: bool = False, wait: float = 0) -> dict:
+def start(by: int = None, full: bool = False, wait: float = 0, only: int = None, years: int = 2) -> dict:
     """Sync in the background (a first sync of two years takes minutes, longer than a browser or a proxy waits) and
     wait for it up to `wait` seconds: its result when it ended by then, else {running: true, progress}."""
     if running():
@@ -545,7 +566,7 @@ def start(by: int = None, full: bool = False, wait: float = 0) -> dict:
     box = {}
 
     def go():
-        box["r"] = sync(by, full)
+        box["r"] = sync(by, full, only, years)
         done.set()
     threading.Thread(target=go, name="monarch-sync", daemon=True).start()
     if done.wait(wait):
@@ -560,16 +581,19 @@ def progress() -> dict | None:
             "started": _progress["started"].isoformat() if _progress["started"] else None}
 
 
-def sync(by: int = None, full: bool = False) -> dict:
-    """Copy Monarch Money in now; what came in, or why it did not. One sync at a time."""
+def sync(by: int = None, full: bool = False, only: int = None, years: int = 2) -> dict:
+    """Copy Monarch Money in now; what came in, or why it did not. One sync at a time. only: one account's
+    transactions of the past years again (the id here; years 0: all Monarch has)."""
     if not _lock.acquire(blocking=False):
         return {"ok": False, "message": "A sync is already running"}
     started = dt.datetime.now().replace(microsecond=0)
     _progress.update(stage="Starting", count=0, started=started)
     sid = db.ex("INSERT INTO mny_syncs (started_at, by_user) VALUES (%s, %s)", (started, by))
     try:
-        got = asyncio.run(_run(full))
+        got = asyncio.run(_run(full, only, years))
         msg = f"{got['accounts']} accounts, {got['transactions']} transactions, {got['holdings']} holdings"
+        if got.get("only"):
+            msg = f"{ONE}{got['only']}: {got['transactions']} transactions since {got['since']} again"
         if got["held"]:
             msg += f"; {got['held']} new account{'s' if got['held'] > 1 else ''} wait{'' if got['held'] > 1 else 's'} for you to say what {'they are' if got['held'] > 1 else 'it is'}"
         db.ex("UPDATE mny_syncs SET finished_at = NOW(), ok = 1, message = %s, accounts = %s, transactions = %s, holdings = %s "

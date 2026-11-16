@@ -405,13 +405,21 @@ def recurring_transactions() -> dict:
 
 
 @server.tool(annotations=WRITES)
-def sync_monarch() -> dict:
-    """Admins: copy Monarch Money in now (accounts, balances, transactions, holdings) and say how it went. A
-    long one (the first, with two years of transactions) goes on in the background: then running is true, and
-    diagnostics or this tool again says how it goes."""
+def sync_monarch(account: Optional[str] = None, years: int = 2) -> dict:
+    """Admins: copy Monarch Money in now (accounts, balances, transactions, holdings) and say how it went; with
+    account (id or name of one from Monarch), that account's transactions of the past years again (years: 2 as left
+out; 0: all Monarch has). A long one (the first,
+    with two years of transactions) goes on in the background: then running is true, and diagnostics or this tool
+    again says how it goes."""
     u = who()
     need_admin()
-    return monarch.start(u["id"], wait=45)
+    only = None
+    if account:
+        a = find_account(u, account)
+        if a.get("source") != "monarch":
+            raise ValueError("That account is not one from Monarch Money")
+        only = a["id"]
+    return monarch.start(u["id"], wait=45, only=only, years=max(0, min(int(years), 30)))
 
 
 @server.tool(annotations=READ_ONLY)

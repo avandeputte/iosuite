@@ -16,6 +16,9 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   ([`monarchmoneycommunity`](https://pypi.org/project/monarchmoneycommunity/)), which speaks to the API Monarch's web
   app uses. A sync runs in the background: Sync now waits a few seconds, then the page follows it (its stage and count
   every two seconds) and says how it went at the end, so a long first sync is no longer reported as failed.
+- **One account synced again** (admins, an account's menu › Sync this account again): its transactions of the past
+  two years, five years or all Monarch has fetched again, with its history and holdings; changes made here stay,
+  what Monarch no longer has or hides goes. The regular sync's window is not moved by it.
 - **A new account in Monarch**: after the first sync, an account Monarch reports that ioMoney does not know is held,
   with its transactions, until an admin says (on the overview's banner or in Settings › Money) whether it is new or an
   account here that was deleted and made again in Monarch, as is often needed when a bank's link breaks. The
@@ -230,7 +233,7 @@ Updates, releases, the reverse proxy and Cloudflare Access work as in every app 
 | One transaction's recurring one, or one to add from it | `GET /api/transactions/{id}/recurring` |
 | Bills: each date a recurring transaction falls on, paid or not | `GET /api/bills?start=&end=` |
 | Categories: list, add, rename / merge / regroup, delete | `GET`, `POST`, `PUT /api/categories` (`{name, newName?, group?}`), `POST /api/categories/delete` (`{name, moveTo?}`) |
-| Monarch Money (admins) | `GET /api/monarch` (with the running sync's progress), `POST /api/monarch/sync` (`{full, wait}`), `POST /api/monarch/code`, `DELETE /api/monarch/session` |
+| Monarch Money (admins) | `GET /api/monarch` (with the running sync's progress), `POST /api/monarch/sync` (`{full, accountId, years, wait}`), `POST /api/monarch/code`, `DELETE /api/monarch/session` |
 | Accounts Monarch reports as new (admins) | `GET /api/monarch/new`, `POST /api/monarch/new/{monarch id}` (`{as: "new"}` or `{as: "existing", accountId}`) |
 | The household's currency, the automatic sync | `GET /api/settings`, `PUT /api/settings` (admins) |
 

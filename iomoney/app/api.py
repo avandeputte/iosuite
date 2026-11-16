@@ -565,13 +565,23 @@ def monarch_status():
 
 @router.post("/api/monarch/sync", dependencies=[access.admin])
 async def monarch_sync(request: Request):
-    """{full?: true (the past two years of transactions again), wait?: seconds (10 as left out, at most 60)}: start
-    copying Monarch Money in, in the background. When it ends within wait: how it went ({ok, message, ...}); else
+    """{full?: true (the past two years of transactions again), accountId?: just this Monarch account's
+    transactions again, years?: how far back for it (2 as left out; 0: all Monarch has), wait?: seconds (10 as left out, at most 60)}: start copying Monarch Money in, in the background. When it ends within wait: how it went ({ok, message, ...}); else
     {running: true, progress: {stage, count, started}}, and GET /api/monarch says how it goes and, at the end, how
     it went (last)."""
     b = await json_body(request) if (request.headers.get("content-length") or "0") != "0" else {}
     wait = max(0.0, min(float(b.get("wait", 10) or 0), 60.0))
-    return await run_in_threadpool(monarch.start, _u(request)["id"], bool(b.get("full")), wait)
+    only = None
+    if b.get("accountId"):
+        a = model.account_row(b["accountId"])
+        if not a or a["source"] != "monarch":
+            raise Invalid("The account: one from Monarch Money")
+        only = a["id"]
+    try:
+        years = max(0, min(int(b.get("years", 2)), 30))
+    except (TypeError, ValueError):
+        raise Invalid("How far back: a number of years, or 0 for all")
+    return await run_in_threadpool(monarch.start, _u(request)["id"], bool(b.get("full")), wait, only, years)
 
 
 @router.get("/api/monarch/new", dependencies=[access.admin])
