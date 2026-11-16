@@ -893,9 +893,9 @@ async function showImport(page) {
     }
     if (j.state === 'failed') { fill(pdfOut, h('p', { class: 'err' }, `The PDF could not be made: ${j.error}`)); return; }
     fill(pdfOut,
-      h('div', { class: 'draftnote' }, icon('check', 's'), `Ready: ${j.things} things on ${j.pages} pages, with ${j.files} photos and papers (${mb(j.size)}), made ${(j.finished || '').replace('T', ' ').slice(0, 16)}.`),
+      h('div', { class: 'draftnote' }, icon('check', 's'), `Ready: ${j.things} things on ${j.pages} pages, with ${j.files} photos and receipts (${mb(j.size)}), made ${(j.finished || '').replace('T', ' ').slice(0, 16)}.`),
       h('p', null, h('a', { class: 'pillbtn primary', href: 'api/export-pdf/file', download: '' }, icon('download', 's'), 'Download the PDF')),
-      j.missing && j.missing.length ? [h('p', { class: 'muted small' }, `Not in the PDF (not a picture or a PDF), still kept in ioThings (${j.missing.length}):`),
+      j.missing && j.missing.length ? [h('p', { class: 'muted small' }, `Photos and receipts not in the PDF (not a picture or a PDF this server reads), still kept in ioThings (${j.missing.length}):`),
         h('ul', { class: 'muted small' }, j.missing.map((x) => h('li', null, x)))] : null);
   };
   const pollPdf = async (quiet) => { if (!document.body.contains(pdfOut)) return; try { showPdf(await api('api/export-pdf'), quiet); } catch (e) { if (!quiet) fill(pdfOut, h('p', { class: 'err' }, e.message)); } };
@@ -918,7 +918,7 @@ async function showImport(page) {
       h('div', { class: 'exports chiprow' }, h('a', { class: 'pillbtn', href: 'api/export.csv', download: '' }, icon('download', 's'), 'Everything'),
         h('a', { class: 'pillbtn', href: 'api/export.csv?archived=false', download: '' }, icon('download', 's'), 'Only what you still have'))),
     h('div', { class: 'box' }, h('h2', null, icon('print'), 'For your insurer: everything in one PDF'),
-      h('p', null, 'Every thing with all its details, its photos, its maintenance log, and its receipts, warranties and manuals, in one PDF with a list and a total at the front. Keep it somewhere other than this house (a cloud drive, a USB stick at work, an email to yourself), and make a new one now and then: if there is a fire or a theft, it is what you need for the claim.'),
+      h('p', null, 'Every thing with all its details, its photos and its receipts (what an insurance claim needs: no manuals or warranty cards), in one PDF with a list and a total at the front. Keep it somewhere other than this house (a cloud drive, a USB stick at work, an email to yourself), and make a new one now and then: if there is a fire or a theft, it is what you need for the claim.'),
       h('label', { class: 'check' }, pdfOld, h('span', null, 'Put the archived and sold things in too')),
       h('p', null, h('button', { class: 'pillbtn primary', onclick: makePdf }, icon('print', 's'), 'Make the PDF')), pdfOut));
   if (canEditAll()) poll();  // an import that is running (or just ran) shows where it is
