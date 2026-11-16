@@ -30,7 +30,8 @@ quotes, and what the house and the cars are worth after their loans.
 - **Five groups**: Cash, Investments, Credit cards, Loans and Assets (real estate, vehicles), in a compact list in the
   sidebar. Rename any account (one from Monarch too) with the pencil by its name.
 - **The net worth**, now and over a month, three, a year or five, by kind of account.
-- **Transactions** to search and correct, one row each (date, payee, notes, category, amount): a category, a payee or a
+- **Transactions** to search (words, or an amount: 280 exactly or 100-200) and correct, one row each (date, payee,
+  notes, category, amount, and the bank's own text if you turn that column on): a category, a payee or a
   note changed here stays through later syncs. What is hidden in Monarch ("Hide from reports") is not brought in;
   what is hidden here is left out of the list unless it is set to show them.
 - **Transfers** between your own accounts (to savings, a card's payment, a loan's payment) are linked: the two halves

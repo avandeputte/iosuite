@@ -13,7 +13,8 @@ What a sync does (sync(); every SYNC_HOURS hours from the chores in app/main.py,
 - accounts: each Monarch account is an account here (source monarch), with its balance today; a new one brings its
   balance history. Real estate (Zillow) and vehicles are accounts too: the house's and the cars' values come from there.
   Name, hidden and "in the net worth" stay as changed here; Monarch decides the rest.
-- transactions: those since the last sync (two weeks back, for late changes), or the past INITIAL_DAYS the first time.
+- transactions: those since the last sync (two weeks back, for late changes, and back to the oldest one still pending
+  here, so it is seen to post), or the past INITIAL_DAYS the first time.
   A transaction whose category, notes or hidden was changed here keeps those. One that disappeared from Monarch inside
   the window (a pending one that posted under another id, one deleted there) goes here too, and so does one hidden in
   Monarch ("Hide from reports": a duplicate, or one a person or a Monarch rule left out): it is not brought in at all.
@@ -51,6 +52,7 @@ KEYS = [
 ]
 INITIAL_DAYS = 730      # transactions fetched on the first sync
 OVERLAP_DAYS = 14       # a later sync looks this far back before the last one
+PENDING_DAYS = 120      # ... and back to the oldest transaction still pending here, at most this far
 PAGE = 500              # transactions per request
 TIMEOUT = 60
 SYNC_HOURS = 6
@@ -508,6 +510,12 @@ async def _run(full: bool) -> dict:
             await _adopt(mm, mv, ids[mv["new_external_id"]], today, groups)
     last = db.one("SELECT MAX(started_at) AS t FROM mny_syncs WHERE ok = 1")["t"]
     since = today - dt.timedelta(days=INITIAL_DAYS) if full or not last else last.date() - dt.timedelta(days=OVERLAP_DAYS)
+    # a transaction pending here is asked again until it posts (Monarch keeps its first date, often weeks before it
+    # posts) or is gone (it posted under another id): otherwise it would stay pending here, beside its posted twin
+    old = db.one("SELECT MIN(day) AS d FROM mny_transactions WHERE source = 'monarch' AND pending = 1 AND day >= %s",
+                 (today - dt.timedelta(days=PENDING_DAYS),))["d"]
+    if old and old < since:
+        since = old
     _at("Transactions")
     n_tx = await _transactions(mm, ids, since, today, groups)
     _at("Holdings")

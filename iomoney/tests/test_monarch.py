@@ -204,6 +204,19 @@ def test_rules_run_over_what_monarch_sends(client, mm):
     assert client.get("/api/transactions").json()["total"] == 0
 
 
+def test_a_pending_one_is_followed_until_it_posts(client, mm):
+    put_keys()
+    FakeMM.transactions = [tx("p1", 40, -280, "Friend", pending=True), tx("p2", 35, -60, "Garage", pending=True), tx("t1", 3, -54.2, "Grocer")]
+    assert client.post("/api/monarch/sync").json()["ok"]
+    assert client.get("/api/transactions?q=friend").json()["items"][0]["pending"] is True
+    # weeks later (far before the last sync's two weeks): one posted under a new id, the other under its own
+    FakeMM.transactions = [tx("p1b", 40, -280, "Friend"), tx("p2", 35, -60, "Garage"), tx("t1", 3, -54.2, "Grocer")]
+    assert client.post("/api/monarch/sync").json()["ok"]
+    friend = client.get("/api/transactions?q=friend").json()["items"]
+    assert len(friend) == 1 and friend[0]["pending"] is False  # not there twice, nor still pending
+    assert client.get("/api/transactions?q=garage").json()["items"][0]["pending"] is False
+
+
 def test_categories_renamed_here_follow_the_syncs(client, mm):
     put_keys()
     assert client.post("/api/monarch/sync").json()["ok"]

@@ -168,14 +168,15 @@ def networth(request: Request, days: int = 365, kind: str = None):
 @router.get("/api/transactions", dependencies=[access.signed_in])
 def list_transactions(request: Request, q: str = "", account: int = None, category: str = None, month: str = None,
                       start: str = None, end: str = None, flow: str = None, hidden: bool = False, reconciled: str = None,
-                      limit: int = 100, offset: int = 0):
-    """The transactions you see, the newest first. q: words (the payee, the bank's text, the category, the notes);
-    account; category ('-': none); month (YYYY-MM) or start and end (YYYY-MM-DD); flow: out or in; hidden: also those
-    left out of the sums; reconciled: yes or no. With total (how many match) and sum."""
+                      amount: str = None, limit: int = 100, offset: int = 0):
+    """The transactions you see, the newest first. q: words (the payee, the bank's text, the category, the notes;
+    $280, 12.50, 100-200, >500 are amounts); account; category ('-': none); month (YYYY-MM) or start and end
+    (YYYY-MM-DD); flow: out or in; amount: an amount, money out or in alike (280), or a range (100-200, >500, <20);
+    hidden: also those left out of the sums; reconciled: yes or no. With total (how many match) and sum."""
     u = _u(request)
     if month:
         start, end = _month_bounds(month)
-    return model.find_transactions(u, q, account, category, start, end, flow, limit, offset, hidden, reconciled)
+    return model.find_transactions(u, q, account, category, start, end, flow, limit, offset, hidden, reconciled, amount)
 
 
 @router.post("/api/transactions/reconcile", dependencies=[access.signed_in])

@@ -817,18 +817,19 @@ function txCat(t) {
   if (t.transfer) return h('span', { class: 'xfer', title: `A transfer ${t.amount < 0 ? 'to' : 'from'} ${t.transfer.account}${t.transfer.how === 'hand' ? ' (linked by hand)' : ''}` }, icon('link', 'xs'), `${t.amount < 0 ? 'To' : 'From'} ${t.transfer.account}`);
   return t.category ? h('span', null, t.category) : h('span', { class: 'muted' }, 'Uncategorized');
 }
-function txList(items, showAccount = true) {
+function txList(items, showAccount = true, showBank = store.get('txbank') === '1') {
   if (!items.length) return h('p', { class: 'muted' }, 'No transactions.');
-  const cls = `rows flat txs ${showAccount ? 'withacct' : ''}`;
+  const cls = `rows flat txs ${showAccount ? 'withacct' : ''} ${showBank ? 'withbank' : ''}`;
   return h('ul', { class: cls },
     h('li', { class: 'txhead', 'aria-hidden': 'true' }, h('div', { class: 'r tx' }, h('span', { class: 'd' }, 'Date'), h('span', { class: 'p' }, 'Payee'),
-      h('span', { class: 'n' }, 'Notes'), h('span', { class: 'c' }, 'Category'), showAccount ? h('span', { class: 'a' }, 'Account') : null, h('span', { class: 'm' }, 'Amount'), h('span', { class: 'rc', title: 'Reconciled' }, '✓'))),
+      showBank ? h('span', { class: 'b' }, 'At the bank') : null, h('span', { class: 'n' }, 'Notes'), h('span', { class: 'c' }, 'Category'), showAccount ? h('span', { class: 'a' }, 'Account') : null, h('span', { class: 'm' }, 'Amount'), h('span', { class: 'rc', title: 'Reconciled' }, '✓'))),
     items.map((t) => h('li', { class: t.hidden ? 'off' : null }, h('div', { class: 'r tx', role: 'button', tabindex: 0, onclick: () => txDialog(t),
       onkeydown: (e) => { if (e.key === 'Enter') txDialog(t); } },
       h('span', { class: 'd' }, fmtTxDay(t.day)),
       h('span', { class: 'p' }, h('b', null, t.merchant || t.description || '(no payee)'), t.pending ? h('span', { class: 'tag' }, 'Pending') : null,
         t.recurring ? h('span', { class: 'rec', title: `Recurring: ${t.recurring.name}${t.recurring.subscription ? ' (a subscription)' : ''}` }, icon(t.recurring.subscription ? 'play' : 'repeat', 'xs')) : null,
         h('small', { class: 'cs' }, txCat(t))),
+      showBank ? h('span', { class: 'b', title: t.description || null }, t.description || '') : null,
       h('span', { class: 'n', title: t.notes || null }, t.notes || ''),
       h('span', { class: 'c' }, txCat(t)),
       showAccount ? h('span', { class: 'a' }, t.account) : null,
@@ -855,23 +856,29 @@ async function showTransactions(page, r) {
   const params = new URLSearchParams({ limit, offset });
   for (const k of ['q', 'account', 'category', 'month', 'flow']) if (q[k]) params.set(k, q[k]);
   if (q.rec) params.set('reconciled', q.rec);
+  if (q.amt) params.set('amount', q.amt);
   if (q.hid) params.set('hidden', 'true');
   const [d, cats] = await Promise.all([api(`api/transactions?${params}`), categories()]);
   const go = (changes) => { const n = { ...q, ...changes }; delete n.offset; for (const k of Object.keys(n)) if (!n[k]) delete n[k]; location.hash = `#/transactions?${new URLSearchParams(n)}`; };
-  const search = h('input', { class: 't', type: 'search', placeholder: 'Payee, category, notes…', value: q.q || '' });
+  const search = h('input', { class: 't', type: 'search', placeholder: 'Payee, category, notes, $amount…', value: q.q || '' });
   let tm; search.oninput = () => { clearTimeout(tm); tm = setTimeout(() => go({ q: search.value.trim() }), 350); };
+  const amount = h('input', { class: 't amtq', type: 'search', inputmode: 'decimal', placeholder: 'Amount: 280 or 100-200', 'aria-label': 'Amount (exact, or a range like 100-200, >500, <20)',
+    title: 'Money out or in alike: 280 exactly, 100-200, >500 or <20', value: q.amt || '' });
+  let tma; amount.oninput = () => { clearTimeout(tma); tma = setTimeout(() => go({ amt: amount.value.trim() }), 500); };
   const sel = (k, opts, label) => h('select', { class: 't', 'aria-label': label, onchange: (e) => go({ [k]: e.target.value }) }, opts.map(([v, l]) => h('option', { value: v, selected: String(q[k] || '') === String(v) ? true : null }, l)));
   const months = [['', 'Any time']]; for (let i = 0; i < 24; i++) { const m = shiftMonth(thisMonth(), -i); months.push([m, fmtMonth(m)]); }
   put(page, h('div', { class: 'pagehead' }, h('h1', null, 'Transactions'), h('span', { class: 'grow' }),
     h('a', { class: 'pillbtn', href: '#/categories', title: 'Add, rename, regroup or delete categories' }, icon('list'), h('span', null, 'Categories')),
     h('a', { class: 'pillbtn', href: '#/rules', title: 'Rules that rename and categorize transactions' }, icon('tune'), h('span', null, 'Rules')),
     S.accounts.some((a) => a.writable && followsTx(a)) ? h('button', { class: 'pillbtn', onclick: () => txDialog() }, icon('add'), h('span', null, 'Transaction')) : null));
-  put(page, h('div', { class: 'filters' }, search,
+  put(page, h('div', { class: 'filters' }, search, amount,
     sel('account', [['', 'Every account'], ...S.accounts.filter(followsTx).map((a) => [a.id, a.name])], 'Account'),
     sel('category', [['', 'Every category'], ['-', 'Uncategorized'], ...cats.map((c) => [c.category, c.category])], 'Category'),
     sel('month', months, 'Month'), sel('flow', [['', 'In and out'], ['out', 'Money out'], ['in', 'Money in']], 'Direction'),
     sel('rec', [['', 'Reconciled or not'], ['no', 'Not reconciled'], ['yes', 'Reconciled']], 'Reconciled'),
-    sel('hid', [['', 'Without the hidden'], ['1', 'With the hidden (dimmed)']], 'Hidden transactions')));
+    sel('hid', [['', 'Without the hidden'], ['1', 'With the hidden (dimmed)']], 'Hidden transactions'),
+    h('label', { class: 'check', title: 'Show the bank’s own text for each transaction' },
+      h('input', { type: 'checkbox', checked: store.get('txbank') === '1' ? true : null, onchange: (e) => { store.set('txbank', e.target.checked ? '1' : '0'); onRoute(); } }), 'At the bank column')));
   const markable = d.items.filter((t) => t.writable && !t.reconciled);
   const markAll = async () => {
     if (!await confirmDialog('Mark them reconciled', `Mark the ${markable.length} transaction${markable.length === 1 ? '' : 's'} shown here as reconciled?`, 'Mark')) return;

@@ -37,10 +37,15 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
 - **The net worth**: what the household owns less what it owes, now and day by day (a month, three, a year, five),
   by kind of account. An account or a holding in another currency is converted at the day's rate.
 - **Transactions**: one row each (date, payee, notes, category or where a transfer went, account, amount; on a phone the
-  category goes under the payee), searched by words, account, category, month and direction; a category, a payee,
+  category goes under the payee; the bank's own text as a column of its own with "At the bank column", remembered in
+  the browser), searched by words, account, category, month, direction and amount (money out or in alike: 280
+  exactly, 100-200, >500 or <20, in the Amount box or in the search as $280, 12.50 or 100-200; a bare number there
+  is the amount or words that have it, such as an account's last digits); a category, a payee,
   notes or hidden changed here stays as changed through later syncs (Monarch itself is not changed). A
   transaction hidden in Monarch ("Hide from reports", often a duplicate) is not brought in at all, and the sync
-  removes it here when it was (Sync two years again cleans the past two years). One hidden here, by a rule or by hand,
+  removes it here when it was (Sync two years again cleans the past two years). A pending one is asked about again on
+  every sync until it posts (up to four months back), so it does not stay pending here, nor stay beside the posted one
+  Monarch sends under a new id. One hidden here, by a rule or by hand,
   is left out of the lists, the sums and the transfer matching; the list shows those, dimmed, with "With the hidden".
 - **Transfers**: money that leaves one of the household's accounts and arrives in another (to savings, a card's payment,
   a loan's payment) is one transfer: its two halves are linked, shown as "To Savings" / "From Checking", and left out
@@ -213,7 +218,7 @@ Updates, releases, the reverse proxy and Cloudflare Access work as in every app 
 | The net worth now and day by day, by kind | `GET /api/summary`, `GET /api/networth?days=365` |
 | Accounts: list, one, add, change, delete (by hand), history, values | `/api/accounts`, `/api/accounts/{id}`, `/api/accounts/{id}/history`, `/api/accounts/{id}/values` |
 | An account's bank details: read, change (the fields given; empty removes) | `GET`, `PUT /api/accounts/{id}/info` |
-| Transactions: search, add (by hand), change, delete | `GET /api/transactions?q=&account=&category=&month=&flow=`, `POST /api/accounts/{id}/transactions`, `/api/transactions/{id}` |
+| Transactions: search, add (by hand), change, delete | `GET /api/transactions?q=&account=&category=&month=&flow=&amount=`, `POST /api/accounts/{id}/transactions`, `/api/transactions/{id}` |
 | Spending and cash flow | `GET /api/spending?month=2026-11`, `GET /api/cashflow?months=12`, `GET /api/categories` |
 | Transfers: one transaction's other half and candidates, link, unlink; link all; what is left | `GET/PUT/DELETE /api/transactions/{id}/transfer`, `POST /api/transfers/link`, `GET /api/transfers/possible` |
 | Reconciled: filter, mark | `GET /api/transactions?reconciled=yes\|no`, `PATCH /api/transactions/{id}` (`reconciled`), `POST /api/transactions/reconcile` (`{ids, reconciled}`) |
