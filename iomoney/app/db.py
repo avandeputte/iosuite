@@ -160,6 +160,21 @@ SCHEMA = [
         k VARCHAR(300) PRIMARY KEY,
         at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""",
+    # a transaction split over categories (app/splits.py): its parts, each with its share of the amount (signed as the
+    # transaction), a category and a note. The reports count the parts in place of the transaction; what the parts do
+    # not add up to (its amount changed since) stays under the transaction's own category.
+    """CREATE TABLE IF NOT EXISTS mny_splits (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        transaction_id INT NOT NULL,
+        position INT NOT NULL DEFAULT 0,
+        amount DECIMAL(18,2) NOT NULL,
+        category VARCHAR(128) NULL,
+        category_group VARCHAR(128) NULL,
+        notes VARCHAR(255) NULL,
+        KEY idx_mny_splits_tx (transaction_id),
+        KEY idx_mny_splits_category (category),
+        CONSTRAINT fk_mny_splits_tx FOREIGN KEY (transaction_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
+    )""",
     # a flag on a recurring transaction (missed: none seen since its payment of that day; changed: the payment of that
     # day had another amount) someone looked at and set aside: not shown again for that day
     """CREATE TABLE IF NOT EXISTS mny_recurring_ok (

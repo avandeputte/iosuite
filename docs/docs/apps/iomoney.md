@@ -65,6 +65,8 @@ quotes, and what the house and the cars are worth after their loans.
   their own on the Recurring page, with what they cost a month and a year.
 - **Categories**: add, rename, merge, move to another group or delete a category; its transactions and rules follow,
   and so does what Monarch sends later under the old name.
+- **Split a transaction** over several categories (one big-store bill: groceries, clothes, a gift): open it, choose
+  Split over categories and give each part its share. The spending by category then counts the parts.
 - **Reconciled**: tick each transaction as checked against the bank's statement, filter on it, or tick every one shown.
 - **Bank details** on each account: account and routing numbers (hidden until shown, with copy), IBAN, customer
   service phone, website, address and notes, to have at hand. AI assistants only get the phone, website and address.

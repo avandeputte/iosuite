@@ -38,7 +38,7 @@ def test_mcp_money(client, as_user):
     client.cookies.clear()
     assert rpc(client, "tools/list")[0] == 401
     names = {t["name"] for t in rpc(client, "tools/list", auth=auth)[1]["result"]["tools"]}
-    assert {"overview", "net_worth_history", "search_transactions", "spending", "cash_flow", "categories", "update_transaction",
+    assert {"overview", "net_worth_history", "search_transactions", "spending", "cash_flow", "categories", "update_transaction", "split_transaction",
             "add_transaction", "portfolio", "get_quote", "add_holding", "update_holding", "delete_holding", "add_account",
             "update_account", "add_valuation", "bills", "recurring_transactions", "cash_forecast", "loan_payoff", "sync_monarch", "diagnostics", "rules", "add_rule", "test_rule", "update_rule",
             "delete_rule", "apply_rules", "link_transfers", "link_transaction", "unlink_transaction", "transfer_rules",
@@ -64,6 +64,9 @@ def test_mcp_money(client, as_user):
     t = call(client, auth, "add_transaction", account="Checking", amount=-25, merchant="Bakery", category="Groceries")
     assert t["amount"] == -25
     assert call(client, auth, "update_transaction", transaction_id=t["id"], category="Dining")["category"] == "Dining"
+    sp = call(client, auth, "split_transaction", transaction_id=t["id"], parts=[{"amount": 20, "category": "Dining"}, {"amount": 5, "category": "Tips"}])
+    assert [p["amount"] for p in sp["splits"]] == [-20, -5]
+    assert call(client, auth, "split_transaction", transaction_id=t["id"], parts=[])["splits"] == []
     s = call(client, auth, "search_transactions", query="bakery")
     assert s["total"] == 1 and s["items"][0]["category"] == "Dining"
     assert call(client, auth, "spending")["spent"] == 25
