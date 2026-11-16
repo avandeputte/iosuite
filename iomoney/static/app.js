@@ -557,6 +557,7 @@ async function showAccount(page, r) {
     if (facts.length || d.notes) put(page, h('div', { class: 'box' }, h('h2', null, icon('tune'), 'Details'), h('div', { class: 'kvs' }, facts.flatMap(([k, v]) => [h('span', null, k), h('span', null, v)])), d.notes ? h('p', { class: 'notes' }, d.notes) : null));
   }
   if (a.kind === 'cash' && tx && !a.closed) put(page, await forecastBox(a));
+  if (a.kind === 'loan' && !a.closed) put(page, await payoffBox(a));
   if (!thing) put(page, await infoBox(a));
   if (a.kind === 'investment') await drawHoldings(page, a.id, a);
   if (valued) {
@@ -603,6 +604,54 @@ async function forecastBox(a) {
     h('p', { class: 'muted small' }, 'Everyday spending is not counted: this is the most the account will hold.',
       f.leftOut.length ? ` Left out, as ${f.leftOut.length === 1 ? 'its' : 'their'} last payment did not come: ${f.leftOut.join(', ')}.` : '',
       f.unassigned ? ` ${f.unassigned} recurring transaction${f.unassigned === 1 ? '' : 's'} kept for any account ${f.unassigned === 1 ? 'is' : 'are'} left out.` : ''));
+}
+/** "Payoff" on a loan's page: from its interest rate and monthly payment, when it is paid off and the interest
+    still to pay; with more paid a month, what that saves. */
+async function payoffBox(a) {
+  let p;
+  try { p = await api(`api/accounts/${a.id}/payoff`); } catch { return null; }
+  const edit = a.writable ? h('button', { class: 'pillbtn tiny', onclick: () => loanDialog(a, p) }, icon('edit', 'xs'), 'Rate and payment') : null;
+  const head = h('h2', null, icon('loan'), 'Payoff', h('span', { class: 'grow' }), edit);
+  if (p.needs.length) {
+    return h('div', { class: 'box payoff' }, head, h('p', { class: 'muted' }, p.needs[0] === 'rate' ? 'Give the loan’s interest rate to see when it is paid off and the interest still to pay.'
+      : 'Give what is paid a month: its balance has no history yet to work it out from.'));
+  }
+  const span = (m) => (m >= 12 ? `${Math.floor(m / 12)} year${m >= 24 ? 's' : ''}${m % 12 ? ` ${m % 12} month${m % 12 === 1 ? '' : 's'}` : ''}` : `${m} month${m === 1 ? '' : 's'}`);
+  const monthOf = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const stat = (l, v, sub) => h('div', { class: 'stat' }, h('div', { class: 'lbl' }, l), h('div', { class: 'val num' }, v), sub ? h('small', { class: 'muted' }, sub) : null);
+  const cards = h('div', { class: 'cards' },
+    stat('Rate', `${p.rate}%`, 'a year'),
+    stat('Payment', `${p.paymentEstimated ? '≈ ' : ''}${money(p.payment, p.currency)}`, p.paymentEstimated ? 'a month, from how the balance went down' : 'a month'),
+    p.never ? stat('Paid off', 'Never', 'the payment does not cover the interest') : stat('Paid off', monthOf(p.payoff), `in ${span(p.months)}`),
+    p.never ? null : stat('Interest left', money(p.interest, p.currency), `${money(p.total, p.currency)} in all`));
+  const extra = inp(store.get(`extra${a.id}`) || '', { inputmode: 'decimal', placeholder: '100', style: { maxWidth: '120px' } });
+  const result = h('p', { class: 'extraout' });
+  const run = async () => {
+    const v = extra.value.trim();
+    store.set(`extra${a.id}`, v);
+    if (!v || !(parseFloat(v) > 0)) { result.replaceChildren(); return; }
+    try {
+      const x = (await api(`api/accounts/${a.id}/payoff?extra=${encodeURIComponent(v)}`)).extra;
+      if (!x || x.never) { result.textContent = 'Even so, the payment does not cover the interest.'; return; }
+      put(result, h('b', null, `Paid off ${monthOf(x.payoff)}`), p.never ? ` (in ${span(x.months)}), with ${money(x.interest, p.currency)} of interest.`
+        : [` · ${span(x.savedMonths)} sooner · `, h('span', { class: 'num pos' }, money(x.savedInterest, p.currency)), ' less interest']);
+    } catch (e) { result.textContent = e.message || String(e); }
+  };
+  let timer = null;
+  extra.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { result.replaceChildren(); run(); }, 350); });
+  if (extra.value) run();
+  return h('div', { class: 'box payoff' }, head, cards,
+    h('div', { class: 'extrarow' }, h('label', null, 'Paying', extra, 'more a month'), result));
+}
+async function loanDialog(a, p) {
+  const d = a.details || {};
+  const rate = inp(d.rate != null ? d.rate : '', { inputmode: 'decimal', placeholder: '6.25' });
+  const pay = inp(d.payment != null ? d.payment : '', { inputmode: 'decimal', placeholder: p && p.paymentEstimated ? `about ${p.payment}` : '' });
+  const body = h('div', null, h('div', { class: 'grid' }, fld('Interest rate (% a year)', rate), fld('Monthly payment', pay)),
+    h('p', { class: 'muted small' }, 'The payment without what goes to escrow (taxes, insurance). Left empty, it is worked out from how the balance went down over the past three months.'));
+  setTimeout(() => rate.focus(), 50);
+  if (!await dialog(`${a.name}: rate and payment`, body, [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }])) return;
+  try { await api(`api/accounts/${a.id}`, { method: 'PATCH', json: { details: { rate: rate.value.trim(), payment: pay.value.trim() } } }); await refreshSummary(); toast('Saved'); onRoute(); } catch (e) { fail(e); }
 }
 async function floorDialog(a) {
   const v = inp(a.details && a.details.floor != null ? a.details.floor : '', { inputmode: 'decimal', placeholder: '500' });

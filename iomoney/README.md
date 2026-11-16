@@ -120,6 +120,10 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   With a lowest balance for the account (zero without one), the forecast says when it would go under it, there and
   on the overview. Everyday spending and the recurring transactions kept for any account are not counted.
   `GET /api/accounts/{id}/forecast`, `GET /api/forecast`; MCP `cash_forecast`.
+- **Loan payoff**: on a loan's page, from its interest rate (percent a year) and monthly payment (given, or worked
+  out from how the balance went down over the past three months plus a month's interest): when it is paid off, the
+  interest still to pay, and what paying more a month saves (months and interest). Interest is counted by the month
+  on what is owed. `GET /api/accounts/{id}/payoff?extra=`; MCP `loan_payoff`.
 - **Subscriptions**: Netflix, Max, YouTube, Spotify, Disney+, iCloud, Amazon Prime and other services (or a category
   like Streaming or Subscriptions) are marked as subscriptions, found after two payments already; the Recurring page
   shows them in a section of their own with what they cost a month and a year. Any recurring one can be marked or

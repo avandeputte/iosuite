@@ -24,6 +24,9 @@ quotes, and what the house and the cars are worth after their loans.
 - **Cash forecast**: each cash account shows where its balance goes over the coming weeks, from the bills,
   subscriptions and paychecks kept for it and the transfers it makes regularly (the card's payment). Set a lowest
   balance and ioMoney warns, on the account and the overview, when it would go under it.
+- **Loan payoff**: give a loan its interest rate (and its monthly payment, or let ioMoney work it out from the
+  balance) and its page shows when it is paid off, the interest still to pay, and what paying a little more each
+  month would save.
 - **A bank link behind?** When Monarch has not heard from an account's bank in more than two days, or says the
   link was cut or the bank sign-in needs fixing, ioMoney flags the account (on the overview, in the sidebar and on its
   page) so you can check its connection in Monarch. An account that rarely changes can be left out from its menu

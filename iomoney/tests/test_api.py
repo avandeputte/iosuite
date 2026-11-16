@@ -437,6 +437,32 @@ def test_settings_and_admin_only(client, as_user):
     assert client.post("/api/monarch/sync").status_code == 403
 
 
+def test_loan_payoff_with_rate_payment_and_extra(client):
+    loan = add(client, name="Mortgage", kind="loan", balance=200000)
+    p = client.get(f"/api/accounts/{loan['id']}/payoff").json()
+    assert p["needs"] == ["rate"] and p["balance"] == 200000
+    assert client.patch(f"/api/accounts/{loan['id']}", json={"details": {"rate": 101}}).status_code == 400
+    assert client.patch(f"/api/accounts/{loan['id']}", json={"details": {"rate": 6}}).json()["details"]["rate"] == 6
+    assert client.get(f"/api/accounts/{loan['id']}/payoff").json()["needs"] == ["payment"]  # no history to work it out from
+    client.patch(f"/api/accounts/{loan['id']}", json={"details": {"payment": 1199.10}})
+    p = client.get(f"/api/accounts/{loan['id']}/payoff").json()
+    today = dt.date.today()
+    assert p["months"] in (360, 361) and not p["never"] and not p["paymentEstimated"]  # a few cents left for a last payment
+    assert p["payoff"][:4] in (str(today.year + 30), str(today.year + 31))
+    assert 231600 < p["interest"] < 231750 and p["total"] == round(200000 + p["interest"], 2) and p["extra"] is None
+    x = client.get(f"/api/accounts/{loan['id']}/payoff?extra=200").json()["extra"]
+    assert x["payment"] == 1399.10 and x["months"] < 270 and x["savedMonths"] == p["months"] - x["months"] and x["savedInterest"] > 60000
+    # a payment that does not cover the interest (1000 a month at 6% on 200000) never pays it off
+    client.patch(f"/api/accounts/{loan['id']}", json={"details": {"payment": 900}})
+    assert client.get(f"/api/accounts/{loan['id']}/payoff").json()["never"] is True
+    # without a payment given: from how the balance went down (1000 a month here) plus a month's interest
+    client.patch(f"/api/accounts/{loan['id']}", json={"details": {"payment": ""}})
+    db.ex("INSERT INTO mny_balances (account_id, day, balance, source) VALUES (%s, %s, 203000, 'manual')", (loan["id"], today - dt.timedelta(days=91)))
+    p = client.get(f"/api/accounts/{loan['id']}/payoff").json()
+    assert p["paymentEstimated"] and 1990 < p["payment"] < 2030 and p["months"] < 150
+    assert client.get(f"/api/accounts/{add(client)['id']}/payoff").status_code == 400  # not for what is owned
+
+
 def test_value_or_transactions_and_the_groups(client):
     chk = add(client, balance=100)
     assert chk["track"] == "transactions" and chk["group"] == "cash"  # a bank account follows its transactions

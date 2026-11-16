@@ -425,3 +425,10 @@ a.thing:hover { box-shadow: var(--shadow); }
   .forecast .rows.fc .bal { min-width: 80px; }
   .forecast .rows.fc .main small { display: none; }
 }
+
+/* a loan's payoff: its rate, payment, when it is paid off, the interest left; and what more a month saves */
+.payoff .cards { margin: 4px 0 10px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.payoff .stat small { display: block; margin-top: 2px; }
+.payoff .extrarow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; }
+.payoff .extrarow label { display: inline-flex; align-items: center; gap: 8px; }
+.payoff .extraout { margin: 0; }

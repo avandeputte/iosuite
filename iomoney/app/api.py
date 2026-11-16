@@ -14,7 +14,7 @@ from iosuite_shared import users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
 
-from app import access, categories, db, forecast, model, monarch, quotes, recurring, transfers
+from app import access, categories, db, forecast, model, monarch, payoff, quotes, recurring, transfers
 
 router = APIRouter()
 
@@ -133,6 +133,18 @@ def account_forecast(aid: int, request: Request, days: int = forecast.DAYS):
     goes under the balance it should not go under (details.floor, set with PATCH /api/accounts/{id}; zero without)."""
     u = _u(request)
     return forecast.forecast(u, model.account(u, aid), days)
+
+
+@router.get("/api/accounts/{aid}/payoff", dependencies=[access.signed_in])
+def account_payoff(aid: int, request: Request, extra: str = None):
+    """A loan's payoff from its interest rate and monthly payment (details.rate in percent a year and details.payment,
+    set with PATCH /api/accounts/{id}; the payment is worked out from the balance's history when not given): when it
+    is paid off, the interest still to pay, and with extra (more paid a month) what that saves."""
+    u = _u(request)
+    a = model.account(u, aid)
+    if a["is_asset"]:
+        raise Invalid("A payoff is for what is owed: a loan or a card")
+    return payoff.payoff(u, a, extra)
 
 
 @router.get("/api/forecast", dependencies=[access.signed_in])
