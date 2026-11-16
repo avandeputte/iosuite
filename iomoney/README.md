@@ -19,6 +19,13 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
 - **One account synced again** (admins, an account's menu › Sync this account again): its transactions of the past
   two years, five years or all Monarch has fetched again, with its history and holdings; changes made here stay,
   what Monarch no longer has or hides goes. The regular sync's window is not moved by it.
+- **Bank links behind**: each sync keeps what Monarch says of every account's link to its bank (when Monarch last
+  heard from the bank, whether the bank sign-in needs fixing there, whether the link was cut). An account Monarch has
+  not heard from in more than 48 hours (by the time of the sync), or whose link is cut or needs its sign-in fixed, is
+  flagged: a banner on the overview, a warning mark in the sidebar and on its row, a note on its page. Not flagged:
+  closed accounts, ones typed in at Monarch or valued by it (a house), ones whose updates are turned off there, and
+  ones someone asked not to flag (an account's menu › Don't flag its bank link). In the API: an account's `bank`,
+  `monarch.stale` in /api/summary; in MCP: `banksBehind` in overview.
 - **A new account in Monarch**: after the first sync, an account Monarch reports that ioMoney does not know is held,
   with its transactions, until an admin says (on the overview's banner or in Settings › Money) whether it is new or an
   account here that was deleted and made again in Monarch, as is often needed when a bank's link breaks. The

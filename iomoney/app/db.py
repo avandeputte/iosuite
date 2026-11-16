@@ -273,6 +273,21 @@ SCHEMA = [
         matched INT NOT NULL DEFAULT 0,
         CONSTRAINT fk_mny_monarch_moves_account FOREIGN KEY (account_id) REFERENCES mny_accounts(id) ON DELETE CASCADE
     )""",
+    # what Monarch Money said of an account's link to its bank at the last sync (times in UTC): linked, the account is
+    # kept up to date from a bank (not typed in at Monarch, not a value Monarch looks up, its updates not turned off);
+    # when Monarch last heard from the bank, whether the bank sign-in there needs fixing, when the link was cut. quiet:
+    # someone asked not to flag this account (the syncs leave it as it is)
+    """CREATE TABLE IF NOT EXISTS mny_bank_links (
+        account_id INT PRIMARY KEY,
+        linked TINYINT(1) NOT NULL DEFAULT 0,
+        refreshed_at DATETIME NULL,
+        update_required TINYINT(1) NOT NULL DEFAULT 0,
+        disconnected_at DATETIME NULL,
+        institution_status VARCHAR(32) NULL,
+        seen_at DATETIME NOT NULL,
+        quiet TINYINT(1) NOT NULL DEFAULT 0,
+        CONSTRAINT fk_mny_bank_links_account FOREIGN KEY (account_id) REFERENCES mny_accounts(id) ON DELETE CASCADE
+    )""",
     # each Monarch Money sync: when, how it went, what came in
     """CREATE TABLE IF NOT EXISTS mny_syncs (
         id INT AUTO_INCREMENT PRIMARY KEY,

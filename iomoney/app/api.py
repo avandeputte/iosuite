@@ -42,7 +42,8 @@ def _month_bounds(month: str | None) -> tuple[dt.date, dt.date]:
 @router.get("/api/summary", dependencies=[access.signed_in])
 def summary(request: Request):
     """What the pages need around them: the net worth now, how many accounts, transactions and holdings this person
-    sees, the household's currency, the kinds of accounts, whether Monarch Money is set up, and what this person may do."""
+    sees, the household's currency, the kinds of accounts, whether Monarch Money is set up (with the accounts whose link to
+    the bank it reports as broken or more than two days behind: monarch.stale), and what this person may do."""
     u = _u(request)
     return {"netWorth": model.net_worth(u), "counts": model.counts(u), "currency": model.home_currency(),
             "kinds": [{"kind": k, "label": v[0], "isAsset": v[1], "group": model.GROUP_OF.get(k, "asset"),
@@ -50,7 +51,8 @@ def summary(request: Request):
             "groups": [{"group": g, "label": name, "kinds": list(kinds)} for g, name, kinds in model.GROUPS],
             "holdingKinds": list(model.HOLDING_KINDS),
             "monarch": {"configured": monarch.configured(), "lastGood": monarch.status()["lastGood"], "running": monarch.running(),
-                        "newAccounts": monarch.held_count() if model.is_admin(u) else 0} if model.role_rank(u) else None,
+                        "newAccounts": monarch.held_count() if model.is_admin(u) else 0,
+                        "stale": model.stale_accounts(u)} if model.role_rank(u) else None,
             "may": {"read": model.role_rank(u) >= 1, "own": model.may_add(u, False), "household": model.may_add(u, True),
                     "admin": model.is_admin(u)}}
 
@@ -67,7 +69,9 @@ def list_accounts(request: Request, hidden: bool = False, kind: str = None, q: s
         rows = [a for a in rows if a["kind"] in model.THINGS]
     for w in q.lower().split():
         rows = [a for a in rows if w in f"{a['name']} {a['institution'] or ''} {a['subtype'] or ''}".lower()]
-    return {"items": [model.account_public(a, u) for a in rows[:max(1, min(limit, 1000))]]}
+    rows = rows[:max(1, min(limit, 1000))]
+    links = model.bank_links([a["id"] for a in rows if a["source"] == "monarch"])
+    return {"items": [model.account_public(a, u, links=links) for a in rows]}
 
 
 @router.post("/api/accounts", dependencies=[access.signed_in])
@@ -91,7 +95,7 @@ def get_account(aid: int, request: Request):
 @router.patch("/api/accounts/{aid}", dependencies=[access.signed_in])
 async def change_account(aid: int, request: Request):
     """Change the fields given (as POST /api/accounts). An account from Monarch Money takes only its name, hidden, in
-    the net worth, the details, the loan and household."""
+    the net worth, the details, the loan, household and flagStale (false: do not flag its link to the bank as behind)."""
     u = _u(request)
     b = await json_body(request)
     a = await run_in_threadpool(lambda: model.update_account(u, model.account(u, aid), b))

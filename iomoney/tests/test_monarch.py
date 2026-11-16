@@ -239,6 +239,49 @@ def test_one_account_synced_again(client, mm):
     assert client.post("/api/monarch/sync", json={"accountId": accts["Mortgage"]["id"] + 1000}).status_code == 400
 
 
+def test_accounts_whose_bank_link_is_behind_are_flagged(client, mm):
+    put_keys()
+    now = dt.datetime.now(dt.timezone.utc)
+    at = lambda hours: (now - dt.timedelta(hours=hours)).isoformat()  # noqa: E731
+    cred = lambda **kw: {"id": "c", "updateRequired": False, "disconnectedFromDataProviderAt": None,  # noqa: E731
+                         "institution": {"name": "Bank", "status": None}, **kw}
+    FakeMM.accounts = [acct("101", "Checking", "depository", 5000, displayLastUpdatedAt=at(3), credential=cred()),
+                       acct("102", "Visa", "credit", -300, asset=False, displayLastUpdatedAt=at(80), credential=cred()),
+                       acct("103", "Brokerage", "brokerage", 12000, displayLastUpdatedAt=at(5), credential=cred(updateRequired=True)),
+                       acct("105", "Mortgage", "loan", -400000, asset=False, displayLastUpdatedAt=at(400),
+                            credential=cred(disconnectedFromDataProviderAt=at(300))),
+                       # a house valued by Monarch and an account typed in there: no bank behind them
+                       acct("104", "1 Main St", "real_estate", 650000, dataProvider="zillow", displayLastUpdatedAt=at(900)),
+                       acct("106", "Honda", "vehicle", 21000, isManual=True, displayLastUpdatedAt=at(900)),
+                       # its updates turned off in Monarch, and one closed
+                       acct("107", "Old card", "credit", 0, asset=False, syncDisabled=True, displayLastUpdatedAt=at(900), credential=cred()),
+                       acct("108", "Closed", "depository", 0, deactivatedAt=D(30), displayLastUpdatedAt=at(900), credential=cred())]
+    assert client.post("/api/monarch/sync").json()["ok"]
+    accts = {a["name"]: a for a in client.get("/api/accounts").json()["items"]}
+    assert accts["Checking"]["bank"]["stale"] is None and accts["Checking"]["bank"]["hoursBehind"] == 3
+    assert accts["Checking"]["bank"]["refreshedAt"].endswith("Z")
+    assert accts["Visa"]["bank"]["stale"] == "old" and accts["Visa"]["bank"]["hoursBehind"] == 80
+    assert accts["Brokerage"]["bank"]["stale"] == "update"
+    assert accts["Mortgage"]["bank"]["stale"] == "disconnected"
+    assert all(accts[n]["bank"]["stale"] is None for n in ("1 Main St", "Honda", "Old card", "Closed"))
+    stale = client.get("/api/summary").json()["monarch"]["stale"]
+    assert {x["name"] for x in stale} == {"Visa", "Brokerage", "Mortgage"}
+    assert client.get(f"/api/accounts/{accts['Visa']['id']}").json()["bank"]["why"].startswith("Monarch Money has not heard")
+    # asked not to flag one: it stays quiet through the next syncs, until asked again
+    v = client.patch(f"/api/accounts/{accts['Visa']['id']}", json={"flagStale": False}).json()
+    assert v["bank"]["quiet"] and v["bank"]["stale"] is None
+    assert client.post("/api/monarch/sync").json()["ok"]
+    assert "Visa" not in {x["name"] for x in client.get("/api/summary").json()["monarch"]["stale"]}
+    assert client.patch(f"/api/accounts/{accts['Visa']['id']}", json={"flagStale": True}).json()["bank"]["stale"] == "old"
+    # once Monarch hears from the bank again, the flag goes at the next sync
+    FakeMM.accounts[1] = acct("102", "Visa", "credit", -300, asset=False, displayLastUpdatedAt=at(1), credential=cred())
+    assert client.post("/api/monarch/sync").json()["ok"]
+    assert client.get(f"/api/accounts/{accts['Visa']['id']}").json()["bank"]["stale"] is None
+    # a manual account has no bank link at all
+    m = client.post("/api/accounts", json={"name": "Cash jar", "kind": "cash", "balance": 10}).json()
+    assert "bank" not in m
+
+
 def test_categories_renamed_here_follow_the_syncs(client, mm):
     put_keys()
     assert client.post("/api/monarch/sync").json()["ok"]
