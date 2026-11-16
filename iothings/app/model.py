@@ -4,15 +4,15 @@ Everything is the household's: whoever has a role here sees every thing, every p
 looks; a member adds things, changes the ones they added and keeps any thing's upkeep and maintenance log; an editor
 (and an admin) changes and deletes everything, and keeps the places and labels in order.
 
-A thing (thg_items) has a place (thg_locations, a tree), labels (thg_labels), purchase, warranty and sale details, its
-own fields, files (app/files.py: photos, the manual, the receipt), upkeep and a maintenance log (app/upkeep.py).
+A thing (thg_items) has a place (thg_locations, a tree), labels (thg_labels), the people of the family whose it is
+(thg_item_people), purchase, warranty and sale details, its own fields, files (app/files.py: photos, the manual, the receipt), upkeep and a maintenance log (app/upkeep.py).
 """
 import datetime as dt
 import json
 import re
 from decimal import Decimal, InvalidOperation
 
-from iosuite_shared import related, users as shared_users
+from iosuite_shared import family as suite_family, related, users as shared_users
 from iosuite_shared.errors import Invalid
 
 from app import db
@@ -28,6 +28,7 @@ class Forbidden(Exception):
 
 MAX_FIELDS = 50        # own fields of one thing
 MAX_LABELS = 30        # labels on one thing
+MAX_PEOPLE = 20        # family members on one thing
 SOON_DAYS = 30         # a warranty that ends within this many days "ends soon"
 CURRENCIES = ("USD", "EUR", "GBP", "CHF", "CAD", "AUD", "NZD", "SEK", "NOK", "DKK", "PLN", "CZK", "JPY", "INR", "ZAR", "BRL", "MXN")
 
@@ -392,6 +393,66 @@ def label_ids(names_or_ids, make: bool = True) -> list[int]:
     return out
 
 
+# ---- the family: whose a thing is
+
+def family() -> list[dict]:
+    """The suite's family (Settings › Security › Family), each with how many things (not archived) are theirs:
+    [{id, name, displayName, initials, color, hasFace, count}], by display name. The same people, colours and initials
+    as in every app. Everyone in it can be given a thing, whether or not they use ioThings (a child's bike)."""
+    n = {r["user_id"]: int(r["n"]) for r in db.q("SELECT p.user_id, COUNT(*) AS n FROM thg_item_people p JOIN thg_items i "
+                                                "ON i.id = p.item_id WHERE i.archived = 0 GROUP BY p.user_id")}
+    return [{**suite_family.public(m), "count": n.get(m["id"], 0)} for m in suite_family.members()]
+
+
+def person(ref, fam: list[dict] | None = None) -> dict:
+    """A member of the family by id, account name or display name (any case)."""
+    fam = fam if fam is not None else [suite_family.public(m) for m in suite_family.members()]
+    s = str(ref.get("id") if isinstance(ref, dict) else ref).strip()
+    for m in fam:
+        if s.isdigit() and m["id"] == int(s):
+            return m
+    for m in fam:
+        if s.lower() in (m["name"].lower(), m["displayName"].strip().lower()):
+            return m
+    raise Invalid(f"No one in the family is '{s}'. The family: " + (", ".join(m["displayName"] for m in fam) or "nobody yet"))
+
+
+def people_ids(refs) -> list[int]:
+    """People of the family by id or name (a list, or one comma-separated string), each once."""
+    if refs in (None, ""):
+        return []
+    if isinstance(refs, (str, int)):
+        refs = [x for x in str(refs).split(",") if x.strip()]
+    if not isinstance(refs, list):
+        raise Invalid("people: a list of family members (ids or names) is expected")
+    fam = [suite_family.public(m) for m in suite_family.members()]
+    out = list(dict.fromkeys(person(r, fam)["id"] for r in refs))
+    if len(out) > MAX_PEOPLE:
+        raise Invalid(f"At most {MAX_PEOPLE} people on one thing")
+    return out
+
+
+def _people_of(ids: list[int]) -> dict:
+    """{item id: [member, ...]} in the order of the family; someone taken out of the family is not shown."""
+    if not ids:
+        return {}
+    fam = {m["id"]: suite_family.public(m) for m in suite_family.members()}
+    order = {uid: i for i, uid in enumerate(fam)}
+    out: dict = {}
+    for r in db.q(f"SELECT item_id, user_id FROM thg_item_people WHERE item_id IN ({db.marks(len(ids))})", ids):
+        if r["user_id"] in fam:
+            out.setdefault(r["item_id"], []).append(fam[r["user_id"]])
+    for v in out.values():
+        v.sort(key=lambda m: order[m["id"]])
+    return out
+
+
+def _set_people(item_id: int, ids: list[int]) -> None:
+    db.ex("DELETE FROM thg_item_people WHERE item_id = %s", (item_id,))
+    for uid in ids:
+        db.ex("INSERT IGNORE INTO thg_item_people (item_id, user_id) VALUES (%s, %s)", (item_id, uid))
+
+
 # ---- reading things
 
 def _iso(v):
@@ -470,14 +531,16 @@ def _labels_of(ids: list[int]) -> dict:
     return out
 
 
-def public(it: dict, u: dict, full: bool = True, places: dict | None = None, tags: dict | None = None) -> dict:
+def public(it: dict, u: dict, full: bool = True, places: dict | None = None, tags: dict | None = None,
+           people: dict | None = None) -> dict:
     """The thing as the API gives it; full: with its files, upkeep and maintenance log."""
     places = places if places is not None else {x["id"]: x for x in locations()}
     loc = places.get(it["location_id"])
     tags = tags if tags is not None else _labels_of([it["id"]])
+    people = people if people is not None else _people_of([it["id"]])
     out = {"id": it["id"], "name": it["name"], "description": it["description"], "quantity": it["quantity"],
            "location": {"id": loc["id"], "name": loc["name"], "path": loc["path"]} if loc else None,
-           "labels": tags.get(it["id"], []), "manufacturer": it["manufacturer"], "modelNumber": it["model_number"],
+           "labels": tags.get(it["id"], []), "people": people.get(it["id"], []), "manufacturer": it["manufacturer"], "modelNumber": it["model_number"],
            "serialNumber": it["serial_number"], "assetId": it["asset_id"], "purchaseDate": _iso(it["purchase_date"]),
            "purchasePrice": _num(it["purchase_price"]), "warrantyExpires": _iso(it["warranty_expires"]),
            "lifetimeWarranty": bool(it["lifetime_warranty"]), "warranty": warranty(it), "insured": bool(it["insured"]),
@@ -504,8 +567,10 @@ SORTS = {"name": "i.name, i.id", "new": "i.created_at DESC, i.id DESC", "updated
 
 
 def find(q: str = "", location: int | None = None, label: int | None = None, archived: str | None = None,
-         warranty_soon: bool = False, sort: str | None = None, limit: int = 500, offset: int = 0) -> list[dict]:
-    """Things with every word of q somewhere in them, in this place (or a place inside it), with this label; archived:
+         warranty_soon: bool = False, sort: str | None = None, limit: int = 500, offset: int = 0,
+         person: int | None = None) -> list[dict]:
+    """Things with every word of q somewhere in them, in this place (or a place inside it), with this label, that are
+    this family member's (person: an account id); archived:
     "only", "also", or left out for the things you still have; warranty_soon: those whose warranty ends within
     SOON_DAYS (or ended in the last week)."""
     where, args = ["1=1"], []
@@ -520,13 +585,23 @@ def find(q: str = "", location: int | None = None, label: int | None = None, arc
     if label is not None:
         where.append("EXISTS (SELECT 1 FROM thg_item_labels x WHERE x.item_id = i.id AND x.label_id = %s)")
         args.append(int(label))
+    if person is not None:
+        where.append("EXISTS (SELECT 1 FROM thg_item_people p WHERE p.item_id = i.id AND p.user_id = %s)")
+        args.append(int(person))
     if warranty_soon:
         today = dt.date.today()
         where.append("i.lifetime_warranty = 0 AND i.warranty_expires BETWEEN %s AND %s")
         args += [today - dt.timedelta(days=7), today + dt.timedelta(days=SOON_DAYS)]
+    fam = suite_family.members() if q and q.strip() else []
     for w in (q or "").lower().split()[:8]:
-        where.append("i.words LIKE %s")
-        args.append("%" + w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+        like = "%" + w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        theirs = [m["id"] for m in fam if re.sub(r"['’]s$", "", w) in (m["name"].lower(), *m["displayName"].lower().split())]  # "emma" or "emma's": their things too
+        if theirs:
+            where.append(f"(i.words LIKE %s OR EXISTS (SELECT 1 FROM thg_item_people p WHERE p.item_id = i.id AND p.user_id IN ({db.marks(len(theirs))})))")
+            args += [like, *theirs]
+        else:
+            where.append("i.words LIKE %s")
+            args.append(like)
     order = SORTS["warranty"] if warranty_soon and not sort else SORTS.get(sort or "name", SORTS["name"])
     n = max(1, min(int(limit), 5000))
     rows = db.q(f"SELECT i.* FROM thg_items i WHERE {' AND '.join(where)} ORDER BY {order} LIMIT %s OFFSET %s",
@@ -538,8 +613,9 @@ def find(q: str = "", location: int | None = None, label: int | None = None, arc
 
 def listed(u: dict, rows: list[dict]) -> list[dict]:
     places = {x["id"]: x for x in locations()}
-    tags = _labels_of([r["id"] for r in rows])
-    return [public(r, u, full=False, places=places, tags=tags) for r in rows]
+    ids = [r["id"] for r in rows]
+    tags, people = _labels_of(ids), _people_of(ids)
+    return [public(r, u, full=False, places=places, tags=tags, people=people) for r in rows]
 
 
 def counts() -> dict:
@@ -584,6 +660,7 @@ def create(u: dict, data: dict, import_ref: str | None = None) -> dict:
     f = clean(data)
     given, loc = _location_of(data)
     ids = label_ids(data.get("labels"))
+    who = people_ids(data.get("people"))
     f["location_id"] = loc if given else None
     f["fields"] = json.dumps(f["fields"], ensure_ascii=False)
     f["created_by"] = u.get("id")
@@ -593,14 +670,17 @@ def create(u: dict, data: dict, import_ref: str | None = None) -> dict:
     with db.tx():
         iid = db.ex(f"INSERT INTO thg_items ({', '.join(cols)}) VALUES ({db.marks(len(cols))})", [f[c] for c in cols])
         _set_labels(iid, ids)
+        _set_people(iid, who)
     _rewords(iid)
     return get(iid)
 
 
 def update(u: dict, it: dict, data: dict) -> dict:
-    """Change the fields given; labels (ids or names) replace the thing's labels; locationId moves it."""
+    """Change the fields given; labels (ids or names) replace the thing's labels, people (family members, ids or
+    names) whose it is; locationId moves it."""
     need_write(u, it)
     f = clean(data, partial=True)
+    who = people_ids(data.get("people")) if "people" in data else None
     given, loc = _location_of(data)
     if given:
         f["location_id"] = loc
@@ -611,6 +691,8 @@ def update(u: dict, it: dict, data: dict) -> dict:
             db.ex(f"UPDATE thg_items SET {', '.join(k + ' = %s' for k in f)} WHERE id = %s", [*f.values(), it["id"]])
         if "labels" in data:
             _set_labels(it["id"], label_ids(data.get("labels")))
+        if who is not None:
+            _set_people(it["id"], who)
     _rewords(it["id"])
     return get(it["id"])
 
@@ -622,7 +704,7 @@ def delete(u: dict, it: dict) -> None:
 
 
 def duplicate(u: dict, it: dict) -> dict:
-    """A copy of the thing (its details and labels; not its files, upkeep or log), named "... (copy)"."""
+    """A copy of the thing (its details, labels and people; not its files, upkeep or log), named "... (copy)"."""
     need_add(u)
     data = {k: _iso(it[c]) if not isinstance(it[c], Decimal) else float(it[c]) for k, c in COLUMNS.items()}
     data["name"] = (it["name"] + " (copy)")[:255]
@@ -630,6 +712,7 @@ def duplicate(u: dict, it: dict) -> dict:
     data["assetId"] = None
     data["locationId"] = it["location_id"]
     data["labels"] = [x["id"] for x in _labels_of([it["id"]]).get(it["id"], [])]
+    data["people"] = [x["id"] for x in _people_of([it["id"]]).get(it["id"], [])]
     return create(u, data)
 
 

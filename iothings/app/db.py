@@ -83,6 +83,15 @@ SCHEMA = [
         CONSTRAINT fk_hom_item_labels_item FOREIGN KEY (item_id) REFERENCES thg_items(id) ON DELETE CASCADE,
         CONSTRAINT fk_hom_item_labels_label FOREIGN KEY (label_id) REFERENCES thg_labels(id) ON DELETE CASCADE
     )""",
+    # whose a thing is: the people of the family (the suite's one list, iosuite_shared.family) it belongs to or is for
+    # (Emma's bike, Dad's laptop; none: the household's). user_id is the account in the Shared ioSuite database.
+    """CREATE TABLE IF NOT EXISTS thg_item_people (
+        item_id INT NOT NULL,
+        user_id INT NOT NULL,
+        PRIMARY KEY (item_id, user_id),
+        KEY idx_thg_item_people_user (user_id),
+        CONSTRAINT fk_thg_item_people_item FOREIGN KEY (item_id) REFERENCES thg_items(id) ON DELETE CASCADE
+    )""",
     # what comes with a thing: its photos, its manual, the receipt, the warranty card, anything else. kind: photo,
     # manual, receipt, warranty or other. The bytes are in thg_file_parts, in parts of PART_BYTES (a database server's
     # max_allowed_packet stays out of the way of a 100 MB manual); thumb: a small JPEG for a picture (NULL otherwise).

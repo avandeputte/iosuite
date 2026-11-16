@@ -20,6 +20,8 @@ fridge's water filter). It does what Homebox does, and brings a Homebox inventor
   purchase (when, where, for how much), the warranty (until when, or for life, and its details), whether it is
   insured, notes and fields of their own (filter size, paint colour, the code of the safe).
 - **Places** as a tree (House / Kitchen / Drawer by the sink), and **labels** with a colour.
+- **Whose it is**: mark a thing as one or more people's of the family (Emma's bike, Dad's laptop); the sidebar's
+  Family shows each person's things. The same family, colours and faces as in ioTask and ioCalendar.
 - **Files**: photos, manuals, receipts and warranty cards, dropped on the thing or taken with the phone. A PDF is
   kept as a manual and an image as a photo unless you say otherwise. They are kept in the database, so there is
   nothing else to back up.

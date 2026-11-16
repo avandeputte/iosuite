@@ -101,6 +101,10 @@ def test_mcp_tools(client):
     assert o["counts"]["items"] == 1 and o["youCan"]["add"] is True and {p["path"] for p in o["places"]} == {"House", "House / Utility room"}
     assert [x["name"] for x in rows(call(client, auth, "search_items", query="vaillant"))] == ["Boiler"]
     assert [x["name"] for x in rows(call(client, auth, "warranties_ending", days=30))] == ["Boiler"]
+    assert call(client, auth, "update_item", item="Boiler", people=["alex"])["people"] == ["alex"]
+    assert [x["name"] for x in rows(call(client, auth, "search_items", person="alex"))] == ["Boiler"]
+    assert [m["name"] for m in call(client, auth, "overview")["family"]] == ["alex"]
+    assert "error" in call(client, auth, "search_items", person="nobody")
     k = call(client, auth, "add_upkeep", item="boiler", what="Annual service", every=1, unit="year", next_due=dt.date.today().isoformat())
     assert k["title"] == "Annual service"
     due = rows(call(client, auth, "list_upkeep", within_days=7))

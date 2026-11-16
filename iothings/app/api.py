@@ -24,9 +24,11 @@ def _int(v) -> int | None:
 @router.get("/api/summary", dependencies=[access.signed_in])
 def summary(request: Request):
     """How many things (still yours, archived, warranties ending soon, upkeep due within a week, what they cost), the
-    places (a tree, each with its path) and the labels, each with how many things; the currency; and what you may do."""
+    places (a tree, each with its path), the labels and the family (Settings › Security › Family), each with how many
+    things; the currency; and what you may do."""
     u = request.state.user
-    return {"counts": model.counts(), "locations": model.locations(), "labels": model.labels(), "currency": model.currency(),
+    return {"counts": model.counts(), "locations": model.locations(), "labels": model.labels(), "family": model.family(),
+            "currency": model.currency(),
             "may": {"add": model.may_add(u), "editAll": model.may_edit_all(u)}, "tasks": upkeep.tasks_enabled()}
 
 
@@ -34,20 +36,23 @@ def summary(request: Request):
 
 @router.get("/api/items", dependencies=[access.signed_in])
 def list_items(request: Request, q: str = "", location: int | None = None, label: int | None = None, archived: str | None = None,
-               warranty: str | None = None, sort: str | None = None, limit: int = 500, offset: int = 0):
+               warranty: str | None = None, sort: str | None = None, limit: int = 500, offset: int = 0, person: str | None = None):
     """The things, without their files and log. q: words to find (in the name, the description, the maker, the model
     and serial numbers, the notes, the place, the labels, the own fields); location: in this place or one inside it;
-    label: with this label; archived: only (the archived ones) or also; warranty=soon: those whose warranty ends within
-    30 days; sort: name (as left out), new, updated, warranty, price or bought; limit, offset: a page of them."""
+    label: with this label; person: a family member's (id or name); archived: only (the archived ones) or also;
+    warranty=soon: those whose warranty ends within 30 days; sort: name (as left out), new, updated, warranty, price or
+    bought; limit, offset: a page of them."""
     u = request.state.user
-    rows = model.find(q, location, label, archived, warranty == "soon", sort, limit, offset)
+    who = model.person(person)["id"] if person else None
+    rows = model.find(q, location, label, archived, warranty == "soon", sort, limit, offset, person=who)
     return {"items": model.listed(u, rows)}
 
 
 @router.post("/api/items", dependencies=[access.signed_in])
 async def add_item(request: Request):
     """{name, description?, quantity?, locationId? (or location: a path such as "House / Kitchen", made where it is
-    missing), labels? (ids or names, made where missing), manufacturer?, modelNumber?, serialNumber?, assetId?, url?,
+    missing), labels? (ids or names, made where missing), people? (the family members whose it is: ids or names, see
+    GET /api/summary's family), manufacturer?, modelNumber?, serialNumber?, assetId?, url?,
     purchaseDate?, purchasePrice?, purchaseFrom?, warrantyExpires?, lifetimeWarranty?, warrantyDetails?, insured?,
     archived?, soldDate?, soldPrice?, soldTo?, soldNotes?, notes?, fields?: [{name, value}]}. Dates are YYYY-MM-DD."""
     u = request.state.user
@@ -68,7 +73,7 @@ def get_item(iid: int, request: Request):
 
 @router.patch("/api/items/{iid}", dependencies=[access.signed_in])
 async def change_item(iid: int, request: Request):
-    """Change the fields given (as POST /api/items); the others stay. labels replaces the labels."""
+    """Change the fields given (as POST /api/items); the others stay. labels replaces the labels, people the people."""
     u = request.state.user
     b = await json_body(request)
     return model.public(await run_in_threadpool(lambda: model.update(u, model.readable(u, iid), b)), u)
@@ -88,7 +93,7 @@ def delete_item(iid: int, request: Request):
 
 @router.post("/api/items/{iid}/duplicate", dependencies=[access.signed_in])
 def duplicate_item(iid: int, request: Request):
-    """A copy of the thing (its details and labels, not its serial number, files, upkeep or log)."""
+    """A copy of the thing (its details, labels and people, not its serial number, files, upkeep or log)."""
     u = request.state.user
     return JSONResponse(model.public(model.duplicate(u, model.readable(u, iid)), u), status_code=201)
 

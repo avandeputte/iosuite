@@ -127,7 +127,7 @@ const store = { get: (k) => { try { return localStorage.getItem(`iothings.${k}`)
 
 
 // ------------------------------------------------------------------ state
-const S = { status: {}, user: null, suite: [], settings: {}, counts: {}, locations: [], labels: [], currency: 'USD', may: {}, tasks: false };
+const S = { status: {}, user: null, suite: [], settings: {}, counts: {}, locations: [], labels: [], family: [], currency: 'USD', may: {}, tasks: false };
 // the suite's roles, each able to do what the one before can: a viewer only looks, a member adds things and keeps
 // their upkeep, an editor changes everything and keeps the places and labels in order
 const RANK = { none: 0, viewer: 1, member: 2, editor: 3, admin: 4 };
@@ -135,7 +135,7 @@ const roleAtLeast = (r) => (RANK[S.user && S.user.role] || 0) >= RANK[r];
 const canAdd = () => roleAtLeast('member');
 const canEditAll = () => roleAtLeast('editor');
 /** What goes around the things: how many, the places and the labels (the summary). */
-function around(d) { S.counts = d.counts; S.locations = d.locations; S.labels = d.labels; S.currency = d.currency || 'USD'; S.may = d.may || {}; S.tasks = !!d.tasks; }
+function around(d) { S.counts = d.counts; S.locations = d.locations; S.labels = d.labels; S.family = d.family || []; S.currency = d.currency || 'USD'; S.may = d.may || {}; S.tasks = !!d.tasks; }
 async function refreshAround() { try { around(await api('api/summary')); } catch { /* the page says so */ } drawNav(); }
 async function saveSettings(changes) {
   Object.assign(S.settings, changes);
@@ -158,6 +158,13 @@ function dueWords(days) {
 }
 const sizeWords = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0)} MB`);
 const placeOf = (id) => S.locations.find((l) => l.id === id);
+const personOf = (id) => S.family.find((m) => m.id === id);
+/** A family member's badge (the suite's family, Settings › Security › Family: the same colour, initials and face in every
+    io app): their initials on their colour; `face`: their face (ioPix, else their ioContact card) when they have one. */
+const memberBadge = (m, face = false) => h('span', { class: `mem${face && m.hasFace ? ' face' : ''}`, title: m.displayName, style: { '--mc': m.color || '#5f6b7a' } }, m.initials || initials(m.displayName),
+  face && m.hasFace ? h('img', { src: `api/auth/family/${m.id}/face`, alt: '', loading: 'lazy', onerror: (e) => { e.currentTarget.parentNode.classList.remove('face'); e.currentTarget.remove(); } }) : null);
+/** "Emma's" / "Chris'" */
+const possessive = (n) => (/s$/i.test(n) ? `${n}’` : `${n}’s`);
 
 // ------------------------------------------------------------------ chrome
 function drawUser() {
@@ -261,6 +268,9 @@ function drawNav() {
     S.locations.length || canAdd() ? [h('div', { class: 'navgap' }),
       sec('Places', canAdd() ? h('button', { class: 'iconbtn', title: 'New place', 'aria-label': 'New place', onclick: () => placeDialog(null) }, icon('add', 's')) : null),
       S.locations.map((l) => link('place', `#/place/${l.id}`, l.depth ? 'subdir' : 'place', l.name, l.count || null, r.view === 'place' && r.id === l.id, '--c-indigo', l.depth))] : null,
+    S.family.length ? [h('div', { class: 'navgap' }), sec('Family'),
+      S.family.map((m) => h('a', { href: `#/person/${m.id}`, 'data-v': 'person', class: `who${r.view === 'person' && r.id === m.id ? ' on' : ''}`, title: `${possessive(m.displayName)} things` },
+        memberBadge(m, true), h('span', { class: 'nl' }, m.displayName), m.count ? h('span', { class: 'n' }, m.count) : null))] : null,
     S.labels.length ? [h('div', { class: 'navgap' }), sec('Labels'),
       S.labels.slice(0, 30).map((t) => link('label', `#/label/${t.id}`, 'tag', t.name, t.count || null, r.view === 'label' && r.id === t.id, t.color ? null : '--c-slate'))] : null,
     canAdd() ? [h('div', { class: 'navgap' }), sec('Add'),
@@ -271,7 +281,7 @@ function drawNav() {
   // a label's own colour on its icon
   nav.querySelectorAll('a[data-v="label"]').forEach((a, i) => { const t = S.labels[i]; if (t && t.color) a.style.setProperty('--hue', t.color); });
   applySidebar();
-  $('.navmore')?.classList.toggle('on', ['place', 'label', 'import', 'new', 'settings', 'search', 'places'].includes(r.view));
+  $('.navmore')?.classList.toggle('on', ['place', 'label', 'person', 'import', 'new', 'settings', 'search', 'places'].includes(r.view));
 }
 function applySidebar() {
   const body = document.body, btn = $('#sidebtn');
@@ -300,6 +310,8 @@ function moreSheet() {
     tile('#/places', 'place', 'Places', 'var(--c-indigo)', r.view === 'places'),
     tile('#/settings', 'settings', 'Settings', 'var(--c-slate)', r.view === 'settings'),
     S.locations.filter((l) => !l.depth).map((l) => tile(`#/place/${l.id}`, 'place', l.name, 'var(--c-indigo)', r.view === 'place' && r.id === l.id)),
+    S.family.map((m) => h('a', { href: `#/person/${m.id}`, class: r.view === 'person' && r.id === m.id ? 'on' : null, style: { '--hue': m.color } },
+      h('span', { class: 'sic' }, memberBadge(m, true)), h('span', null, m.displayName))),
     S.labels.slice(0, 18).map((t) => tile(`#/label/${t.id}`, 'tag', t.name, t.color || 'var(--c-slate)', r.view === 'label' && r.id === t.id)));
   const p = dialog('More', grid, [{ label: 'Close', value: null }]);
   grid.addEventListener('click', (e) => { if (e.target.closest('a')) closeDialogs(); });
@@ -315,6 +327,7 @@ function route() {
   if (VIEWS[a]) return { view: a };
   if (a === 'place' && b) return { view: 'place', id: +b };
   if (a === 'label' && b) return { view: 'label', id: +b };
+  if (a === 'person' && b) return { view: 'person', id: +b };
   if (a === 'search') return { view: 'search', q: b || '' };
   if (a === 'item' && b) return { view: c === 'edit' ? 'edit' : 'item', id: +b };
   if (a === 'new') return { view: 'new' };
@@ -323,7 +336,7 @@ function route() {
   if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: c };
   return { view: 'all' };
 }
-const GRID_VIEWS = ['all', 'warranty', 'archived', 'place', 'label', 'search'];
+const GRID_VIEWS = ['all', 'warranty', 'archived', 'place', 'label', 'person', 'search'];
 
 async function onRoute() {
   const r = route();
@@ -347,6 +360,7 @@ async function fetchItems(r) {
   if (r.view === 'warranty') q.set('warranty', 'soon');
   if (r.view === 'place') q.set('location', r.id);
   if (r.view === 'label') q.set('label', r.id);
+  if (r.view === 'person') q.set('person', r.id);
   if (r.view === 'search') { q.set('q', r.q); q.set('archived', 'also'); }
   if (SORTS[S.settings.sort] && S.settings.sort !== 'name' && r.view !== 'warranty') q.set('sort', S.settings.sort);
   return (await api(`api/items?${q}`)).items;
@@ -366,14 +380,15 @@ function card(x) {
       h('span', { class: 'rtitle' }, x.name),
       h('span', { class: 'rmeta' }, x.location ? [icon('place', 'xs'), x.location.path] : [x.manufacturer, x.modelNumber].filter(Boolean).join(' ') || ' '),
       x.warranty && x.warranty.state === 'soon' ? warrantyBadge(x.warranty, true) : null,
-      x.labels.length ? h('span', { class: 'labs' }, x.labels.slice(0, 3).map(labelChip)) : null));
+      x.people.length || x.labels.length ? h('span', { class: 'labs' }, x.people.map((m) => memberBadge(m, true)), x.labels.slice(0, 3).map(labelChip)) : null));
 }
 const labelChip = (t) => h('span', { class: 'lchip', style: t.color ? { '--lc': t.color } : null }, t.name);
 function table(items) {
   return h('div', { class: 'tablewrap' }, h('table', { class: 'things' },
-    h('thead', null, h('tr', null, ['Name', 'Place', 'Maker and model', 'Bought', 'Price', 'Warranty'].map((t) => h('th', null, t)))),
+    h('thead', null, h('tr', null, ['Name', 'Whose', 'Place', 'Maker and model', 'Bought', 'Price', 'Warranty'].map((t) => h('th', null, t)))),
     h('tbody', null, items.map((x) => h('tr', { onclick: () => { location.hash = `#/item/${x.id}`; } },
       h('td', null, h('a', { href: `#/item/${x.id}`, class: 'lnk' }, x.name), x.quantity > 1 ? h('span', { class: 'muted' }, ` ×${x.quantity}`) : null),
+      h('td', null, h('span', { class: 'ppl' }, x.people.map((m) => memberBadge(m, true)))),
       h('td', null, x.location ? x.location.path : ''), h('td', null, [x.manufacturer, x.modelNumber].filter(Boolean).join(' ')),
       h('td', null, fmtDay(x.purchaseDate)), h('td', { class: 'num' }, money(x.purchasePrice)),
       h('td', null, x.warranty ? warrantyBadge(x.warranty, true) : ''))))));
@@ -382,10 +397,12 @@ async function drawItems(page, r) {
   const items = await fetchItems(r);
   const place = r.view === 'place' ? placeOf(r.id) : null;
   const lab = r.view === 'label' ? S.labels.find((t) => t.id === r.id) : null;
+  const who = r.view === 'person' ? personOf(r.id) : null;
   if (r.view === 'place' && !place) throw new Error('No such place');
   if (r.view === 'label' && !lab) throw new Error('No such label');
-  const title = place ? place.name : lab ? lab.name : r.view === 'search' ? `“${r.q}”` : VIEWS[r.view][0];
-  if (place || lab) document.title = `${title} · ioThings`;
+  if (r.view === 'person' && !who) throw new Error('No one in the family by that number');
+  const title = place ? place.name : lab ? lab.name : who ? `${possessive(who.displayName)} things` : r.view === 'search' ? `“${r.q}”` : VIEWS[r.view][0];
+  if (place || lab || who) document.title = `${title} · ioThings`;
   page.classList.add('wide');
   const asTable = S.settings.layout === 'table';
   const sort = r.view === 'warranty' ? null : h('select', { class: 't sortsel', title: 'In what order', 'aria-label': 'In what order', onchange: async (e) => { await saveSettings({ sort: e.target.value }); onRoute(); } },
@@ -414,6 +431,7 @@ async function drawItems(page, r) {
     put(page, h('div', { class: 'empty' }, icon(r.view === 'archived' ? 'archive' : r.view === 'warranty' ? 'shield' : 'box'),
       h('p', null, r.view === 'search' ? 'Nothing has those words.' : r.view === 'archived' ? 'Nothing archived: a thing that is sold or thrown out goes here, with its story.'
         : r.view === 'warranty' ? 'No warranty ends in the next 30 days.' : r.view === 'place' ? 'Nothing in this place yet.' : r.view === 'label' ? 'Nothing has this label.'
+          : r.view === 'person' ? `Nothing is marked as ${possessive(who.displayName)} yet: Edit a thing and pick ${who.displayName} under Whose it is.`
           : 'Nothing yet. Add what you own, or bring them over from Homebox.'),
       first && canAdd() ? h('p', { class: 'emptybtns' }, h('a', { class: 'pillbtn primary', href: '#/new' }, icon('add', 's'), 'New thing'),
         h('a', { class: 'pillbtn', href: '#/import' }, icon('download', 's'), 'Import from Homebox')) : null));
@@ -557,7 +575,9 @@ async function showItem(page, r) {
     h('div', { class: 'pagehead' }, h('h1', null, x.name), x.archived ? h('span', { class: 'badge off' }, icon('archive', 'xs'), 'Archived') : null,
       h('span', { class: 'grow' }),
       x.writable ? h('a', { class: 'pillbtn', href: `#/item/${x.id}/edit` }, icon('edit', 's'), 'Edit') : null, more),
-    x.labels.length ? h('div', { class: 'chiprow labels' }, x.labels.map((t) => h('a', { class: 'lchip big', href: `#/label/${t.id}`, style: t.color ? { '--lc': t.color } : null }, t.name))) : null,
+    x.people.length || x.labels.length ? h('div', { class: 'chiprow labels' },
+      x.people.map((m) => h('a', { class: 'chip mchip', href: `#/person/${m.id}`, title: `${possessive(m.displayName)} things` }, memberBadge(m, true), m.displayName)),
+      x.labels.map((t) => h('a', { class: 'lchip big', href: `#/label/${t.id}`, style: t.color ? { '--lc': t.color } : null }, t.name))) : null,
     h('div', { class: 'itemtop' },
       pics.length ? h('div', { class: 'gallery' }, h('img', { class: 'hero', src: pics[0].url, alt: '', onclick: () => lightbox(pics, 0, x) }),
         pics.length > 1 ? h('div', { class: 'thumbs' }, pics.slice(1, 9).map((p, i) => h('img', { src: `${p.url}?size=small`, alt: '', loading: 'lazy', onclick: () => lightbox(pics, i + 1, x) }))) : null)
@@ -723,7 +743,7 @@ async function showUpkeep(page) {
 
 // ------------------------------------------------------------------ one thing: the form
 async function showForm(page, r) {
-  const x = r.view === 'edit' ? await api(`api/items/${r.id}`) : { quantity: 1, labels: [], fields: [], location: S.settings.lastPlace ? { id: S.settings.lastPlace } : null };
+  const x = r.view === 'edit' ? await api(`api/items/${r.id}`) : { quantity: 1, labels: [], people: [], fields: [], location: S.settings.lastPlace ? { id: S.settings.lastPlace } : null };
   if (r.view === 'edit' && !x.writable) { location.hash = `#/item/${x.id}`; return; }
   if (r.view === 'new' && !canAdd()) throw new Error('A viewer only looks: a member or more adds things.');
   const back = x.id ? `#/item/${x.id}` : '#/';
@@ -758,6 +778,13 @@ async function showForm(page, r) {
   }));
   labIn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); const v = labIn.value.trim(); if (v) { chosen.add(v); labIn.value = ''; drawLabels(); } } });
   drawLabels();
+  // whose it is: the family, each a chip to tick
+  const whose = new Set(x.people.map((m) => m.id));
+  const peopleBox = h('div', { class: 'chiprow' });
+  const drawPeople = () => fill(peopleBox, S.family.map((m) =>
+    h('button', { type: 'button', class: `chip mchip toggle${whose.has(m.id) ? ' on' : ''}`, 'aria-pressed': String(whose.has(m.id)),
+      onclick: () => { if (whose.has(m.id)) whose.delete(m.id); else whose.add(m.id); drawPeople(); } }, memberBadge(m, true), m.displayName)));
+  drawPeople();
   // own fields
   const fieldRows = h('div', { class: 'ownfields' });
   const addField = (n = '', v = '') => fieldRows.append(h('div', { class: 'ownfield' }, inp(n, { placeholder: 'Name (Filter, Colour, PIN)' }), inp(v, { placeholder: 'Value' }),
@@ -768,6 +795,7 @@ async function showForm(page, r) {
     json.locationId = f.location.value ? +f.location.value : null; delete json.location;
     json.lifetimeWarranty = lifetime.checked; json.insured = insured.checked; json.archived = archived.checked;
     json.labels = [...chosen];
+    if (S.family.length) json.people = [...whose];
     json.fields = [...fieldRows.children].map((row) => { const [a, b] = row.querySelectorAll('input'); return { name: a.value, value: b.value }; }).filter((o) => o.name.trim() && o.value.trim());
     try {
       const got = await api(x.id ? `api/items/${x.id}` : 'api/items', { method: x.id ? 'PATCH' : 'POST', json });
@@ -782,6 +810,8 @@ async function showForm(page, r) {
     f.name, h('div', { class: 'grid', style: { marginTop: '10px' } }, h('label', { class: 'field wide' }, h('span', null, 'Description'), f.description)),
     sec('place', 'Where'),
     h('div', { class: 'grid' }, h('label', { class: 'field' }, h('span', null, 'Place'), f.location, canAdd() ? newPlace : null), fld('How many', f.quantity)),
+    S.family.length ? [sec('people', 'Whose it is'), peopleBox,
+      h('p', { class: 'muted small' }, 'The people of the family it belongs to or is for. None: the household’s.')] : null,
     sec('tag', 'Labels'), labBox, h('div', { class: 'grid', style: { marginTop: '6px' } }, labIn), h('datalist', { id: 'labelnames' }, S.labels.map((t) => h('option', { value: t.name }))),
     sec('info', 'What it is'),
     h('div', { class: 'grid' }, fld('Maker', f.manufacturer), fld('Model', f.modelNumber), fld('Serial number', f.serialNumber), fld('Asset id', f.assetId), fld('Link (the product page)', f.url)),
