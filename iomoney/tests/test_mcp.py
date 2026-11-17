@@ -42,7 +42,7 @@ def test_mcp_money(client, as_user):
             "add_transaction", "portfolio", "get_quote", "add_holding", "update_holding", "delete_holding", "add_account",
             "update_account", "add_valuation", "bills", "recurring_transactions", "cash_forecast", "loan_payoff", "sync_monarch", "diagnostics", "rules", "add_rule", "test_rule", "update_rule",
             "delete_rule", "apply_rules", "link_transfers", "link_transaction", "unlink_transaction", "transfer_rules",
-            "add_transfer_rule", "delete_transfer_rule", "monarch_new_accounts", "resolve_new_account"} <= names
+            "add_transfer_rule", "delete_transfer_rule", "monarch_new_accounts", "resolve_new_account", "data_checks", "payees"} <= names
     a = call(client, auth, "add_account", name="Checking", kind="cash", balance=1200)
     assert a["name"] == "Checking" and a["youCanChange"] is True and a["household"] is True
     from app import db
@@ -69,6 +69,12 @@ def test_mcp_money(client, as_user):
     assert call(client, auth, "split_transaction", transaction_id=t["id"], parts=[])["splits"] == []
     s = call(client, auth, "search_transactions", query="bakery")
     assert s["total"] == 1 and s["items"][0]["category"] == "Dining"
+    assert call(client, auth, "update_transaction", transaction_id=t["id"], tags=["trip"], reviewed=True)["ownTags"] == ["trip"]
+    assert call(client, auth, "search_transactions", tag="trip")["total"] == 1
+    assert call(client, auth, "search_transactions", needs_look=True)["total"] == 0
+    assert call(client, auth, "payees", query="bak")["items"][0]["payee"] == "Bakery"
+    dc = call(client, auth, "data_checks")
+    assert dc["needsLook"] == 0 and dc["likelyDuplicates"] == [] and dc["balanceCheck"] == []
     assert call(client, auth, "spending")["spent"] == 25
     assert call(client, auth, "add_account", name="Brokerage", kind="investment")["kind"] == "investment"
     h = call(client, auth, "add_holding", account="Brokerage", symbol="AAPL", shares=3, cost_basis=450)

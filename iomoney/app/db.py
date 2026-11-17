@@ -287,6 +287,77 @@ SCHEMA = [
         at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT fk_mny_reconciled_tx FOREIGN KEY (transaction_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
     )""",
+    # a person's own tags on a transaction (app/tags.py), beside the ones Monarch Money sends (mny_transactions.tags)
+    """CREATE TABLE IF NOT EXISTS mny_tags (
+        transaction_id INT NOT NULL,
+        tag VARCHAR(64) NOT NULL,
+        PRIMARY KEY (transaction_id, tag),
+        KEY idx_mny_tags_tag (tag),
+        CONSTRAINT fk_mny_tags_tx FOREIGN KEY (transaction_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
+    )""",
+    # a transaction someone looked at (app/review.py): off the Needs a look page
+    """CREATE TABLE IF NOT EXISTS mny_reviewed (
+        transaction_id INT PRIMARY KEY,
+        by_user INT NULL,
+        at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_mny_reviewed_tx FOREIGN KEY (transaction_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
+    )""",
+    # two transactions that look like one entered twice and a person said are not (app/duplicates.py): a_id < b_id
+    """CREATE TABLE IF NOT EXISTS mny_duplicate_nots (
+        a_id INT NOT NULL,
+        b_id INT NOT NULL,
+        PRIMARY KEY (a_id, b_id),
+        CONSTRAINT fk_mny_duplicate_nots_a FOREIGN KEY (a_id) REFERENCES mny_transactions(id) ON DELETE CASCADE,
+        CONSTRAINT fk_mny_duplicate_nots_b FOREIGN KEY (b_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
+    )""",
+    # a bank statement an account was reconciled against (app/statements.py): from start_day to end_day the balance
+    # went from opening to closing, and the reconciled transactions of those days add up to the difference
+    """CREATE TABLE IF NOT EXISTS mny_statements (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        account_id INT NOT NULL,
+        start_day DATE NOT NULL,
+        end_day DATE NOT NULL,
+        opening DECIMAL(18,2) NOT NULL,
+        closing DECIMAL(18,2) NOT NULL,
+        difference DECIMAL(18,2) NOT NULL DEFAULT 0,
+        by_user INT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_mny_statements_end (account_id, end_day),
+        CONSTRAINT fk_mny_statements_account FOREIGN KEY (account_id) REFERENCES mny_accounts(id) ON DELETE CASCADE
+    )""",
+    # what a person changed on a transaction (app/history.py): the fields as they were (before_json) and as they
+    # became (after_json). batch: the changes made together (many transactions at once); what: hand, bulk, undo or
+    # reset (back to Monarch's own). undone: taken back since.
+    """CREATE TABLE IF NOT EXISTS mny_changes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        transaction_id INT NOT NULL,
+        batch VARCHAR(32) NULL,
+        what VARCHAR(16) NOT NULL DEFAULT 'hand',
+        by_user INT NULL,
+        at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        before_json TEXT NOT NULL,
+        after_json TEXT NOT NULL,
+        undone TINYINT(1) NOT NULL DEFAULT 0,
+        KEY idx_mny_changes_tx (transaction_id, id),
+        KEY idx_mny_changes_batch (batch),
+        KEY idx_mny_changes_at (at),
+        CONSTRAINT fk_mny_changes_tx FOREIGN KEY (transaction_id) REFERENCES mny_transactions(id) ON DELETE CASCADE
+    )""",
+    # a search of the transactions a person kept under a name (app/searches.py): the page's own query string
+    """CREATE TABLE IF NOT EXISTS mny_searches (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        name VARCHAR(64) NOT NULL,
+        query VARCHAR(1000) NOT NULL,
+        position INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_mny_searches_user (user_id, position)
+    )""",
+    # a rule that was suggested (app/rulecheck.py) and a person did not want: payee and category, not offered again
+    """CREATE TABLE IF NOT EXISTS mny_rule_nots (
+        k VARCHAR(400) PRIMARY KEY,
+        at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""",
     # what the household keeps about an account to deal with its bank (account and routing numbers, IBAN, customer
     # service): a JSON object of known fields, apart from the account so that it goes into no list, summary or MCP tool
     """CREATE TABLE IF NOT EXISTS mny_account_info (

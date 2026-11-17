@@ -706,7 +706,7 @@ def amount_range(s: str | None) -> tuple[Decimal | None, Decimal | None] | None:
 
 def _tx_filter(u: dict, q: str = "", account: int = None, category: str = None, start=None, end=None,
                flow: str = None, hidden: bool = False, reconciled: str = None, amount: str = None,
-               receipt: str = None) -> tuple[str, list]:
+               receipt: str = None, tag: str = None, review: str = None) -> tuple[str, list]:
     """amount: an amount or a range (amount_range); in q, a word with $ or cents, a range or > < is an amount too, and
     a bare number is an amount or a word (the last digits in the bank's text)."""
     where, args = _visible(u)
@@ -736,6 +736,16 @@ def _tx_filter(u: dict, q: str = "", account: int = None, category: str = None, 
         where += " AND t.amount > 0"
     if reconciled in ("yes", "no"):
         where += f" AND {'' if reconciled == 'yes' else 'NOT '}EXISTS (SELECT 1 FROM mny_reconciled r WHERE r.transaction_id = t.id)"
+    if tag:
+        from app import tags
+        w, wargs = tags.where(str(tag).strip())
+        where += f" AND {w}"
+        args += wargs
+    if review == "yes":
+        from app import review as rv
+        w, wargs = rv.where()
+        where += f" AND {w}"
+        args += wargs
     if receipt in ("yes", "no"):
         where += f" AND {'' if receipt == 'yes' else 'NOT '}EXISTS (SELECT 1 FROM mny_receipts rc WHERE rc.transaction_id = t.id)"
     if amount not in (None, ""):
@@ -751,9 +761,9 @@ def _tx_filter(u: dict, q: str = "", account: int = None, category: str = None, 
             args += [r[0], like]
         elif r:
             where, args = _amount_where(where, args, r)
-        else:
-            where += " AND t.words LIKE %s"
-            args.append(like)
+        else:  # a word of the transaction, or of one of its own tags
+            where += " AND (t.words LIKE %s OR EXISTS (SELECT 1 FROM mny_tags g WHERE g.transaction_id = t.id AND g.tag LIKE %s))"
+            args += [like, like]
     return where, args
 
 
@@ -770,8 +780,8 @@ def _amount_where(where: str, args: list, r: tuple) -> tuple[str, list]:
 
 def find_transactions(u: dict, q: str = "", account: int = None, category: str = None, start=None, end=None,
                       flow: str = None, limit: int = 100, offset: int = 0, hidden: bool = False, reconciled: str = None,
-                      amount: str = None, receipt: str = None) -> dict:
-    where, args = _tx_filter(u, q, account, category, start, end, flow, hidden, reconciled, amount, receipt)
+                      amount: str = None, receipt: str = None, tag: str = None, review: str = None) -> dict:
+    where, args = _tx_filter(u, q, account, category, start, end, flow, hidden, reconciled, amount, receipt, tag, review)
     base = f"FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id WHERE {where}"
     total = db.one(f"SELECT count(*) AS n, COALESCE(SUM(t.amount), 0) AS s {base}", args)
     rows = db.q(f"SELECT t.*, a.owner_id, a.name AS account_name, a.currency, EXISTS (SELECT 1 FROM mny_reconciled r WHERE r.transaction_id = t.id) AS reconciled {base} ORDER BY t.day DESC, t.id DESC LIMIT %s OFFSET %s",
@@ -782,12 +792,13 @@ def find_transactions(u: dict, q: str = "", account: int = None, category: str =
 def with_transfers(items: list[dict], u: dict) -> list[dict]:
     """Each transaction that is half of a transfer gets transfer: {id, accountId, account, how} (the other half; its
     account left out when it is someone else's private one); each gets recurring: the household's recurring
-    transaction it is ({id, name, subscription}), or None; splits: its parts when it is split over categories; and
-    receipts: the files kept with it."""
-    from app import receipts, recurring, splits, transfers
+    transaction it is ({id, name, subscription}), or None; splits: its parts when it is split over categories;
+    receipts: the files kept with it; and ownTags: the tags set here (tags: those and Monarch's)."""
+    from app import receipts, recurring, splits, tags, transfers
     recurring.mark(items, u)
     splits.mark(items)
     receipts.mark(items)
+    tags.mark(items)
     halves = transfers.halves_of([t["id"] for t in items])
     others = {}
     if halves:
@@ -833,26 +844,39 @@ def create_transaction(u: dict, a: dict, b: dict) -> dict:
                 "words, created_by) VALUES (%s, 'manual', %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (a["id"], on, amt, merchant, cat, grp, notes, hidden, words(merchant, cat, notes, a["name"]), u["id"]))
     _move_balance(a["id"], amt)
-    from app import transfers
+    from app import review, tags, transfers
+    if b.get("tags"):
+        tags.put(tx_row(tid), b["tags"])
+    review.looked(u, tid)  # typed in by a person: looked at
     transfers.link("t.id = %s", (tid,))
     return tx_row(tid)
 
 
-def update_transaction(u: dict, t: dict, b: dict) -> dict:
-    """The category, the notes, hidden (left out of the sums) and the payee's name: kept as changed here, also by
-    the next sync. A manual account's transaction also takes a new date and amount."""
+def update_transaction(u: dict, t: dict, b: dict, what: str = "hand", batch: str = None) -> dict:
+    """The category, the notes, hidden (left out of the sums), the payee's name and the tags: kept as changed here,
+    also by the next sync. A manual account's transaction also takes a new date and amount. The change is kept
+    (app/history.py: what and batch say how it was made), and the transaction counts as looked at (app/review.py)."""
+    from app import history, review, splits, tags
     _need(can_write(u, t))
+    own = tags.of([t["id"]]).get(t["id"], [])
+    before = history.snapshot(t, own)
     sets, args = [], []
     for k, col, lim in (("category", "category", 128), ("group", "category_group", 128), ("merchant", "merchant", 255),
                         ("notes", "notes", 4000)):
         if k in b:
             sets.append(f"{col} = %s")
             args.append(text(b[k], lim, k))
+    if "category" in b and "group" not in b and text(b["category"], 128, "category") != t["category"]:
+        cat = text(b["category"], 128, "category")  # another category: its group follows
+        sets.append("category_group = %s")
+        args.append(_group_of_category(cat) if cat else None)
     if "hidden" in b:
         sets.append("hidden = %s")
         args.append(flag(b["hidden"]))
     if "reconciled" in b:  # not a change to what the transaction says: it does not make it "edited"
         set_reconciled(u, [t["id"]], flag(b["reconciled"]))
+    if "reviewed" in b:
+        review.mark(u, [t["id"]], bool(flag(b["reviewed"])))
     if t["source"] == "manual":
         if "day" in b:
             sets.append("day = %s")
@@ -860,14 +884,53 @@ def update_transaction(u: dict, t: dict, b: dict) -> dict:
         if "amount" in b:
             sets.append("amount = %s")
             args.append(money(b["amount"]))
+    tagged = False
+    if "tags" in b or "addTags" in b or "removeTags" in b:
+        want = tags.listed(b["tags"]) if "tags" in b else list(own)
+        have = {x.lower() for x in want}
+        want += [x for x in tags.listed(b.get("addTags")) if x.lower() not in have]
+        gone = {x.lower() for x in tags.listed(b.get("removeTags"))}
+        tagged = tags.put(t, [x for x in want if x.lower() not in gone])
     if sets:
         db.ex(f"UPDATE mny_transactions SET {', '.join(sets)}, edited = 1 WHERE id = %s", (*args, t["id"]))
-        n = tx_row(t["id"])
-        from app import splits
+    if sets or tagged:
         splits.rewords(t["id"])
+        n = tx_row(t["id"])
         if t["source"] == "manual":
             _move_balance(t["account_id"], Decimal(n["amount"]) - Decimal(t["amount"]))
+        history.record(u, t["id"], before, history.snapshot(n, tags.of([t["id"]]).get(t["id"], [])), what, batch)
+        if "reviewed" not in b:
+            review.looked(u, t["id"])
     return tx_row(t["id"])
+
+
+def change_many(u: dict, ids: list, b: dict) -> dict:
+    """The same change to many transactions at once ({category?, merchant?, notes?, hidden?, reconciled?, reviewed?,
+    addTags?, removeTags?}): those this person may change; kept as one batch, so it can be taken back as one.
+    {changed, skipped, batch}."""
+    from app import history
+    if not isinstance(ids, list) or not ids:
+        raise Invalid("ids: the transactions to change")
+    if len(ids) > MAX_MANY:
+        raise Invalid(f"At most {MAX_MANY} transactions at once")
+    b = {k: v for k, v in (b or {}).items() if k in ("category", "merchant", "notes", "hidden", "reconciled", "reviewed", "addTags", "removeTags")}
+    if not b:
+        raise Invalid("Say what to change: category, merchant, notes, hidden, reconciled, reviewed, addTags or removeTags")
+    if "merchant" in b and not text(b["merchant"], 255, "The payee"):
+        raise Invalid("Give the payee's name")
+    batch = history.batch_id()
+    changed = skipped = 0
+    for tid in ids:
+        t = tx_row(tid)
+        if not t or not can_read(u, t) or not can_write(u, t):
+            skipped += 1
+            continue
+        update_transaction(u, t, b, "bulk", batch)
+        changed += 1
+    if changed and ("category" in b or "hidden" in b):
+        from app import transfers
+        transfers.link()  # a category can make a transfer plain
+    return {"changed": changed, "skipped": skipped, "batch": batch}
 
 
 def set_reconciled(u: dict, ids: list, on: bool) -> int:
@@ -1144,6 +1207,7 @@ def write_estimates() -> int:
 
 # ---- rules: the household's, renaming and categorizing transactions as they come in
 
+MAX_MANY = 2000  # transactions changed at once
 RULE_FIELDS = ("either", "merchant", "description")  # what is matched: the payee, the bank's own text, or either
 RULE_HOW = ("contains", "is", "starts")
 FLOWS = ("out", "in")
@@ -1275,7 +1339,9 @@ def order_rules(u: dict, ids: list) -> list[dict]:
     return rules(u)
 
 
-def _matches(r: dict, t: dict) -> bool:
+def _matches(r: dict, t: dict, renamed: str = None) -> bool:
+    """Whether a rule is for a transaction. renamed: the payee's name as a rule makes it, which a rule that looks at
+    the payee matches as well as the name the transaction came with."""
     if r.get("account_id") and r["account_id"] != t["account_id"]:
         return False
     amt = Decimal(t["amount"])
@@ -1286,7 +1352,7 @@ def _matches(r: dict, t: dict) -> bool:
     if r.get("amount_max") is not None and abs(amt) > Decimal(r["amount_max"]):
         return False
     p = (r["pattern"] or "").lower()
-    texts = {"merchant": [t.get("merchant")], "description": [t.get("description")]}.get(r["field"], [t.get("merchant"), t.get("description")])
+    texts = {"merchant": [t.get("merchant"), renamed], "description": [t.get("description")]}.get(r["field"], [t.get("merchant"), renamed, t.get("description")])
     for s in texts:
         s = (s or "").lower().strip()
         if not s:
@@ -1297,13 +1363,17 @@ def _matches(r: dict, t: dict) -> bool:
 
 
 def _rule_changes(rs: list[dict], t: dict) -> dict:
-    """What the rules make of one transaction: {merchant?, category?, hidden?}, the first rule that sets each winning."""
+    """What the rules make of one transaction: {merchant?, category?, hidden?}, the first rule that sets each winning.
+    The payee is renamed first, and a rule that looks at the payee is then for the new name as well as the old one
+    (so "Shell is Fuel" holds for what a rule renamed to Shell, wherever the two rules stand)."""
     out = {}
     for r in rs:
-        if not r["enabled"] or not _matches(r, t):
-            continue
-        if r["set_merchant"] and "merchant" not in out:
+        if r["enabled"] and r["set_merchant"] and _matches(r, t):
             out["merchant"] = r["set_merchant"]
+            break
+    for r in rs:
+        if not r["enabled"] or not _matches(r, t, out.get("merchant")):
+            continue
         if r["set_category"] and "category" not in out:
             out["category"] = r["set_category"]
         if r["set_hidden"] is not None and "hidden" not in out:

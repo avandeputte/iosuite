@@ -608,7 +608,8 @@ def test_rules_rename_and_categorize(client, as_user):
     # the first rule that sets a thing wins; a later one still hides
     r2 = client.post("/api/rules", json={"pattern": "amazon", "field": "merchant", "setCategory": "Other", "setHidden": True}).json()
     new = tx("AMZN Mktp US*9Z1")
-    assert new["merchant"] == "Amazon" and new["category"] == "Shopping" and new["hidden"] is False  # names are matched as typed
+    # the first rule that sets the category wins; a rule on the payee is for the name a rule gave it too, so it hides
+    assert new["merchant"] == "Amazon" and new["category"] == "Shopping" and new["hidden"] is True
     assert tx("Amazon", 5)["category"] == "Other"
     order = client.put("/api/rules/order", json={"ids": [r2["id"]]}).json()["items"]
     assert [x["id"] for x in order] == [r2["id"], r.json()["id"]]

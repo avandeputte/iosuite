@@ -124,8 +124,8 @@ def forget(tids) -> None:
 
 def carry(gone: list[int], seen: set) -> int:
     """Monarch no longer has these transactions; the ones it sent this time have the ids in seen. A pending
-    transaction that posted comes back under another id: what was kept with the old one here (its receipts, its
-    links to the suite's other items, its split when the amount stayed) moves to the one that took its place: in
+    transaction that posted comes back under another id: what was kept with the old one here (its receipts, its own
+    tags, its links to the suite's other items, its split when the amount stayed) moves to the one that took its place: in
     the same account, within CARRY_DAYS, of the same amount, or of the same payee and nearly the amount (a tip
     added). How many were carried over; the links of the others are removed."""
     gone = [int(i) for i in gone]
@@ -135,7 +135,8 @@ def carry(gone: list[int], seen: set) -> int:
     kept = {r["transaction_id"] for r in db.q(f"SELECT DISTINCT transaction_id FROM mny_receipts WHERE transaction_id IN ({marks})", gone)}
     linked = {int(i) for i in related.having(KIND, gone)}
     split = {r["transaction_id"] for r in db.q(f"SELECT DISTINCT transaction_id FROM mny_splits WHERE transaction_id IN ({marks})", gone)}
-    want = sorted(kept | linked | split)
+    tagged = {r["transaction_id"] for r in db.q(f"SELECT DISTINCT transaction_id FROM mny_tags WHERE transaction_id IN ({marks})", gone)}
+    want = sorted(kept | linked | split | tagged)
     n, taken = 0, set(gone)
     for old in (db.q(f"SELECT id, account_id, day, amount, merchant FROM mny_transactions WHERE id IN ({db.marks(len(want))}) ORDER BY id", want) if want else []):
         cands = db.q("SELECT id, day, amount, merchant, external_id FROM mny_transactions WHERE source = 'monarch' AND account_id = %s "
@@ -157,13 +158,14 @@ def carry(gone: list[int], seen: set) -> int:
         taken.add(new["id"])
         with db.tx():
             db.ex("UPDATE mny_receipts SET transaction_id = %s WHERE transaction_id = %s", (new["id"], old["id"]))
+            db.ex("UPDATE IGNORE mny_tags SET transaction_id = %s WHERE transaction_id = %s", (new["id"], old["id"]))
             if old["id"] in split and new["amount"] == old["amount"] and not db.one("SELECT 1 AS x FROM mny_splits WHERE transaction_id = %s LIMIT 1", (new["id"],)):
                 db.ex("UPDATE mny_splits SET transaction_id = %s WHERE transaction_id = %s", (new["id"], old["id"]))
                 db.ex("UPDATE mny_transactions SET edited = 1 WHERE id = %s", (new["id"],))
                 moved_split = True
             else:
                 moved_split = False
-        if moved_split:
+        if moved_split or old["id"] in tagged:
             from app import splits
             splits.rewords(new["id"])
         if old["id"] in linked:

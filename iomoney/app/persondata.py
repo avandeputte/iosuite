@@ -1,9 +1,10 @@
 """What a person keeps in ioMoney, counted or removed when their account is deleted (iosuite_shared.persondata):
-their private accounts, with everything in them (balances, transactions with their receipts, holdings). The household's accounts stay,
+their private accounts, with everything in them (balances, transactions with their receipts, holdings), and
+their saved searches. The household's accounts stay,
 whoever added them or changed their transactions: they are everyone's."""
 from iosuite_shared import related
 
-from app import db, receipts
+from app import db, receipts, searches
 
 
 def of(user_id: int, remove: bool) -> list:
@@ -19,7 +20,9 @@ def of(user_id: int, remove: bool) -> list:
             db.ex("DELETE FROM mny_accounts WHERE owner_id = %s", (user_id,))  # balances, transactions, holdings go with them
         related.forget_many("asset", accts)  # their links to other items of the suite go too
         receipts.forget(tids)                # and those of their transactions (the receipts go with the transactions)
+    saved = searches.forget(user_id) if remove else db.one("SELECT count(*) AS n FROM mny_searches WHERE user_id = %s", (user_id,))["n"]
     return [{"what": "private accounts", "one": "private account", "count": len(accts)},
             {"what": "transactions in them", "one": "transaction in them", "count": tx},
             {"what": "holdings in them", "one": "holding in them", "count": hold},
+            {"what": "saved searches", "one": "saved search", "count": saved},
             {"what": "household accounts they added", "one": "household account they added", "count": added, "kept": True}]

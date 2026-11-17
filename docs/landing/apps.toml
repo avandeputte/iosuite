@@ -541,7 +541,16 @@ title = "Transfers linked"
 text = "To savings, a card's payment, a loan's payment: the two halves are found and linked, and a rule learns from each."
 [[iomoney.features]]
 title = "Reconciled"
-text = "Tick each transaction as checked against the bank's statement."
+text = "Tick an account's transactions off against the bank's statement until the difference is zero; a balance check says when an account and its transactions disagree."
+[[iomoney.features]]
+title = "Tidy up"
+text = "The transactions that need a look, likely duplicates, the payees to rename or merge, your own tags, and many transactions changed at once."
+[[iomoney.features]]
+title = "History and undo"
+text = "Every change made by hand is kept with who and when, and can be taken back."
+[[iomoney.features]]
+title = "Bank files"
+text = "Import CSV, OFX or QFX into an account kept by hand; what is there already is left out."
 [[iomoney.features]]
 title = "Bank details at hand"
 text = "Account and routing numbers (hidden until shown), IBAN, the bank's phone and website."

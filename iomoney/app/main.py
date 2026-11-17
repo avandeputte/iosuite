@@ -15,7 +15,7 @@ from iosuite_shared import chores, mcp as shared_mcp, pages
 from iosuite_shared import demo as suite_demo
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, config, db, mcp, model, monarch, quotes, users
+from app import __version__, api, config, db, history, mcp, model, monarch, quotes, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -47,12 +47,13 @@ async def lifespan(app: FastAPI):
 
 def background() -> None:
     """Every five minutes: Monarch Money when its sync is due, the quotes that are old, the manual investment accounts
-    revalued, and today's estimates of the house and the cars."""
+    revalued, today's estimates of the house and the cars, and the kept changes that are too old dropped."""
     if monarch.due():
         monarch.sync()
     quotes.refresh()
     model.revalue_manual_investments()
     model.write_estimates()
+    history.prune()
 
 
 app = FastAPI(title="ioMoney", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
@@ -74,6 +75,8 @@ app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN
 
 
 def _limit_for(path: str, ctype: str) -> int:
+    if path.endswith("/import"):
+        return config.MAX_IMPORT_BYTES
     return config.MAX_RECEIPT_BYTES if path.endswith("/receipts") else config.MAX_JSON_BYTES
 
 

@@ -52,17 +52,25 @@ const ICONS = {
   repeat: 'M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z',
   eye: 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
   copy: 'M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z',
+  tidy: 'M20 3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM10 17H5v-2h5v2zm0-4H5v-2h5v2zm0-4H5V7h5v2zm4.82 6L12 12.16l1.41-1.41 1.41 1.42L17.99 9l1.42 1.42L14.82 15z',
+  label: 'M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z',
+  history: 'M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z',
+  undo: 'M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z',
+  store: 'M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z',
+  bookmark: 'M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z',
+  scale: 'M13 7.83c.85-.3 1.53-.98 1.83-1.83H18l-3 7c0 1.66 1.57 3 3.5 3s3.5-1.34 3.5-3l-3-7h2V4h-6.17c-.41-1.17-1.52-2-2.83-2s-2.42.83-2.83 2H3v2h2l-3 7c0 1.66 1.57 3 3.5 3S9 14.66 9 13L6 6h3.17c.3.85.98 1.53 1.83 1.83V19H2v2h20v-2h-9V7.83zM20.37 13h-3.74l1.87-4.36L20.37 13zm-13 0H3.63L5.5 8.64 7.37 13zM12 6c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z',
+  doneAll: 'M18 7l-1.41-1.41-6.34 6.34 1.41 1.41L18 7zm4.24-1.41L11.66 16.17 7.48 12l-1.41 1.41L11.66 19l12-12-1.42-1.41zM.41 13.41L6 19l1.41-1.41L1.83 12 .41 13.41z',
   phone: 'M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z',
 };
 const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
 
 let toastTimer;
-/** A note at the foot of the page. */
-function toast(msg) {
+/** A note at the foot of the page; act: [label, what it does], a way back shown beside it for a while (Undo). */
+function toast(msg, act) {
   const t = $('#toast');
-  t.textContent = msg;
+  t.replaceChildren(msg, ...(act ? [h('button', { class: 'undo', onclick: () => { t.hidden = true; act[1](); } }, act[0])] : []));
   t.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, act ? 9000 : 3500);
 }
 const fail = (e) => toast(e.message || String(e));
 
@@ -111,7 +119,7 @@ const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p
 const store = { get: (k) => { try { return localStorage.getItem(`iomoney.${k}`); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(`iomoney.${k}`, v); } catch { /* private mode */ } } };
 
 // ------------------------------------------------------------------ state
-const S = { status: {}, user: null, suite: [], settings: {}, sum: null, accounts: [], cats: [] };
+const S = { status: {}, user: null, suite: [], settings: {}, sum: null, accounts: [], cats: [], searches: [], tags: null };
 const RANK = { none: 0, viewer: 1, member: 2, editor: 3, admin: 4 };
 const roleAtLeast = (r) => (RANK[S.user && S.user.role] || 0) >= RANK[r];
 const may = (k) => !!(S.sum && S.sum.may && S.sum.may[k]);
@@ -120,6 +128,7 @@ const CUR = () => (S.sum && S.sum.currency) || 'USD';
 async function refreshSummary() {
   try { S.sum = await api('api/summary'); } catch { /* the page says so */ }
   try { S.accounts = (await api('api/accounts?hidden=true')).items || []; } catch { S.accounts = []; }
+  try { S.searches = may('read') ? (await api('api/searches')).items || [] : []; } catch { S.searches = []; }
   drawNav();
 }
 async function saveSettings(changes) {
@@ -255,7 +264,10 @@ function bar(label, value, max, { href, hueVar, cur, sub } = {}) {
 const DOCK_MIN = 1100;
 const VIEWS = { overview: ['Overview', 'dashboard', '--c-amber'], transactions: ['Transactions', 'receipt', '--c-blue'],
   spending: ['Spending', 'pie', '--c-rose'], portfolio: ['Portfolio', 'trend', '--c-indigo'], assets: ['Assets', 'home', '--c-orange'],
-  recurring: ['Recurring', 'repeat', '--c-green'], rules: ['Rules', 'tune', '--c-teal'] };
+  recurring: ['Recurring', 'repeat', '--c-green'], tidy: ['Tidy up', 'tidy', '--c-purple'], rules: ['Rules', 'tune', '--c-teal'] };
+/** A search as its address has it, whatever the order of its filters: to tell whether two are the same. */
+const sameSearch = (a, b) => { const n = (x) => [...new URLSearchParams(x)].filter(([k, v]) => k !== 'offset' && v).map(([k, v]) => `${k}=${v}`).sort().join('&'); return n(a) === n(b); };
+const TIDY_VIEWS = ['tidy', 'review', 'payees', 'duplicates', 'balance', 'changes', 'transfers'];
 function drawNav() {
   const nav = $('#nav'); const r = route();
   const link = (v, href, ic, label, n, on, hueVar) => h('a', { href, 'data-v': v, class: on ? 'on' : null, style: hueVar ? { '--hue': `var(${hueVar})` } : null },
@@ -274,7 +286,11 @@ function drawNav() {
           h('span', { class: 'brand-name' }, brandName())),
       h('button', { id: 'sidebtn', class: 'iconbtn', onclick: sidebarButton })),
     Object.entries(VIEWS).filter(([k]) => k !== 'assets' || shown.some((a) => THINGS.includes(a.kind)) || canAdd())
-      .map(([k, [label, ic, hv]]) => link(k, k === 'overview' ? '#/' : `#/${k}`, ic, label, k === 'recurring' && S.sum && S.sum.recurringFlags ? S.sum.recurringFlags : null, r.view === k, hv)),
+      .map(([k, [label, ic, hv]]) => [link(k, k === 'overview' ? '#/' : `#/${k}`, ic, label,
+        k === 'recurring' && S.sum && S.sum.recurringFlags ? S.sum.recurringFlags : k === 'tidy' && S.sum && S.sum.review ? S.sum.review : null,
+        r.view === k || (k === 'tidy' && TIDY_VIEWS.includes(r.view)), hv),
+      // a person's saved searches, under Transactions
+      k === 'transactions' ? S.searches.map((x) => link('acct', `#/transactions?${x.query}`, 'bookmark', x.name, null, r.view === 'transactions' && sameSearch(x.query, new URLSearchParams(r.q || {})), '--c-blue')) : null]),
     h('button', { class: 'navmore', 'data-v': 'more', title: 'More', onclick: moreSheet }, icon('more'), h('span', { class: 'nl' }, 'More')),
     byGroup(shown).map((g) => [h('div', { class: 'navgap' }), sec(g.label),
       g.list.map((a) => behindMark(link('acct', `#/account/${a.id}`, a.household ? KIND_LOOK[a.kind][0] : 'lock', a.name, null, r.view === 'account' && r.id === a.id, KIND_LOOK[a.kind][1]), a))]),
@@ -283,7 +299,7 @@ function drawNav() {
   ].flat(4).filter(Boolean));
   nav.querySelector('a[href="#/accounts/new"]')?.addEventListener('click', (e) => { e.preventDefault(); accountDialog(); });
   applySidebar();
-  $('.navmore')?.classList.toggle('on', ['assets', 'rules', 'account', 'settings'].includes(r.view));
+  $('.navmore')?.classList.toggle('on', ['assets', 'rules', 'account', 'settings', 'categories', ...TIDY_VIEWS].includes(r.view));
 }
 /** An account whose link to its bank Monarch Money reports as cut, needing its sign-in fixed or over two days behind:
     a warning mark (with why) on its row. */
@@ -305,6 +321,7 @@ function moreSheet() {
   const grid = h('div', { class: 'sheetgrid' },
     tile('#/assets', 'home', 'Assets', 'var(--c-orange)', r.view === 'assets'),
     tile('#/recurring', 'repeat', 'Recurring', 'var(--c-green)', r.view === 'recurring'),
+    tile('#/tidy', 'tidy', 'Tidy up', 'var(--c-purple)', TIDY_VIEWS.includes(r.view)),
     tile('#/rules', 'tune', 'Rules', 'var(--c-teal)', r.view === 'rules'),
     tile('#/categories', 'list', 'Categories', 'var(--c-purple)', r.view === 'categories'),
     tile('#/settings', 'settings', 'Settings', 'var(--c-slate)', r.view === 'settings'),
@@ -331,6 +348,7 @@ function route() {
   if (a === 'recurring') return { view: 'recurring' };
   if (a === 'categories') return { view: 'categories' };
   if (a === 'transfers') return { view: 'transfers', q };
+  if (['tidy', 'review', 'payees', 'duplicates', 'balance', 'changes'].includes(a)) return { view: a, q };
   if (a === 'account' && b) return { view: 'account', id: +b, tab: c };
   if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: c };
   return { view: 'overview' };
@@ -344,7 +362,8 @@ async function onRoute() {
     const page = h('div', { class: 'page wide' });
     if (!may('read') && r.view !== 'settings') noRole(page);
     else await ({ overview: showOverview, transactions: showTransactions, spending: showSpending, portfolio: showPortfolio,
-      assets: showAssets, rules: showRules, transaction: showTransaction, transfers: showTransfers, recurring: showRecurring, categories: showCategories, account: showAccount, settings: showSettings })[r.view](page, r);
+      assets: showAssets, rules: showRules, transaction: showTransaction, transfers: showTransfers, recurring: showRecurring, categories: showCategories, account: showAccount, settings: showSettings,
+      tidy: showTidy, review: showReview, payees: showPayees, duplicates: showDuplicates, balance: showBalance, changes: showChanges })[r.view](page, r);
     main.replaceChildren(page);
     if (!r.keepScroll) main.scrollTop = 0;
   } catch (e) { main.replaceChildren(h('div', { class: 'page' }, h('div', { class: 'empty' }, icon('warning'), h('p', null, e.message || String(e)), h('p', null, h('a', { class: 'lnk', href: '#/' }, 'Overview'))))); }
@@ -514,6 +533,7 @@ async function newAccountsDialog() {
 async function showAccount(page, r) {
   const a = await api(`api/accounts/${r.id}`);
   document.title = `${a.name} · ioMoney`;
+  if (r.tab === 'reconcile') { await showReconcile(page, a); return; }
   const thing = THINGS.includes(a.kind);
   const tx = followsTx(a);
   const valued = thing || (!tx && a.kind !== 'investment');  // a value now and then, not transactions
@@ -526,6 +546,8 @@ async function showAccount(page, r) {
     a.writable && a.source === 'manual' && a.kind === 'investment' ? ['add', 'Add a holding', () => holdingDialog(null, a.id)] : null,
     a.writable && tx ? ['add', 'Add a transaction', () => txDialog(null, a)] : null,
     tx ? ['receipt', 'Its transactions', `#/transactions?account=${a.id}`] : null,
+    tx && a.writable ? ['check', 'Reconcile with a statement', `#/account/${a.id}/reconcile`] : null,
+    tx && a.writable && a.source === 'manual' ? ['upload', 'Import a bank file', () => importDialog(a)] : null,
     a.source === 'monarch' && may('admin') ? ['sync', 'Sync this account again', () => resyncAccount(a)] : null,
     a.writable && a.bank && a.bank.linked && !a.closed ? (a.bank.quiet ? ['warning', 'Flag it when the bank link is behind', () => quietBank(a, false)]
       : ['warning', 'Don’t flag its bank link', () => quietBank(a, true)]) : null,
@@ -953,6 +975,7 @@ async function showCategories(page) {
         h('span', { class: 'main' }, h('b', null, c.category)),
         h('a', { class: 'lnk small', href: `#/transactions?${new URLSearchParams({ category: c.category })}`, onclick: (e) => e.stopPropagation() }, `${c.count} transaction${c.count === 1 ? '' : 's'}`)))))));
   }
+  await drawTags(page);
 }
 async function categoryDialog(c, all) {
   const isNew = !c;
@@ -1005,25 +1028,56 @@ function txCat(t) {
   if (t.splits && t.splits.length) return h('span', { class: 'split', title: t.splits.map((p) => `${p.category || 'Uncategorized'} ${money(p.amount, t.currency)}`).join(' · ') }, icon('split', 'xs'), [...new Set(t.splits.map((p) => p.category || 'Uncategorized'))].join(', '));
   return t.category ? h('span', null, t.category) : h('span', { class: 'muted' }, 'Uncategorized');
 }
-function txList(items, showAccount = true, showBank = store.get('txbank') === '1') {
+function txList(items, showAccount = true, showBank = store.get('txbank') === '1', opt = {}) {
   if (!items.length) return h('p', { class: 'muted' }, 'No transactions.');
-  const cls = `rows flat txs ${showAccount ? 'withacct' : ''} ${showBank ? 'withbank' : ''}`;
+  const cls = `rows flat txs ${showAccount ? 'withacct' : ''} ${showBank ? 'withbank' : ''} ${opt.picked ? 'sel' : ''}`;
+  const boxes = [];
+  const pick = (t) => {  // a tick to change several at once (opt.picked: the ids ticked; opt.onPick: after each change)
+    if (!opt.picked) return null;
+    if (!t.writable) return h('span', { class: 's' });
+    const b = h('input', { type: 'checkbox', 'aria-label': 'Select', checked: opt.picked.has(t.id) ? true : null, onclick: (e) => e.stopPropagation(),
+      onchange: () => { if (b.checked) opt.picked.add(t.id); else opt.picked.delete(t.id); b.closest('li').classList.toggle('picked', b.checked); opt.onPick(); } });
+    boxes.push([t, b]);
+    return h('span', { class: 's', onclick: (e) => e.stopPropagation() }, b);
+  };
+  const all = opt.picked ? h('input', { type: 'checkbox', title: 'Select all shown', 'aria-label': 'Select all shown', onchange: (e) => {
+    for (const [t, b] of boxes) { b.checked = e.target.checked; b.closest('li').classList.toggle('picked', b.checked); if (b.checked) opt.picked.add(t.id); else opt.picked.delete(t.id); }
+    opt.onPick();
+  } }) : null;
   return h('ul', { class: cls },
-    h('li', { class: 'txhead', 'aria-hidden': 'true' }, h('div', { class: 'r tx' }, h('span', { class: 'd' }, 'Date'), h('span', { class: 'p' }, 'Payee'),
-      showBank ? h('span', { class: 'b' }, 'At the bank') : null, h('span', { class: 'n' }, 'Notes'), h('span', { class: 'c' }, 'Category'), showAccount ? h('span', { class: 'a' }, 'Account') : null, h('span', { class: 'm' }, 'Amount'), h('span', { class: 'rc', title: 'Reconciled' }, '✓'))),
+    h('li', { class: 'txhead' }, h('div', { class: 'r tx' }, opt.picked ? h('span', { class: 's' }, all) : null, h('span', { class: 'd' }, 'Date'), h('span', { class: 'p' }, 'Payee'),
+      showBank ? h('span', { class: 'b' }, 'At the bank') : null, h('span', { class: 'n' }, 'Notes'), h('span', { class: 'c' }, 'Category'), showAccount ? h('span', { class: 'a' }, 'Account') : null, h('span', { class: 'm' }, 'Amount'), h('span', { class: 'rc', title: opt.review ? 'Reviewed' : 'Reconciled' }, '✓'))),
     items.map((t) => h('li', { class: t.hidden ? 'off' : null }, h('div', { class: 'r tx', role: 'button', tabindex: 0, onclick: () => txDialog(t),
-      onkeydown: (e) => { if (e.key === 'Enter') txDialog(t); } },
+      onkeydown: (e) => { if (e.key === 'Enter' && e.target === e.currentTarget) txDialog(t); } },
+      pick(t),
       h('span', { class: 'd' }, fmtTxDay(t.day)),
       h('span', { class: 'p' }, h('b', null, t.merchant || t.description || '(no payee)'), t.pending ? h('span', { class: 'tag' }, 'Pending') : null,
         t.recurring ? h('span', { class: 'rec', title: `Recurring: ${t.recurring.name}${t.recurring.subscription ? ' (a subscription)' : ''}` }, icon(t.recurring.subscription ? 'play' : 'repeat', 'xs')) : null,
         t.receipts && t.receipts.length ? h('span', { class: 'rcp', title: t.receipts.length === 1 ? 'A receipt is kept with it' : `${t.receipts.length} receipts are kept with it` }, icon('attach', 'xs')) : null,
+        (t.tags || []).map((x) => h('span', { class: 'tag tg' }, x)),
         h('small', { class: 'cs' }, txCat(t))),
       showBank ? h('span', { class: 'b', title: t.description || null }, t.description || '') : null,
       h('span', { class: 'n', title: t.notes || null }, t.notes || ''),
       h('span', { class: 'c' }, txCat(t)),
       showAccount ? h('span', { class: 'a' }, t.account) : null,
       h('span', { class: 'm' }, amt(t.amount, t.currency)),
-      h('span', { class: 'rc' }, recTick(t))))));
+      h('span', { class: 'rc' }, opt.review ? reviewTick(t, opt) : recTick(t))))));
+}
+/** On the Needs a look page: the tick that says a transaction was looked at; it leaves the list. */
+function reviewTick(t, opt) {
+  const b = h('button', { class: 'tick', title: 'Looked at: take it off this list', 'aria-label': 'Reviewed', disabled: t.writable ? null : true }, icon('check', 's'));
+  b.onclick = async (e) => {
+    e.stopPropagation();
+    try {
+      const r = await api('api/transactions/review', { method: 'POST', json: { ids: [t.id] } });
+      if (opt.picked) opt.picked.delete(t.id);
+      b.closest('li').remove();
+      if (S.sum) S.sum.review = r.left;
+      drawNav();
+      if (opt.onReviewed) opt.onReviewed(r.left);
+    } catch (x) { fail(x); }
+  };
+  return b;
 }
 /** The reconciled tick of a transaction: a click marks it (or unmarks it) without opening it. */
 function recTick(t) {
@@ -1048,7 +1102,9 @@ async function showTransactions(page, r) {
   if (q.rcp) params.set('receipt', q.rcp);
   if (q.amt) params.set('amount', q.amt);
   if (q.hid) params.set('hidden', 'true');
-  const [d, cats] = await Promise.all([api(`api/transactions?${params}`), categories()]);
+  if (q.tag) params.set('tag', q.tag);
+  if (q.rev) params.set('review', q.rev);
+  const [d, cats, tags] = await Promise.all([api(`api/transactions?${params}`), categories(), tagList()]);
   const go = (changes) => { const n = { ...q, ...changes }; delete n.offset; for (const k of Object.keys(n)) if (!n[k]) delete n[k]; location.hash = `#/transactions?${new URLSearchParams(n)}`; };
   const search = h('input', { class: 't', type: 'search', placeholder: 'Payee, category, notes, $amount…', value: q.q || '' });
   let tm; search.oninput = () => { clearTimeout(tm); tm = setTimeout(() => go({ q: search.value.trim() }), 350); };
@@ -1061,6 +1117,7 @@ async function showTransactions(page, r) {
     h('a', { class: 'pillbtn', href: '#/categories', title: 'Add, rename, regroup or delete categories' }, icon('list'), h('span', null, 'Categories')),
     h('a', { class: 'pillbtn', href: '#/rules', title: 'Rules that rename and categorize transactions' }, icon('tune'), h('span', null, 'Rules')),
     S.accounts.some((a) => a.writable && followsTx(a)) ? h('button', { class: 'pillbtn', onclick: () => txDialog() }, icon('add'), h('span', null, 'Transaction')) : null));
+  put(page, savedRow(q));
   put(page, h('div', { class: 'filters' }, search, amount,
     sel('account', [['', 'Every account'], ...S.accounts.filter(followsTx).map((a) => [a.id, a.name])], 'Account'),
     sel('category', [['', 'Every category'], ['-', 'Uncategorized'], ...cats.map((c) => [c.category, c.category])], 'Category'),
@@ -1068,6 +1125,8 @@ async function showTransactions(page, r) {
     sel('rec', [['', 'Reconciled or not'], ['no', 'Not reconciled'], ['yes', 'Reconciled']], 'Reconciled'),
     sel('rcp', [['', 'With or without a receipt'], ['yes', 'With a receipt'], ['no', 'Without a receipt']], 'Receipts'),
     sel('hid', [['', 'Without the hidden'], ['1', 'With the hidden (dimmed)']], 'Hidden transactions'),
+    tags.length || q.tag ? sel('tag', [['', 'Any tag'], ...[...new Set([...tags.map((x) => x.tag), q.tag].filter(Boolean))].map((x) => [x, `Tag: ${x}`])], 'Tag') : null,
+    sel('rev', [['', 'Looked at or not'], ['yes', 'Needs a look']], 'Needs a look'),
     h('label', { class: 'check', title: 'Show the bank’s own text for each transaction' },
       h('input', { type: 'checkbox', checked: store.get('txbank') === '1' ? true : null, onchange: (e) => { store.set('txbank', e.target.checked ? '1' : '0'); onRoute(); } }), 'At the bank column')));
   const markable = d.items.filter((t) => t.writable && !t.reconciled);
@@ -1077,7 +1136,9 @@ async function showTransactions(page, r) {
   };
   put(page, h('p', { class: 'sumline' }, `${d.total} transaction${d.total === 1 ? '' : 's'} · `, amt(d.sum),
     q.rec === 'no' && markable.length ? [' · ', h('button', { class: 'lnk', onclick: markAll }, `Mark these ${markable.length} reconciled`)] : null));
-  put(page, txList(d.items));
+  const picked = new Set();
+  const bar = h('div', { class: 'bulkbar', hidden: true });
+  put(page, txList(d.items, true, undefined, { picked, onPick: () => drawBulk(bar, picked, d.items, !!q.rev) }), bar);
   if (d.total > offset + limit || offset) {
     put(page, h('div', { class: 'more' }, offset ? h('a', { class: 'pillbtn', href: `#/transactions?${new URLSearchParams({ ...q, offset: Math.max(0, offset - limit) })}` }, 'Newer') : null,
       d.total > offset + limit ? h('a', { class: 'pillbtn', href: `#/transactions?${new URLSearchParams({ ...q, offset: offset + limit })}` }, 'Older') : null));
@@ -1097,7 +1158,14 @@ async function txDialog(t, account) {
     notes: h('textarea', { class: 't', rows: 2, disabled: ro ? true : null }, t.notes || ''), hidden: h('input', { type: 'checkbox', checked: t.hidden ? true : null, disabled: ro ? true : null }),
     reconciled: h('input', { type: 'checkbox', checked: t.reconciled ? true : null, disabled: ro ? true : null }),
     day: inp(t.day, { type: 'date', disabled: ro || !manual ? true : null }), amount: inp(t.amount, { inputmode: 'decimal', placeholder: '-12.50 out, 100 in', disabled: ro || !manual ? true : null }),
-    account: h('select', { class: 't', disabled: !isNew ? true : null }, (isNew ? manualAccts : S.accounts).map((a) => h('option', { value: a.id, selected: a.id === t.accountId ? true : null }, a.name))) };
+    account: h('select', { class: 't', disabled: !isNew ? true : null }, (isNew ? manualAccts : S.accounts).map((a) => h('option', { value: a.id, selected: a.id === t.accountId ? true : null }, a.name))),
+    tags: inp((t.ownTags || []).join(', '), { placeholder: 'trip, reimbursable, tax', disabled: ro ? true : null }) };
+  // its tags: the household's own, typed here; the ones Monarch Money sends are shown beside them
+  const theirs = (t.tags || []).filter((x) => !(t.ownTags || []).some((o) => o.toLowerCase() === x.toLowerCase()));
+  const known = ro ? [] : (await tagList()).filter((x) => x.own && !(t.tags || []).some((y) => y.toLowerCase() === x.tag.toLowerCase())).sort((a, b) => b.count - a.count).slice(0, 8);
+  const tagsNow = () => [...new Set(f.tags.value.split(',').map((x) => x.trim().replace(/^#/, '')).filter(Boolean))];
+  const tagHints = h('div', { class: 'taghints' }, theirs.length ? h('span', { class: 'muted small' }, 'From Monarch Money: ', theirs.map((x) => h('span', { class: 'tag tg' }, x))) : null,
+    known.map((x) => h('button', { class: 'tag tg add', title: 'Add this tag', onclick: () => { if (!tagsNow().some((y) => y.toLowerCase() === x.tag.toLowerCase())) f.tags.value = [...tagsNow(), x.tag].join(', '); } }, icon('add', 'xs'), x.tag)));
   // split over categories: its parts, or the way to split it
   const parts = t.splits || [];
   const sbox = isNew ? null : parts.length
@@ -1112,9 +1180,9 @@ async function txDialog(t, account) {
   const rbox = isNew ? null : h('div', { class: 'rcbox' });
   if (rbox) drawReceipts(rbox, t, () => { moved = true; });
   const lbox = isNew ? null : linkedTx(t);
-  const body = h('div', null, dl, h('div', { class: 'grid' }, fld('Payee', f.merchant, true), fld('Amount', f.amount), fld('Date', f.day), fld('Category', f.category), fld('Account', f.account), fld('Notes', f.notes, true)),
+  const body = h('div', null, dl, h('div', { class: 'grid' }, fld('Payee', f.merchant, true), fld('Amount', f.amount), fld('Date', f.day), fld('Category', f.category), fld('Account', f.account), fld('Notes', f.notes, true), fld('Tags', f.tags, true)), tagHints,
     h('div', { class: 'chiprow', style: { marginTop: '10px', gap: '18px' } }, h('label', { class: 'check' }, f.hidden, 'Hidden: left out of the sums'),
-      !isNew ? h('label', { class: 'check' }, f.reconciled, 'Reconciled with the statement') : null), sbox, xbox, rbox, lbox,
+      !isNew ? h('label', { class: 'check' }, f.reconciled, 'Reconciled with the statement') : null), sbox, xbox, rbox, lbox, isNew ? null : historyBox(t),
     t.description && t.description !== t.merchant ? h('p', { class: 'muted small' }, 'At the bank: ', t.description) : null,
     t.source === 'monarch' ? h('p', { class: 'muted small' }, 'From Monarch Money. A change here stays here: Monarch itself is not changed.') : null,
     isNew ? h('p', { class: 'muted small' }, 'Added here, by hand. In an account from Monarch Money it stays beside Monarch’s own transactions, and the balance stays Monarch’s.') : null);
@@ -1144,9 +1212,11 @@ async function txDialog(t, account) {
   const b = { merchant: f.merchant.value, category: f.category.value, notes: f.notes.value, hidden: f.hidden.checked };
   if (!isNew && f.reconciled.checked !== !!t.reconciled) b.reconciled = f.reconciled.checked;
   if (manual) Object.assign(b, { day: f.day.value, amount: f.amount.value });
+  const low = (xs) => xs.map((x) => x.toLowerCase()).sort().join('|');
+  if (isNew ? tagsNow().length : low(tagsNow()) !== low(t.ownTags || [])) { b.tags = tagsNow(); S.tags = null; }
   try {
     await api(isNew ? `api/accounts/${f.account.value}/transactions` : `api/transactions/${t.id}`, { method: isNew ? 'POST' : 'PATCH', json: b });
-    S.cats = []; toast(isNew ? 'Added' : 'Saved'); onRoute();
+    S.cats = []; toast(isNew ? 'Added' : 'Saved'); if (route().view === 'review') await refreshSummary(); onRoute();
   } catch (e) { fail(e); }
 }
 
@@ -1316,14 +1386,17 @@ async function showRules(page) {
     const ids = items.map((x) => x.id); const [x] = ids.splice(i, 1); ids.splice(i + by, 0, x);
     try { await api('api/rules/order', { method: 'PUT', json: { ids } }); onRoute(); } catch (e) { fail(e); }
   };
-  put(page, h('ul', { class: 'rows rules' }, items.map((x, i) => h('li', { class: x.enabled ? null : 'off' }, h('div', { class: 'r' },
+  const sug = h('div');
+  put(page, sug);
+  put(page, h('ul', { class: 'rows rules' }, items.map((x, i) => h('li', { class: x.enabled ? null : 'off', 'data-rule': x.id }, h('div', { class: 'r' },
     h('span', { class: 'n' }, i + 1),
-    h('span', { class: 'main' }, h('b', null, ruleThen(x)), h('small', null, ruleWhen(x))),
+    h('span', { class: 'main' }, h('b', null, ruleThen(x)), h('small', null, ruleWhen(x), h('span', { class: 'upk' }))),
     !x.enabled ? h('span', { class: 'tag' }, 'Off') : null,
     w ? h('span', { class: 'end acts' },
       h('button', { class: 'iconbtn', title: 'Tried earlier', disabled: i === 0 ? true : null, onclick: () => move(i, -1) }, icon('prev', 's up')),
       h('button', { class: 'iconbtn', title: 'Tried later', disabled: i === items.length - 1 ? true : null, onclick: () => move(i, 1) }, icon('next', 's down')),
       h('button', { class: 'iconbtn', title: 'Edit', onclick: () => ruleDialog(x) }, icon('edit', 's'))) : null)))));
+  api('api/rules/upkeep').then((u) => drawUpkeep(page, sug, u)).catch(() => {});  // what each rule does: counted apart, it takes a moment
   await drawTransferRules(page);
 }
 /** The transfer rules: in this account, a payee like this is a transfer with that account. ioMoney learns one each
@@ -1509,6 +1582,550 @@ async function ruleDialog(x, preset) {
     S.cats = [];
     toast(r.changed != null ? `${isNew ? 'Added' : 'Saved'}: ${r.changed} transaction${r.changed === 1 ? '' : 's'} changed` : (isNew ? 'Added' : 'Saved'));
     if (route().view === 'rules' || route().view === 'transactions' || route().view === 'account') onRoute(); else location.hash = '#/rules';
+  } catch (e) { fail(e); }
+}
+
+// ------------------------------------------------------------------ putting the data in order
+/** Every tag the transactions have (Monarch's and the household's own), kept until one changes. */
+async function tagList() {
+  if (!S.tags) { try { S.tags = (await api('api/tags')).items || []; } catch { S.tags = []; } }
+  return S.tags;
+}
+const plural = (n, one, many) => `${n.toLocaleString()} ${n === 1 ? one : (many || `${one}s`)}`;
+const agoSec = (s) => (s == null ? '' : s < 90 ? 'just now' : s < 5400 ? `${Math.round(s / 60)} minutes ago` : s < 129600 ? `${Math.round(s / 3600)} hours ago` : `${Math.round(s / 86400)} days ago`);
+const tidyBack = () => h('a', { class: 'iconbtn', href: '#/tidy', title: 'Tidy up', 'aria-label': 'Tidy up' }, icon('prev'));
+
+/** Above the filters: this person's saved searches (the one shown now marked, with the way to forget it), and "Save
+    this search" when filters are set that no saved search has. */
+function savedRow(q) {
+  const now = new URLSearchParams(Object.entries(q).filter(([k, v]) => k !== 'offset' && v));
+  const has = [...now].length > 0;
+  if (!S.searches.length && !has) return null;
+  const mine = S.searches.find((x) => sameSearch(x.query, now));
+  const save = async () => {
+    const name = inp('', { maxlength: 64, placeholder: 'Reimbursable, Card over $500…', list: 'savednames' });
+    const ok = await dialog('Save this search', h('div', null, h('datalist', { id: 'savednames' }, S.searches.map((x) => h('option', { value: x.name }))),
+      h('div', { class: 'grid' }, fld('Name', name, true)),
+      h('p', { class: 'muted small' }, 'Kept for you alone, in the sidebar under Transactions: the filters, not what they found. A name you already use takes this search instead.')),
+    [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }]);
+    if (!ok) return;
+    try { await api('api/searches', { method: 'POST', json: { name: name.value, query: String(now) } }); await refreshSummary(); toast('Saved'); onRoute(); } catch (e) { fail(e); }
+  };
+  const forget = async (x) => {
+    if (!await confirmDialog('Forget the search', `Forget “${x.name}”? The transactions stay.`, 'Forget', true)) return;
+    try { await api(`api/searches/${x.id}`, { method: 'DELETE' }); await refreshSummary(); onRoute(); } catch (e) { fail(e); }
+  };
+  return h('div', { class: 'saved' }, S.searches.map((x) => h('span', { class: `schip ${x === mine ? 'on' : ''}` },
+    h('a', { href: `#/transactions?${x.query}` }, icon('bookmark', 'xs'), x.name),
+    x === mine ? h('button', { title: 'Forget this search', 'aria-label': 'Forget this search', onclick: () => forget(x) }, icon('close', 'xs')) : null)),
+  has && !mine ? h('button', { class: 'schip new', onclick: save }, icon('add', 'xs'), 'Save this search') : null,
+  has ? h('a', { class: 'lnk small', href: '#/transactions' }, 'Clear the filters') : null);
+}
+
+/** The bar that comes up once transactions are ticked: the same change to all of them (category, payee, tags, hidden,
+    reconciled, looked at), with Undo right after. review: on the Needs a look page. */
+function drawBulk(bar, picked, items, review) {
+  const n = picked.size;
+  bar.hidden = !n;
+  if (!n) { bar.replaceChildren(); return; }
+  const rows = items.filter((t) => picked.has(t.id));
+  const run = async (set, done) => {
+    try {
+      const r = await api('api/transactions/bulk', { method: 'POST', json: { ids: [...picked], set } });
+      S.cats = []; S.tags = null;
+      await refreshSummary();
+      const kept = Object.keys(set).some((k) => !['reconciled', 'reviewed'].includes(k));  // those two are no change to the transaction itself
+      toast(`${plural(r.changed, 'transaction')} ${done}`, kept && r.changed ? ['Undo', async () => {
+        try { const b = await api('api/changes/undo', { method: 'POST', json: { batch: r.batch } }); S.cats = []; S.tags = null; toast(`${plural(b.undone, 'transaction')} put back`); await refreshSummary(); onRoute(); } catch (e) { fail(e); }
+      }] : null);
+      onRoute();
+    } catch (e) { fail(e); }
+  };
+  const ask = async (title, label, field, ok = 'Change') => (await dialog(title, h('div', null, h('div', { class: 'grid' }, fld(label, field, true)),
+    h('p', { class: 'muted small' }, `For the ${plural(n, 'transaction')} ticked. Undo takes it back.`)), [{ label: 'Cancel', value: false }, { label: ok, value: true, primary: true }])) === true;
+  const category = async () => {
+    const cats = await categories();
+    const f = inp('', { list: 'bulkcats', placeholder: 'Groceries' });
+    const dl = h('datalist', { id: 'bulkcats' }, cats.map((c) => h('option', { value: c.category })));
+    if (!await ask('Set the category', 'Category', h('span', null, dl, f)) || !f.value.trim()) return;
+    run({ category: f.value.trim() }, 'categorized');
+  };
+  const payee = async () => {
+    const f = inp('', { maxlength: 255, placeholder: 'The payee’s name' });
+    if (!await ask('Set the payee', 'Payee', f) || !f.value.trim()) return;
+    run({ merchant: f.value.trim() }, 'renamed');
+  };
+  const tag = async () => {
+    const known = (await tagList()).filter((x) => x.own);
+    const own = [...new Map(rows.flatMap((t) => t.ownTags || []).map((x) => [x.toLowerCase(), x])).values()].sort((a, b) => a.localeCompare(b));
+    const add = inp('', { list: 'bulktags', placeholder: 'trip, reimbursable' });
+    const off = h('select', { class: 't' }, h('option', { value: '' }, 'None'), own.map((x) => h('option', { value: x }, x)));
+    const ok = await dialog('Tag them', h('div', null, h('datalist', { id: 'bulktags' }, known.map((x) => h('option', { value: x.tag }))),
+      h('div', { class: 'grid' }, fld('Add the tags', add, true), own.length ? fld('Take off the tag', off, true) : null),
+      h('p', { class: 'muted small' }, `For the ${plural(n, 'transaction')} ticked. Undo takes it back.`)), [{ label: 'Cancel', value: false }, { label: 'Change', value: true, primary: true }]);
+    const tags = add.value.split(',').map((x) => x.trim().replace(/^#/, '')).filter(Boolean);
+    if (!ok || (!tags.length && !off.value)) return;
+    run({ ...(tags.length ? { addTags: tags } : {}), ...(off.value ? { removeTags: [off.value] } : {}) }, 'tagged');
+  };
+  const allHidden = rows.length && rows.every((t) => t.hidden);
+  const allRec = rows.length && rows.every((t) => t.reconciled);
+  const btn = (ic, label, fn, title) => h('button', { class: 'pillbtn tiny', onclick: fn, title: title || null }, icon(ic, 'xs'), label);
+  fill(bar, h('b', null, `${n} ticked`),
+    btn('list', 'Category', category), btn('store', 'Payee', payee), btn('label', 'Tags', tag),
+    btn('eye', allHidden ? 'Show' : 'Hide', () => run({ hidden: !allHidden }, allHidden ? 'shown' : 'hidden'), 'A hidden transaction is left out of the sums'),
+    btn('check', allRec ? 'Not reconciled' : 'Reconciled', () => run({ reconciled: !allRec }, allRec ? 'no longer reconciled' : 'marked reconciled')),
+    review ? btn('doneAll', 'Looked at', () => run({ reviewed: true }, 'looked at'), 'Take them off this list as they are') : null,
+    h('span', { class: 'grow' }),
+    h('button', { class: 'iconbtn', title: 'Untick them', 'aria-label': 'Untick them', onclick: () => { picked.clear(); onRoute(); } }, icon('close', 's')));
+}
+
+/** A change kept for a transaction, as words: "category: Shopping, was Groceries". */
+const histVal = (f, v) => (v == null || v === '' || (Array.isArray(v) && !v.length) ? 'nothing' : f === 'hidden' ? (v ? 'yes' : 'no')
+  : Array.isArray(v) ? v.join(', ') : f === 'date' ? fmtDay(v, true) : String(v));
+const histFields = (c) => c.fields.map((x) => h('span', { class: 'hf' }, h('i', null, x.field), ' ', h('b', null, histVal(x.field, x.after)), h('small', null, ` was ${histVal(x.field, x.before)}`)));
+const HIST_WHAT = { hand: 'Changed', bulk: 'Changed with others', undo: 'Taken back', reset: 'Back to Monarch’s own' };
+/** "History" in a transaction's dialog: what was changed on it by hand, by whom and when, each with its way back; and
+    for one from Monarch Money that was changed here, the way back to Monarch's own. Fetched when opened. */
+function historyBox(t) {
+  const list = h('div', { class: 'hist' });
+  const box = h('details', { class: 'histbox' }, h('summary', null, icon('history', 'xs'), 'History'), list);
+  const after = async (fn, done) => { try { await fn(); S.cats = []; S.tags = null; toast(done); closeDialogs(); await refreshSummary(); onRoute(); } catch (e) { fail(e); } };
+  const reset = t.writable && t.source === 'monarch' && t.edited ? h('button', { class: 'lnkbtn', onclick: async () => {
+    if (!await confirmDialog('Back to Monarch’s own', 'Undo everything changed here on this transaction (its payee, category, notes, tags and split)? The rules apply to it again, and the next sync refreshes it from Monarch Money.', 'Put it back')) return;
+    after(() => api(`api/transactions/${t.id}/reset`, { method: 'POST' }), 'Back to Monarch’s own');
+  } }, icon('undo', 'xs'), 'Back to Monarch’s own') : null;
+  let got = false;
+  box.addEventListener('toggle', async () => {
+    if (!box.open || got) return;
+    got = true;
+    try {
+      const items = (await api(`api/transactions/${t.id}/changes`)).items || [];
+      fill(list, items.length ? h('ul', null, items.map((c) => h('li', { class: c.undone ? 'undone' : null },
+        h('div', { class: 'hw' }, h('span', null, [HIST_WHAT[c.what] || c.what, c.by, agoSec(c.secondsAgo)].filter(Boolean).join(' · ')), c.undone ? h('span', { class: 'tag' }, 'Taken back') : null,
+          t.writable && !c.undone && c.what !== 'undo' ? h('button', { class: 'lnk small', onclick: () => after(() => api('api/changes/undo', { method: 'POST', json: { id: c.id } }), 'Taken back') }, 'Undo') : null),
+        h('div', { class: 'hfs' }, histFields(c)))))
+        : h('p', { class: 'muted small' }, t.edited ? 'Changed here before changes were kept.' : 'Not changed by hand.'), reset);
+    } catch (e) { fill(list, h('p', { class: 'muted small' }, e.message || String(e))); }
+  });
+  return box;
+}
+
+/** Choose one of the accounts (for the statement to reconcile, the file to import). */
+async function pickAccount(title, accts, text) {
+  if (!accts.length) { toast(text); return null; }
+  if (accts.length === 1) return accts[0];
+  const sel = h('select', { class: 't' }, accts.map((a) => h('option', { value: a.id }, a.name)));
+  const ok = await dialog(title, h('div', { class: 'grid' }, fld('Account', sel, true)), [{ label: 'Cancel', value: false }, { label: 'Next', value: true, primary: true }]);
+  return ok ? accts.find((a) => a.id === +sel.value) : null;
+}
+
+/** Tidy up: everything that keeps the transactions right, each with how much there is to do. */
+async function showTidy(page) {
+  const d = await api('api/tidy');
+  put(page, h('div', { class: 'pagehead' }, h('h1', null, 'Tidy up')));
+  put(page, h('p', { class: 'muted' }, 'What keeps the transactions right: the ones to look at, the ones kept twice, the accounts that do not add up, and the lists behind them.'));
+  const tile = (to, ic, hueVar, title, text, n, warn) => {
+    const kids = [h('span', { class: 'sic' }, icon(ic)), h('span', { class: 'tt' }, h('b', null, title, n ? h('span', { class: `n ${warn ? 'warn' : ''}` }, n.toLocaleString()) : null), h('small', null, text))];
+    return typeof to === 'string' ? h('a', { class: 'tidytile', href: to, style: { '--hue': `var(${hueVar})` } }, kids)
+      : h('button', { class: 'tidytile', onclick: to, style: { '--hue': `var(${hueVar})` } }, kids);
+  };
+  const txAccts = S.accounts.filter((a) => followsTx(a) && a.writable && !a.closed);
+  const reconcile = async () => { const a = await pickAccount('Reconcile with a statement', txAccts, 'No account of yours follows its transactions'); if (a) location.hash = `#/account/${a.id}/reconcile`; };
+  const imp = async () => { const a = await pickAccount('Import a bank file', txAccts.filter((x) => x.source === 'manual'), 'A bank file goes into an account kept by hand: add one first'); if (a) importDialog(a); };
+  put(page, h('h2', { class: 'recurhead' }, icon('warning'), h('span', null, 'To check')), h('div', { class: 'tidygrid' },
+    tile('#/review', 'doneAll', '--c-blue', 'Needs a look', 'New transactions, and the ones without a category', d.review, true),
+    tile('#/duplicates', 'copy', '--c-rose', 'Likely duplicates', 'The same transaction kept twice', d.duplicates, true),
+    tile('#/transfers', 'link', '--c-teal', 'Transfers to check', 'The same amount out of one account and into another, not linked', d.transfers, true),
+    tile('#/balance', 'scale', '--c-amber', 'Balance check', 'Does each account’s balance agree with its transactions?', d.balanceGaps, true)));
+  put(page, h('h2', { class: 'recurhead' }, icon('list'), h('span', null, 'The lists')), h('div', { class: 'tidygrid' },
+    tile('#/payees', 'store', '--c-indigo', 'Payees', 'Rename or merge them, give each its usual category', d.payees),
+    tile('#/categories', 'label', '--c-purple', 'Categories and tags', 'Add, rename, merge or delete them', d.tags),
+    tile('#/rules', 'tune', '--c-teal', 'Rules', 'What each rule does, the ones that do nothing, the ones missing'),
+    tile('#/changes', 'history', '--c-slate', 'Recent changes', 'What was changed by hand, each with its way back')));
+  put(page, h('h2', { class: 'recurhead' }, icon('bank'), h('span', null, 'Against the bank')), h('div', { class: 'tidygrid' },
+    tile(reconcile, 'check', '--c-green', 'Reconcile with a statement', 'Tick an account’s transactions off against the bank’s statement'),
+    tile(imp, 'upload', '--c-orange', 'Import a bank file', 'CSV, OFX or QFX into an account kept by hand')));
+}
+
+/** Needs a look: what came in since someone last looked, and what has no category. A tick takes one off as it is;
+    saving a change does too; several ticked are changed together. */
+async function showReview(page) {
+  const d = await api('api/transactions?review=yes&limit=300');
+  const can = d.items.some((t) => t.writable);
+  const sum = h('p', { class: 'sumline' });
+  const say = (n) => { sum.textContent = n ? `${plural(n, 'transaction')} to look at${n > d.items.length ? `, the latest ${d.items.length} shown` : ''}` : ''; };
+  const markAll = async () => {
+    if (!await confirmDialog('Mark all looked at', `Take all ${plural(d.total, 'transaction')} off this list as they are?`, 'Mark them')) return;
+    try { const r = await api('api/transactions/review', { method: 'POST', json: { all: true } }); toast(`${plural(r.changed, 'transaction')} looked at`); await refreshSummary(); onRoute(); } catch (e) { fail(e); }
+  };
+  put(page, h('div', { class: 'pagehead' }, tidyBack(), h('h1', null, 'Needs a look'), h('span', { class: 'grow' }),
+    can ? h('button', { class: 'pillbtn', onclick: markAll }, icon('doneAll'), h('span', null, 'All looked at')) : null));
+  put(page, h('p', { class: 'muted' }, 'The transactions that came in since this list was first opened and nobody looked at yet, and the ones without a category. ',
+    'Open one to correct it (saving takes it off the list), tick it at the right as it is, or tick several at the left and change them together.'));
+  if (!d.items.length) { put(page, h('div', { class: 'empty' }, icon('doneAll'), h('p', null, 'Nothing needs a look.'))); return; }
+  say(d.total);
+  const picked = new Set();
+  const bar = h('div', { class: 'bulkbar', hidden: true });
+  put(page, sum, txList(d.items, true, undefined, { picked, onPick: () => drawBulk(bar, picked, d.items, true), review: true,
+    onReviewed: (left) => { say(left); drawBulk(bar, picked, d.items, true); if (!left) onRoute(); } }), bar);
+}
+
+/** The payees: how many transactions and how much each, its usual category; editors rename one (into another: the two
+    are one) and give it its category, kept as rules. */
+async function showPayees(page) {
+  const [d, cats] = await Promise.all([api('api/payees?limit=2000'), categories()]);
+  const w = d.writable;
+  const f = { q: '', sort: store.get('paySort') || 'count' };
+  put(page, h('div', { class: 'pagehead' }, tidyBack(), h('h1', null, 'Payees')));
+  put(page, h('p', { class: 'muted' }, 'Everyone the transactions were paid to or came from. ',
+    w ? 'Rename a payee, or give it the name of another to make the two one; give it its usual category. Both are kept as rules, so what comes in later follows.' : 'Editors rename and merge them and set their usual category.'));
+  if (!d.items.length) { put(page, h('div', { class: 'empty' }, icon('store'), h('p', null, 'No payees yet.'))); return; }
+  const count = h('span', { class: 'muted small' });
+  const list = h('ul', { class: 'rows flat payees' });
+  const SHOWN = 400;
+  const sorts = { count: (a, b) => b.count - a.count || a.payee.localeCompare(b.payee), name: (a, b) => a.payee.localeCompare(b.payee),
+    total: (a, b) => Math.abs(b.total) - Math.abs(a.total), mixed: (a, b) => b.categories - a.categories || b.count - a.count, last: (a, b) => b.last.localeCompare(a.last) };
+  const draw = () => {
+    const q = f.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const shown = d.items.filter((p) => q.every((x) => p.payee.toLowerCase().includes(x) || (p.category || '').toLowerCase().includes(x))).sort(sorts[f.sort]);
+    count.textContent = `${shown.length.toLocaleString()} of ${d.total.toLocaleString()}${shown.length > SHOWN ? `, the first ${SHOWN} shown` : ''}`;
+    fill(list, shown.slice(0, SHOWN).map((p) => h('li', null, h('div', { class: 'r', role: w ? 'button' : null, tabindex: w ? 0 : null, onclick: w ? () => payeeDialog(p, d.items, cats) : null },
+      h('span', { class: 'main' }, h('b', null, p.payee), h('small', null, h('span', { class: 'pcn' }, `${p.count} · `), `last ${fmtDay(p.last, p.last.slice(0, 4) !== today().slice(0, 4))}`)),
+      h('span', { class: 'pc' }, p.rule ? h('span', { title: 'A rule gives it this category' }, icon('tune', 'xs'), p.rule.category) : (p.category || h('span', { class: 'muted' }, 'Uncategorized')),
+        p.categories > 1 ? h('span', { class: 'tag warn', title: 'Its transactions are in several categories' }, `${p.categories} categories`) : null),
+      h('a', { class: 'lnk small pn', href: `#/transactions?${new URLSearchParams({ q: p.payee })}`, onclick: (e) => e.stopPropagation() }, plural(p.count, 'transaction')),
+      h('span', { class: 'pt' }, amt(p.total))))));
+  };
+  const search = inp('', { type: 'search', placeholder: 'Payee or category…' });
+  let tm; search.oninput = () => { clearTimeout(tm); tm = setTimeout(() => { f.q = search.value; draw(); }, 150); };
+  const sort = h('select', { class: 't', 'aria-label': 'Order', onchange: (e) => { f.sort = e.target.value; store.set('paySort', f.sort); draw(); } },
+    [['count', 'Most used first'], ['name', 'By name'], ['total', 'Largest total first'], ['last', 'Latest first'], ['mixed', 'Several categories first']].map(([v, l]) => h('option', { value: v, selected: v === f.sort ? true : null }, l)));
+  put(page, h('div', { class: 'filters' }, search, sort, count), list);
+  draw();
+}
+async function payeeDialog(p, all, cats) {
+  const f = { name: inp(p.payee, { maxlength: 255, list: 'payeenames' }), category: inp(p.rule ? p.rule.category : '', { list: 'payeecats', placeholder: p.category ? `Mostly ${p.category} now` : 'Groceries' }),
+    all: h('input', { type: 'checkbox' }) };
+  const body = h('div', null, h('datalist', { id: 'payeenames' }, all.filter((x) => x !== p).slice(0, 1500).map((x) => h('option', { value: x.payee }))),
+    h('datalist', { id: 'payeecats' }, cats.map((c) => h('option', { value: c.category }))),
+    h('div', { class: 'grid' }, fld('Name', f.name, true), fld('Its usual category', f.category, true)),
+    h('label', { class: 'check', style: { marginTop: '10px' } }, f.all, 'Give the category to the ones categorized by hand too'),
+    h('p', { class: 'muted small' }, `${plural(p.count, 'transaction')}, ${money(p.total)} in all. Give it the name of another payee to make the two one. The name and the category are kept as rules (on the Rules page).`));
+  if (!await dialog(p.payee, body, [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }], 'wide')) return;
+  const name = f.name.value.trim(), cat = f.category.value.trim();
+  try {
+    let said = 'Nothing changed';
+    if (name && name !== p.payee) {
+      const other = all.find((x) => x !== p && x.payee.toLowerCase() === name.toLowerCase());
+      if (other && !await confirmDialog('Make the two one', `Rename ${p.payee} to ${other.payee}? Its ${plural(p.count, 'transaction')} join the ${other.count} there, now and from here on.`, 'Merge')) return;
+      const r = await api('api/payees/rename', { method: 'POST', json: { name: p.payee, newName: other ? other.payee : name } });
+      said = `${plural(r.changed, 'transaction')} renamed`;
+    }
+    if (cat && (f.all.checked || !p.rule || p.rule.category !== cat)) {
+      const r = await api('api/payees/category', { method: 'POST', json: { name: name || p.payee, category: cat, all: f.all.checked } });
+      said = `${said === 'Nothing changed' ? '' : `${said}; `}${plural(r.changed, 'transaction')} categorized`;
+    }
+    S.cats = []; toast(said); onRoute();
+  } catch (e) { fail(e); }
+}
+
+/** The tags, under the categories: each with how many transactions and how much; editors rename (or merge) and delete
+    the household's own. */
+async function drawTags(page) {
+  let d; try { d = await api('api/tags'); } catch { return; }
+  S.tags = d.items;
+  put(page, h('div', { class: 'pagehead', style: { marginTop: '28px' } }, h('h2', { class: 'h1ish' }, icon('label'), 'Tags')));
+  put(page, h('p', { class: 'muted' }, 'A tag says what a transaction is part of, whatever its category: a trip, what is to be paid back, what counts for the taxes. ',
+    'Type them on a transaction, or tick several transactions and tag them together. The tags Monarch Money sends are shown too; those are changed in Monarch.'));
+  if (!d.items.length) { put(page, h('p', { class: 'muted small' }, 'No tags yet.')); return; }
+  put(page, h('ul', { class: 'rows flat tagrows' }, d.items.map((x) => {
+    const edit = d.writable && x.own;
+    return h('li', null, h('div', { class: 'r', role: edit ? 'button' : null, tabindex: edit ? 0 : null, onclick: edit ? () => tagDialog(x, d.items) : null },
+      h('span', { class: 'main' }, h('b', null, h('span', { class: 'tag tg' }, x.tag), !x.own ? h('span', { class: 'tag', title: 'Sent by Monarch Money: changed there' }, 'Monarch') : null)),
+      h('a', { class: 'lnk small', href: `#/transactions?${new URLSearchParams({ tag: x.tag })}`, onclick: (e) => e.stopPropagation() }, plural(x.count, 'transaction')),
+      h('span', { class: 'pt' }, amt(x.total))));
+  })));
+}
+async function tagDialog(x, all) {
+  const name = inp(x.tag, { maxlength: 64, list: 'tagnames' });
+  const body = h('div', null, h('datalist', { id: 'tagnames' }, all.filter((y) => y.own && y !== x).map((y) => h('option', { value: y.tag }))),
+    h('div', { class: 'grid' }, fld('Name', name, true)), h('p', { class: 'muted small' }, `On ${plural(x.count, 'transaction')}. Give it the name of another tag to make the two one.`));
+  const ok = await dialog(`Tag ${x.tag}`, body, [{ label: 'Delete', value: 'delete', danger: true }, { label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }]);
+  try {
+    if (ok === 'delete') {
+      if (!await confirmDialog('Delete the tag', `Take “${x.tag}” off its ${plural(x.count, 'transaction')}? The transactions stay.`, 'Delete', true)) return;
+      await api('api/tags/delete', { method: 'POST', json: { name: x.tag } });
+    } else if (ok && name.value.trim() && name.value.trim() !== x.tag) await api('api/tags', { method: 'PUT', json: { name: x.tag, newName: name.value } });
+    else return;
+    S.tags = null; toast(ok === 'delete' ? 'Deleted' : 'Saved'); onRoute();
+  } catch (e) { fail(e); }
+}
+
+/** Likely duplicates: the same account and amount, at most three days apart, and alike. Keep one and hide (or, added
+    here, delete) the other, or say they are two. */
+async function showDuplicates(page) {
+  const d = await api('api/duplicates');
+  put(page, h('div', { class: 'pagehead' }, tidyBack(), h('h1', null, 'Likely duplicates')));
+  put(page, h('p', { class: 'muted' }, 'Transactions in one account, of the same amount, at most three days apart, that look like one kept twice. ',
+    'Keep one and hide the other (a hidden transaction is left out of every sum; one added here can be deleted), or say they are different: those are not shown again.'));
+  if (!d.items.length) { put(page, h('div', { class: 'empty' }, icon('copy'), h('p', null, 'No likely duplicates.'))); return; }
+  const count = h('p', { class: 'sumline' });
+  const list = h('div', { class: 'dups' });
+  const say = () => {
+    const n = list.children.length;
+    count.textContent = n ? `${plural(n, 'likely duplicate')} to check` : '';
+    if (S.sum && !n) refreshSummary();
+    if (!n) fill(list, h('div', { class: 'empty' }, icon('check'), h('p', null, 'All checked.')));
+  };
+  const group = (g) => {
+    const el = h('div', { class: 'dupg' });
+    const left = () => { if (el.querySelectorAll('.dupr').length < 2) { el.remove(); say(); } };
+    const row = (t) => {
+      const r = h('div', { class: 'dupr' });
+      const act = (label, fn, cls) => h('button', { class: `pillbtn tiny ${cls || ''}`, onclick: async (e) => { e.stopPropagation(); try { if (await fn() === false) return; r.remove(); left(); } catch (x) { fail(x); } } }, label);
+      put(r, h('span', { class: 'd' }, fmtDay(t.day, true)),
+        h('button', { class: 'p', title: 'Open the transaction', onclick: () => txDialog(t) }, h('b', null, t.merchant || t.description || '(no payee)'),
+          t.description && t.description !== t.merchant ? h('small', null, t.description) : null),
+        h('span', { class: 'k' }, h('span', { class: 'tag' }, t.source === 'manual' ? 'Added here' : 'Monarch'), t.pending ? h('span', { class: 'tag' }, 'Pending') : null,
+          t.reconciled ? h('span', { class: 'tag', title: 'Checked against a statement' }, 'Reconciled') : null, t.edited ? h('span', { class: 'tag' }, 'Changed here') : null,
+          t.transfer ? h('span', { class: 'tag' }, 'Transfer') : null, t.category ? h('span', { class: 'muted small' }, t.category) : null),
+        h('span', { class: 'm' }, amt(t.amount, t.currency)),
+        h('span', { class: 'acts' }, !t.writable ? null : [act('Hide', () => api(`api/transactions/${t.id}`, { method: 'PATCH', json: { hidden: true } })),
+          t.source === 'manual' ? act('Delete', async () => { if (!await confirmDialog('Delete it', 'Delete this transaction? This cannot be undone.', 'Delete', true)) return false; await api(`api/transactions/${t.id}`, { method: 'DELETE' }); }, 'danger') : null]));
+      return r;
+    };
+    put(el, h('div', { class: 'duph' }, h('b', null, g.items[0].account), h('span', { class: 'muted small' }, g.whyText), h('span', { class: 'grow' }),
+      g.items.every((t) => t.writable) ? h('button', { class: 'pillbtn tiny', onclick: async () => {
+        try { await api('api/duplicates/not', { method: 'POST', json: { ids: g.items.map((t) => t.id) } }); el.remove(); say(); } catch (x) { fail(x); }
+      } }, 'They are different') : null), g.items.map(row));
+    return el;
+  };
+  put(list, d.items.map(group));
+  put(page, count, list);
+  say();
+}
+
+/** #/account/3/reconcile: an account against the bank's statement. The statement's days and its two balances; the
+    transactions of those days to tick off; done when the ticked ones add up to what the balance moved by. */
+async function showReconcile(page, a) {
+  const d = await api(`api/accounts/${a.id}/statements`);
+  const w = d.writable;
+  const iso = (x) => x.toLocaleDateString('sv');
+  let end = today();
+  if (d.next.start) { const e = dateOf(d.next.start); e.setMonth(e.getMonth() + 1); e.setDate(e.getDate() - 1); if (iso(e) < end) end = iso(e); }
+  const f = { start: inp(d.next.start || '', { type: 'date' }), end: inp(end, { type: 'date' }), opening: inp(d.next.opening == null ? '' : d.next.opening, { inputmode: 'decimal' }),
+    closing: inp('', { inputmode: 'decimal', placeholder: 'as the statement says' }) };
+  const num = (v) => { const x = parseFloat(String(v).replace(/[^0-9.-]/g, '')); return Number.isNaN(x) ? null : x; };
+  const cents = (v) => Math.round(v * 100);
+  put(page, h('div', { class: 'pagehead' }, h('a', { class: 'iconbtn', href: `#/account/${a.id}`, title: a.name, 'aria-label': a.name }, icon('prev')), h('h1', null, `Reconcile ${a.name}`)));
+  put(page, h('p', { class: 'muted' }, 'Take the bank’s statement: its first and last day, and the balance at its start and at its end. Tick each transaction the statement shows. ',
+    'When the ticked ones add up to what the balance moved by, the account agrees with the bank up to that day.',
+    d.isAsset ? null : ' What is owed counts as a positive balance here, so a purchase makes it go up.'));
+  put(page, h('div', { class: 'box' }, h('div', { class: 'grid' }, fld('First day', f.start), fld('Last day', f.end), fld(d.isAsset ? 'Balance at the start' : 'Owed at the start', f.opening), fld(d.isAsset ? 'Balance at the end' : 'Owed at the end', f.closing))));
+  const lines = h('div');
+  const bar = h('div', { class: 'bulkbar recbar' });
+  put(page, lines, bar);
+  let items = [], sign = 1; const ticked = new Set();
+  const summary = () => {
+    const sum = items.filter((t) => ticked.has(t.id)).reduce((s, t) => s + cents(t.amount), 0);
+    const o = num(f.opening.value), c = num(f.closing.value);
+    const moved = o == null || c == null ? null : cents(c) - cents(o);
+    const diff = moved == null ? null : moved - sign * sum;
+    const finish = async () => {
+      if (diff && !await confirmDialog('Finish with a difference', `The transactions ticked do not add up to the statement: ${money(Math.abs(diff) / 100, a.currency)} is left. Keep the statement as it is anyway?`, 'Finish anyway')) return;
+      try {
+        const r = await api(`api/accounts/${a.id}/statements`, { method: 'POST', json: { start: f.start.value, end: f.end.value, opening: o, closing: c, ids: [...ticked], anyway: !!diff } });
+        toast(`${plural(r.reconciled, 'transaction')} reconciled`); onRoute();
+      } catch (e) { fail(e); }
+    };
+    fill(bar, h('span', null, `${ticked.size} of ${items.length} ticked: `, h('b', { class: 'num' }, money(sum / 100, a.currency))),
+      h('span', null, 'The statement moved by ', h('b', { class: 'num' }, moved == null ? '…' : money(sign * moved / 100, a.currency))),
+      h('span', { class: diff === 0 ? 'ok' : 'off' }, 'Difference ', h('b', { class: 'num' }, diff == null ? '…' : money((sign * diff || 0) / 100, a.currency))),
+      h('span', { class: 'grow' }),
+      w ? h('button', { class: `pillbtn ${diff === 0 ? 'primary' : ''}`, disabled: diff == null || !items.length ? true : null, onclick: finish }, icon('check', 'xs'), diff ? 'Finish anyway' : 'Finish') : null);
+  };
+  const load = async () => {
+    ticked.clear(); items = [];
+    if (!f.start.value || !f.end.value) { fill(lines, h('p', { class: 'muted' }, 'Give the statement’s first and last day.')); summary(); return; }
+    try {
+      const got = await api(`api/accounts/${a.id}/statement?${new URLSearchParams({ start: f.start.value, end: f.end.value })}`);
+      items = got.items; sign = got.sign;
+      for (const t of items) if (t.reconciled && !t.earlier) ticked.add(t.id);
+      const boxes = [];
+      const row = (t) => {
+        const b = h('input', { type: 'checkbox', checked: ticked.has(t.id) ? true : null, disabled: w ? null : true, 'aria-label': 'On the statement' });
+        const li = h('li', { class: ticked.has(t.id) ? 'picked' : null });
+        b.onchange = () => { if (b.checked) ticked.add(t.id); else ticked.delete(t.id); li.classList.toggle('picked', b.checked); summary(); };
+        boxes.push([t, b, li]);
+        put(li, h('label', { class: 'r' }, b, h('span', { class: 'day' }, fmtDay(t.day)),
+          h('span', { class: 'main' }, h('b', null, t.merchant || t.description || '(no payee)', t.earlier ? h('span', { class: 'tag', title: 'From before this statement, not ticked off on the one before' }, 'Earlier') : null,
+            t.hidden ? h('span', { class: 'tag' }, 'Hidden') : null), h('small', null, [t.transfer ? `Transfer ${t.amount < 0 ? 'to' : 'from'} ${t.transfer.account}` : t.category, t.description && t.description !== t.merchant ? t.description : null].filter(Boolean).join(' · '))),
+          h('span', { class: 'pt' }, amt(t.amount, t.currency))));
+        return li;
+      };
+      const all = (on) => { for (const [t, b, li] of boxes) { b.checked = on; li.classList.toggle('picked', on); if (on) ticked.add(t.id); else ticked.delete(t.id); } summary(); };
+      fill(lines, items.length ? [h('p', { class: 'sumline', style: { marginTop: '4px' } }, `${plural(items.length, 'transaction')} to tick off`,
+        w ? [' · ', h('button', { class: 'lnk', onclick: () => all(true) }, 'Tick all'), ' · ', h('button', { class: 'lnk', onclick: () => all(false) }, 'Untick all')] : null),
+      h('ul', { class: 'rows flat recon' }, items.map(row))] : h('p', { class: 'muted' }, 'No transactions in these days.'));
+    } catch (e) { fill(lines, h('p', { class: 'muted' }, e.message || String(e))); }
+    summary();
+  };
+  f.start.onchange = load; f.end.onchange = load; f.opening.oninput = summary; f.closing.oninput = summary;
+  await load();
+  if (d.items.length) {
+    put(page, h('h2', { class: 'recurhead' }, icon('history'), h('span', null, 'Statements reconciled')), h('ul', { class: 'rows flat' }, d.items.map((s) => h('li', null, h('div', { class: 'r' },
+      h('span', { class: 'main' }, h('b', null, `${fmtDay(s.start, true)} to ${fmtDay(s.end, true)}`),
+        h('small', null, `${money(s.opening, a.currency)} to ${money(s.closing, a.currency)}`, s.difference ? ` · finished with ${money(Math.abs(s.difference), a.currency)} left` : '')),
+      s.difference ? h('span', { class: 'tag warn' }, 'With a difference') : null,
+      w ? h('button', { class: 'iconbtn', title: 'Forget this statement (its transactions stay reconciled)', onclick: async () => {
+        if (!await confirmDialog('Forget the statement', 'Forget this statement? Its transactions stay reconciled.', 'Forget', true)) return;
+        try { await api(`api/statements/${s.id}`, { method: 'DELETE' }); onRoute(); } catch (e) { fail(e); }
+      } }, icon('delete', 's')) : null)))));
+  }
+}
+
+/** The balance check: for each cash account and card from Monarch Money, whether its balance moved by what its
+    transactions add up to; where it did not, by how much, which way, and in which days the gap appeared. */
+async function showBalance(page) {
+  const d = await api('api/balance-check');
+  put(page, h('div', { class: 'pagehead' }, tidyBack(), h('h1', null, 'Balance check')));
+  put(page, h('p', { class: 'muted' }, `Over the past ${d.days} days, each account’s balance at the bank should have moved by exactly what its transactions here add up to. `,
+    'Where it did not, a transaction is missing here or kept twice. This looks at the cash accounts and cards Monarch Money keeps with a bank behind them.'));
+  if (!d.items.length) { put(page, h('div', { class: 'empty' }, icon('scale'), h('p', null, 'No accounts to check.'))); return; }
+  const post = async (x, gap) => { try { await api(`api/balance-check/${x.id}/ok`, { method: 'POST', json: { gap } }); await refreshSummary(); onRoute(); } catch (e) { fail(e); } };
+  const TAGS = { ok: ['Agrees', 'ok'], pending: ['Agrees but for the pending ones', 'ok'], accepted: ['Accepted as it is', ''], unknown: ['Too little history yet', ''] };
+  for (const x of d.items) {
+    const acct = S.accounts.find((a) => a.id === x.id);
+    const can = acct && acct.writable;
+    const cur = x.currency;
+    const head = h('div', { class: 'balh' }, h('a', { class: 'lnk', href: `#/account/${x.id}` }, h('b', null, x.name)), x.institution ? h('span', { class: 'muted small' }, x.institution) : null, h('span', { class: 'grow' }),
+      x.status === 'gap' ? h('span', { class: 'tag warn' }, icon('warning', 'xs'), `Off by ${money(Math.abs(x.gap), cur)}`) : h('span', { class: `tag ${TAGS[x.status][1]}` }, TAGS[x.status][0]));
+    const facts = x.status === 'unknown' ? h('p', { class: 'muted small' }, 'Monarch Money has not yet sent two balances for this account to compare.')
+      : h('p', { class: 'muted small' }, `Since ${fmtDay(x.from, true)} the balance went from ${money(x.opening, cur)} to ${money(x.balance, cur)}; the ${plural(x.count, 'transaction')} here add up to ${money(x.moved, cur)}.`,
+        x.status === 'pending' ? ` The pending ones (${money(x.pending, cur)}) explain the difference.` : x.status === 'accepted' ? ` Off by ${money(Math.abs(x.gap), cur)}, accepted as it is.` : '');
+    const box = h('div', { class: `box balc ${x.status}` }, head, facts);
+    if (x.status === 'gap') {
+      const outMissing = x.isAsset ? x.gap < 0 : x.gap > 0;
+      put(box, h('p', null, outMissing ? `About ${money(Math.abs(x.gap), cur)} of money out is missing here, or money in is kept twice.` : `About ${money(Math.abs(x.gap), cur)} of money in is missing here, or money out is kept twice.`,
+        x.pending ? ` (${money(x.pending, cur)} is pending.)` : ''));
+      if (x.weeks.length) {
+        put(box, h('ul', { class: 'balw' }, x.weeks.map((k) => h('li', null, h('span', null, `${fmtDay(k.from)} to ${fmtDay(k.to, true)}`), h('span', { class: 'num' }, `${k.change > 0 ? '+' : ''}${money(k.change, cur)}`),
+          h('a', { class: 'lnk small', href: `#/transactions?${new URLSearchParams({ account: x.id, month: k.to.slice(0, 7), hid: '1' })}` }, `The transactions of ${fmtMonth(k.to.slice(0, 7))}`)))));
+      }
+      put(box, h('p', { class: 'muted small' }, 'Things to try: look for it among the ', h('a', { class: 'lnk', href: '#/duplicates' }, 'likely duplicates'),
+        '; a transaction hidden in Monarch Money is not kept here and shows as a gap; syncing the account again fetches what the bank link dropped.'));
+    }
+    const acts = [x.status === 'gap' && can ? h('button', { class: 'pillbtn tiny', onclick: () => post(x, x.gap), title: 'Not flagged again while the gap stays the same' }, 'It is fine as it is') : null,
+      x.status === 'accepted' && can ? h('button', { class: 'pillbtn tiny', onclick: () => post(x, null) }, 'Flag it again') : null,
+      x.status === 'gap' && acct && may('admin') ? h('button', { class: 'pillbtn tiny', onclick: () => resyncAccount(acct) }, icon('sync', 'xs'), 'Sync this account again') : null,
+      x.status === 'gap' && can ? h('a', { class: 'pillbtn tiny', href: `#/account/${x.id}/reconcile` }, icon('check', 'xs'), 'Reconcile with a statement') : null].filter(Boolean);
+    if (acts.length) put(box, h('div', { class: 'chiprow', style: { marginTop: '10px' } }, acts));
+    put(page, box);
+  }
+}
+
+/** Recent changes: what was changed by hand, the latest first, a change to many at once as one line; each with Undo. */
+async function showChanges(page) {
+  const d = await api('api/changes?limit=100');
+  put(page, h('div', { class: 'pagehead' }, tidyBack(), h('h1', null, 'Recent changes')));
+  put(page, h('p', { class: 'muted' }, 'What was changed by hand on the transactions, the latest first; a change to many at once is one line. Undo puts the fields back as they were. ',
+    'Kept for 400 days. What the rules and the syncs change is not listed.'));
+  if (!d.items.length) { put(page, h('div', { class: 'empty' }, icon('history'), h('p', null, 'No changes yet.'))); return; }
+  const undo = async (g) => {
+    try { const r = await api('api/changes/undo', { method: 'POST', json: g.batch ? { batch: g.batch } : { id: g.id } }); S.cats = []; S.tags = null; toast(`${plural(r.undone, 'transaction')} put back`); await refreshSummary(); onRoute(); } catch (e) { fail(e); }
+  };
+  put(page, h('ul', { class: 'rows flat changes' }, d.items.map((g) => {
+    const c = g.changes[0], t = c.transaction;
+    const title = g.count === 1 ? h('a', { class: 'lnk', href: `#/transaction/${t.id}` }, `${t.payee || '(no payee)'} · ${fmtDay(t.day, true)} · ${money(t.amount, t.currency)}`)
+      : `${g.count} transactions at once: ${g.changes.map((x) => x.transaction.payee || '(no payee)').filter((x, i, xs) => xs.indexOf(x) === i).join(', ')}${g.count > g.changes.length ? '…' : ''}`;
+    return h('li', { class: g.undone ? 'off' : null }, h('div', { class: 'r' },
+      h('span', { class: 'main' }, h('b', null, title), h('small', null, [HIST_WHAT[g.what] || g.what, g.by, agoSec(g.secondsAgo), g.count === 1 ? t.account : null].filter(Boolean).join(' · ')),
+        h('span', { class: 'hfs' }, histFields(c))),
+      g.undone ? h('span', { class: 'tag' }, 'Taken back') : null,
+      g.canUndo ? h('button', { class: 'pillbtn tiny', onclick: () => undo(g) }, icon('undo', 'xs'), 'Undo') : null));
+  })));
+}
+
+/** On the Rules page: beside each rule what it did to the transactions of the past two years (and whether it does
+    nothing), and above the list the rules that seem to be missing. */
+function drawUpkeep(page, sug, u) {
+  for (const r of u.rules) {
+    const el = page.querySelector(`li[data-rule="${r.id}"] .upk`);
+    if (!el) continue;
+    if (r.note === 'never' || r.note === 'behind') fill(el, ' ', h('span', { class: 'tag warn', title: r.noteText }, icon('warning', 'xs'), r.note === 'never' ? 'Matches nothing' : 'Never decides'));
+    else if (r.note !== 'off') fill(el, ` · ${plural(r.matched, 'transaction')}${r.last ? `, the last on ${fmtDay(r.last, true)}` : ''}`);
+  }
+  if (!u.suggestions.length) return;
+  fill(sug, h('div', { class: 'box sugbox' }, h('h2', null, icon('tune'), 'Rules you seem to be missing'),
+    h('p', { class: 'muted small' }, 'Payees you gave the same category by hand several times, with no rule that does it.'),
+    h('ul', { class: 'rows' }, u.suggestions.map((x) => {
+      const li = h('li');
+      const add = async () => { try { const r = await api('api/payees/category', { method: 'POST', json: { name: x.payee, category: x.category } }); S.cats = []; toast(`Rule added; ${plural(r.changed, 'transaction')} changed`); onRoute(); } catch (e) { fail(e); } };
+      const not = async () => { try { await api('api/rules/suggestions/not', { method: 'POST', json: { key: x.key } }); li.remove(); if (!sug.querySelector('li')) sug.replaceChildren(); } catch (e) { fail(e); } };
+      put(li, h('div', { class: 'r' }, h('span', { class: 'main' }, h('b', null, `${x.payee}: ${x.category}`),
+        h('small', null, `Set by hand ${x.count} times${x.wouldChange ? `; ${plural(x.wouldChange, 'more transaction')} would follow` : ''}`)),
+      u.writable ? h('span', { class: 'end acts', style: { flexDirection: 'row', gap: '6px' } }, h('button', { class: 'pillbtn primary tiny', onclick: add }, icon('add', 'xs'), 'Add the rule'), h('button', { class: 'pillbtn tiny', onclick: not }, 'No thanks')) : null));
+      return li;
+    }))));
+}
+
+/** A bank's file (CSV, OFX, QFX) into an account kept by hand: choose it, see what it holds (for a CSV file which
+    column is what), then bring in what the account does not have yet. */
+const IMPORT_FIELDS = [['date', 'Date'], ['amount', 'Amount'], ['debit', 'Money out'], ['credit', 'Money in'], ['type', 'Debit or credit'], ['payee', 'Payee'], ['notes', 'Notes'], ['category', 'Category']];
+async function importDialog(a) {
+  const file = h('input', { type: 'file', accept: '.csv,.ofx,.qfx,.qbo,.txt,text/csv' });
+  const ok = await dialog(`Import a bank file into ${a.name}`, h('div', null,
+    h('p', { class: 'muted' }, 'A file of transactions from the bank’s website: CSV, OFX or QFX (Quicken). What the account has already is left out.'), file),
+  [{ label: 'Cancel', value: false }, { label: 'Next', value: true, primary: true }]);
+  if (!ok) return;
+  const fl = file.files[0];
+  if (!fl) { toast('Choose a file first'); return; }
+  if (fl.size > 20 * 1048576) { toast('That file is over 20 MB'); return; }
+  const buf = await fl.arrayBuffer();
+  let text; try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { text = new TextDecoder('windows-1252').decode(buf); }
+  const o = { mapping: null, dateOrder: null, flip: false, duplicates: false, balance: 'move', cols: false };
+  const send = (preview) => api(`api/accounts/${a.id}/import`, { method: 'POST', json: { name: fl.name, text, preview, flip: o.flip, duplicates: o.duplicates, balance: o.balance,
+    ...(o.mapping ? { mapping: o.mapping } : {}), ...(o.dateOrder ? { dateOrder: o.dateOrder } : {}) } });
+  let p;
+  try { p = await send(true); } catch (e) { fail(e); return; }
+  const box = h('div', { class: 'impbox' });
+  const again = async () => { try { p = await send(true); } catch (e) { fail(e); } draw(); };
+  const draw = () => {
+    const adds = o.duplicates ? p.total : p.new;
+    const csv = p.kind === 'csv';
+    const colSel = (k) => h('select', { class: 't', onchange: (e) => { o.mapping = { ...(o.mapping || p.mapping) }; if (e.target.value === '') delete o.mapping[k]; else o.mapping[k] = +e.target.value; again(); } },
+      h('option', { value: '' }, 'Not in the file'), p.columns.map((c, i) => h('option', { value: i, selected: p.mapping[k] === i ? true : null }, `${c || `Column ${i + 1}`}${p.sample[0] && p.sample[0][i] ? ` (${String(p.sample[0][i]).slice(0, 18)})` : ''}`)));
+    fill(box,
+      p.needs ? h('p', { class: 'note warnnote' }, icon('warning', 's'), h('span', null, `${p.needs}.`))
+        : h('p', null, `${plural(p.total, 'transaction')} in the file`, p.from ? `, ${fmtDay(p.from, true)} to ${fmtDay(p.to, true)}` : '', ': ', h('b', null, `${p.new} new`), p.duplicates ? `, ${p.duplicates} the account has already` : '', '.'),
+      p.problemCount ? h('p', { class: 'muted small warn' }, `${plural(p.problemCount, 'line')} could not be read: `, p.problems.slice(0, 3).map((x) => `line ${x.line} (${x.why})`).join('; '), p.problemCount > 3 ? '…' : '') : null,
+      csv ? h('details', { class: 'impcols', open: o.cols || p.needs ? true : null, ontoggle: (e) => { o.cols = e.target.open; } }, h('summary', null, 'Which column is what'),
+        h('div', { class: 'grid' }, IMPORT_FIELDS.map(([k, l]) => fld(l, colSel(k))))) : null,
+      csv ? h('div', { class: 'grid' }, fld(`Dates are written${p.guessed ? ' (a guess: check the first rows)' : ''}`, h('select', { class: 't', onchange: (e) => { o.dateOrder = e.target.value; again(); } },
+        [['mdy', 'Month, day, year'], ['dmy', 'Day, month, year'], ['ymd', 'Year, month, day']].map(([v, l]) => h('option', { value: v, selected: p.dateOrder === v ? true : null }, l))), true)) : null,
+      h('label', { class: 'check', style: { marginTop: '10px' } }, h('input', { type: 'checkbox', checked: o.flip ? true : null, onchange: (e) => { o.flip = e.target.checked; again(); } }), 'Money out is written as a positive number in this file (a card’s export often is)'),
+      p.rows.length ? h('ul', { class: 'rows flat improws' }, p.rows.map((r) => h('li', { class: r.new ? null : 'off' }, h('div', { class: 'r' }, h('span', { class: 'day' }, fmtDay(r.day)),
+        h('span', { class: 'main' }, h('b', null, r.payee || '(no payee)'), h('small', null, [r.category, r.notes].filter(Boolean).join(' · '))), r.new ? null : h('span', { class: 'tag' }, 'Already there'),
+        h('span', { class: 'pt' }, amt(r.amount, a.currency)))))) : null,
+      p.total > p.rows.length ? h('p', { class: 'muted small' }, `…and ${p.total - p.rows.length} more.`) : null,
+      p.duplicates ? h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: o.duplicates ? true : null, onchange: (e) => { o.duplicates = e.target.checked; again(); } }), `Bring in the ${p.duplicates} the account has already too`) : null,
+      !p.needs ? h('div', { class: 'grid', style: { marginTop: '10px' } }, fld(`The account’s balance (now ${money(a.balance, a.currency)})`, h('select', { class: 't', onchange: (e) => { o.balance = e.target.value; } },
+        [['move', `Moves by what comes in (${money(p.sum, a.currency)})`], ['keep', 'Stays as it is'], p.fileBalance != null ? ['file', `Becomes the file’s balance (${money(p.fileBalance, a.currency)})`] : null].filter(Boolean)
+          .map(([v, l]) => h('option', { value: v, selected: o.balance === v ? true : null }, l))), true)) : null,
+      h('p', { class: 'muted small' }, adds ? `${plural(adds, 'transaction')} will come in. The rules apply to them, and transfers are linked.` : 'Nothing to bring in.'));
+  };
+  for (;;) {
+    draw();
+    if (!await dialog(`Import ${fl.name}`, box, [{ label: 'Cancel', value: false }, { label: 'Import', value: true, primary: true }], 'wide')) return;
+    if (p.needs) { toast(p.needs); continue; }
+    if (!(o.duplicates ? p.total : p.new)) { toast('Nothing to bring in'); return; }
+    break;
+  }
+  try {
+    const r = await send(false);
+    S.cats = []; toast(`${plural(r.added, 'transaction')} imported`);
+    await refreshSummary();
+    if (location.hash === `#/account/${a.id}`) onRoute(); else location.hash = `#/account/${a.id}`;
   } catch (e) { fail(e); }
 }
 
