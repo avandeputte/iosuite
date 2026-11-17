@@ -33,7 +33,7 @@ const CASES = {
     check("no demo data unless asked", !y.includes('"--demo"'));
   }],
   "with demo data": [answers({demo: true}), y => {
-    check("setup adds the demo", y.includes('"--proxies", "10.186.30.10", "--demo"]'));
+    check("the setup adds the demo", y.includes('"--proxies", "10.186.30.10", "--demo", "--", "python", "-m", "app"]'));
   }],
   "everything, with the admin tools": [answers({apps: {iodns: true, iobackup: true}, iobackup: {folder: "/srv/backups"}, iocontact: {ldap: true}}), y => {
     check("ldap is published", y.includes('- "389:3890"'));
@@ -71,7 +71,7 @@ const CASES = {
   }],
   "a database server that exists, made by an administrator": [answers({db: {mode: "existing", host: "host.docker.internal", port: "3307", adminPassword: "r$t", user: "fam"}}), y => {
     check("no database container", !has(y, "db:") && !y.includes("mariadb:11"));
-    check("this machine is reachable", (y.match(/host\.docker\.internal:host-gateway/g) || []).length === 2);
+    check("this machine is reachable", (y.match(/host\.docker\.internal:host-gateway/g) || []).length === 1);
     check("the administrator is used", y.includes('"--db-admin", "root"') && has(y, 'DB_ADMIN_PASSWORD: "r$$t"'));
     check("the apps' user", has(y, 'DB_USER: "fam"') && has(y, 'DB_PORT: "3307"'));
   }],
@@ -107,9 +107,14 @@ for (const [name, [s, test, expected]] of Object.entries(CASES)) {
     check("docker compose reads it", r.status === 0, (r.stderr || "").trim().split("\n").pop());
     if (r.status === 0) {
       const cfg = JSON.parse(r.stdout);
-      check("the admin's password reaches the setup step as typed", cfg.services.setup.environment.ADMIN_PASSWORD === s.admin.password.replace(/\$/g, "$$$$"));  // config prints $ doubled again
+      const sel = C.APPS.filter(a => s.apps[a.key]).map(a => a.key);
+      const first = sel.filter(k => (cfg.services[k].command || [])[0] === "iosuite-shared");
+      check("one app sets the stack up, then starts", first.length === 1 && cfg.services[first[0]].command.slice(-4).join(" ") === "-- python -m app", first.join());
+      check("no service that stops when its work is done", Object.keys(cfg.services).every(k => cfg.services[k].restart === "unless-stopped"));
+      check("the admin's password reaches the setup as typed", first.length === 1 && cfg.services[first[0]].environment.ADMIN_PASSWORD === s.admin.password.replace(/\$/g, "$$$$"));  // config prints $ doubled again
+      check("only that app holds the admin's passwords", sel.every(k => k === first[0] || !("ADMIN_PASSWORD" in cfg.services[k].environment || "DB_ADMIN_PASSWORD" in cfg.services[k].environment)));
       check("a service per app", C.APPS.every(a => !!cfg.services[a.key] === !!s.apps[a.key]));
-      check("every app waits for setup", C.APPS.filter(a => s.apps[a.key]).every(a => (cfg.services[a.key].depends_on || {}).setup));
+      check("every other app waits until that one is healthy", sel.every(k => k === first[0] || ((cfg.services[k].depends_on || {})[first[0]] || {}).condition === "service_healthy"));
     }
     files++;
   }

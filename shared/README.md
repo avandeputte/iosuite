@@ -685,11 +685,13 @@ administrator's password travels in `DB_ADMIN_PASSWORD`, never on a command line
 ### A Docker stack set up before its apps start: `stack`
 
 ```sh
-iosuite-shared stack [--db-admin root --databases iostart,iocalendar] [--one-address on|off] [--proxies 10.186.30.10,10.186.30.11] [--demo]
+iosuite-shared stack [--db-admin root --databases iostart,iocalendar] [--one-address on|off] [--proxies 10.186.30.10,10.186.30.11] [--demo] [-- python -m app]
 ```
 
-The `setup` service of a stack file made by the [Docker Compose builder](https://iosuite.iothing.net/compose/) runs
-this in any app's image, before the apps, at every `docker compose up`; the server and the users come from the
+The first app of a stack file made by the [Docker Compose builder](https://iosuite.iothing.net/compose/) runs this
+as its command, at every start: what follows `--` is the app, which this process becomes (exec) once the work is done,
+without `DB_ADMIN_PASSWORD` and `ADMIN_PASSWORD` in its environment. The other apps of the stack wait until that app
+is healthy. So no container is left stopped (Dockge and Portainer show a stack with one as exited). The server and the users come from the
 environment (`DB_*`, `IOSUITE_DB_*`), as the apps of the stack get them. With `--db-admin` (password in
 `DB_ADMIN_PASSWORD`) it makes the listed databases for `DB_USER` and the Shared ioSuite database and user, as
 `provision` does, for any host (`--client-host`, `%` by default: a container's address is not known ahead of time, and
