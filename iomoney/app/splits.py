@@ -32,16 +32,20 @@ def mark(items: list[dict]) -> list[dict]:
     return items
 
 
-def _words(t: dict, parts: list[dict]) -> str:
+def _words(t: dict, parts: list[dict], tags: list = ()) -> str:
     return model.words(t["merchant"], t["description"], t["category"], t["category_group"], t["notes"], t["account_name"],
-                       *[x for p in parts for x in (p["category"], p["category_group"], p["notes"])])
+                       *[x for p in parts for x in (p["category"], p["category_group"], p["notes"])], *tags)
 
 
 def rewords(tid: int) -> None:
-    """The words a search looks in, with the parts' categories and notes."""
+    """The words a search looks in, with the parts' categories and notes, and the tags (Monarch's and its own)."""
+    from app import tags
     t = model.tx_row(tid)
+    if not t:
+        return
     parts = db.q("SELECT category, category_group, notes FROM mny_splits WHERE transaction_id = %s", (tid,))
-    db.ex("UPDATE mny_transactions SET words = %s WHERE id = %s", (_words(t, parts), tid))
+    own = [r["tag"] for r in db.q("SELECT tag FROM mny_tags WHERE transaction_id = %s", (tid,))]
+    db.ex("UPDATE mny_transactions SET words = %s, updated_at = updated_at WHERE id = %s", (_words(t, parts, tags.monarch(t) + own), tid))
 
 
 def put(u: dict, t: dict, parts) -> dict:

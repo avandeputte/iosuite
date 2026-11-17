@@ -5,7 +5,8 @@ from typing import Literal, Optional
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import __version__, config, forecast, model, monarch, payoff, quotes, recurring, splits, transfers
+from app import (__version__, balancecheck, config, duplicates, forecast, model, monarch, payees as payee_list, payoff, quotes,
+                 recurring, review, splits, tags as tag_store, transfers)
 from app.mcp.base import ADDS, DELETES, READ_ONLY, WRITES, clamp, find_account, guard, link, need_admin, server, who
 
 
@@ -61,19 +62,21 @@ def bank_contact(account: str) -> dict:
 def search_transactions(query: Optional[str] = None, account: Optional[str] = None, category: Optional[str] = None,
                         start: Optional[str] = None, end: Optional[str] = None, flow: Optional[Literal["in", "out"]] = None,
                         reconciled: Optional[bool] = None, amount: Optional[str] = None, receipt: Optional[bool] = None,
-                        limit: int = 50) -> dict:
+                        tag: Optional[str] = None, needs_look: Optional[bool] = None, limit: int = 50) -> dict:
     """Transactions, the newest first: query (words in the payee, the bank's text, the category, the notes),
     account (id or name), category (exact name), start and end (YYYY-MM-DD), flow (out: money out; in: money in),
     reconciled (true: only those reconciled; false: only those not), amount (money out or in alike: "280" exactly, or
-    a range "100-200", ">500", "<20"), receipt (true: only those with a receipt kept; false: only those without).
-    With how many match and their sum. Each has splits (its parts, when it is split over categories) and receipts
+    a range "100-200", ">500", "<20"), receipt (true: only those with a receipt kept; false: only those without),
+    tag (one tag, Monarch's or set in ioMoney), needs_look (true: only those nobody looked at yet: new ones and
+    those without a category). With how many match and their sum. Each has splits (its parts, when it is split over categories) and receipts
     (the files kept with it: their names, not their content)."""
     u = who()
     _need_role(u)
     aid = find_account(u, account)["id"] if account else None
     rec = None if reconciled is None else ("yes" if reconciled else "no")
     has = None if receipt is None else ("yes" if receipt else "no")
-    r = guard(model.find_transactions, u, query or "", aid, category, start, end, flow, clamp(limit, 1, 500), 0, False, rec, amount, has)
+    r = guard(model.find_transactions, u, query or "", aid, category, start, end, flow, clamp(limit, 1, 500), 0, False, rec, amount, has,
+              tag, "yes" if needs_look else None)
     for t in r["items"]:
         for k in ("writable", "edited", "source"):
             t.pop(k, None)
@@ -109,16 +112,43 @@ def categories() -> list:
     return model.categories(u)
 
 
+@server.tool(annotations=READ_ONLY)
+def data_checks() -> dict:
+    """What there is to put in order in the data: needsLook (how many transactions nobody looked at yet;
+    search_transactions(needs_look=true) lists them), likelyDuplicates (groups of transactions that look like one
+    kept twice: the same account and amount within three days, with why), and balanceCheck (for each cash account
+    and card from Monarch Money: whether its balance moved by what its transactions add up to over the past 90 days,
+    the gap when not, and the weeks in which it appeared). Nothing is changed."""
+    u = who()
+    _need_role(u)
+    dup = [{"why": g["whyText"], "transactions": [{k: t[k] for k in ("id", "account", "day", "amount", "merchant", "description", "pending", "source")}
+                                                   for t in g["items"]]} for g in duplicates.groups(u, 50)]
+    return {"needsLook": review.count(u), "likelyDuplicates": dup, "balanceCheck": balancecheck.check(u)["items"]}
+
+
+@server.tool(annotations=READ_ONLY)
+def payees(query: Optional[str] = None, limit: int = 100) -> dict:
+    """The payees of the transactions, the most used first: how many transactions and how much each has, the last
+    day, its most common category and how many different categories it has (more than one often means some are
+    wrong). query: words in the name."""
+    u = who()
+    _need_role(u)
+    return payee_list.items(u, query or "", clamp(limit, 1, 500))
+
+
 @server.tool(annotations=WRITES)
 def update_transaction(transaction_id: int, category: Optional[str] = None, notes: Optional[str] = None,
-                       hidden: Optional[bool] = None, merchant: Optional[str] = None, reconciled: Optional[bool] = None) -> dict:
-    """Change a transaction: its category, notes, payee name, hidden (left out of the sums) or reconciled (checked
-    against the statement). Kept as changed here, also by the next Monarch sync (Monarch itself is not changed)."""
+                       hidden: Optional[bool] = None, merchant: Optional[str] = None, reconciled: Optional[bool] = None,
+                       tags: Optional[list[str]] = None, reviewed: Optional[bool] = None) -> dict:
+    """Change a transaction: its category, notes, payee name, hidden (left out of the sums), reconciled (checked
+    against the statement), tags (its own tags, all of them: the ones Monarch sends stay) or reviewed (looked at: off
+    the Needs a look list). Kept as changed here, also by the next Monarch sync (Monarch itself is not changed), and
+    kept in the transaction's history, where it can be taken back."""
     u = who()
     b = {k: v for k, v in {"category": category, "notes": notes, "hidden": hidden, "merchant": merchant,
-                           "reconciled": reconciled}.items() if v is not None}
+                           "reconciled": reconciled, "tags": tags, "reviewed": reviewed}.items() if v is not None}
     t = guard(model.update_transaction, u, guard(model.transaction, u, transaction_id), b)
-    return model.tx_public(t)
+    return tag_store.mark([model.tx_public(t)])[0]
 
 
 @server.tool(annotations=WRITES)

@@ -222,10 +222,12 @@ def test_receipts_links_and_split_follow_a_pending_one_that_posts(client, mm):
     from iosuite_shared import related
     put_keys()
     FakeMM.transactions = [tx("p1", 4, -280, "Appliance shop", pending=True), tx("p2", 4, -40, "Bistro", pending=True),
-                           tx("p3", 4, -15, "Kiosk", pending=True), tx("t1", 3, -54.2, "Grocer")]
+                           tx("p3", 4, -15, "Kiosk", pending=True), tx("p4", 4, -9, "Newsstand", pending=True), tx("t1", 3, -54.2, "Grocer")]
     assert client.post("/api/monarch/sync").json()["ok"]
     one = lambda q: client.get(f"/api/transactions?q={q}").json()["items"][0]  # noqa: E731
     shop, bistro, kiosk = one("appliance"), one("bistro"), one("kiosk")
+    client.patch(f"/api/transactions/{shop['id']}", json={"tags": ["warranty"]})
+    client.patch(f"/api/transactions/{one('newsstand')['id']}", json={"tags": ["trip"]})  # a tag alone goes along too
     pdf = b"%PDF-1.4\n%%EOF\n"
     for t in (shop, bistro, kiosk):
         assert client.post(f"/api/transactions/{t['id']}/receipts", params={"name": "slip.pdf"}, content=pdf).status_code == 201
@@ -233,9 +235,12 @@ def test_receipts_links_and_split_follow_a_pending_one_that_posts(client, mm):
     related.add(("transaction", kiosk["id"]), ("item", 9))
     client.put(f"/api/transactions/{shop['id']}/splits", json={"items": [{"amount": 200, "category": "Home"}, {"amount": 80, "category": "Gifts"}]})
     # posted: the shop's under a new id, the bistro's with the tip added; the kiosk's charge never went through
-    FakeMM.transactions = [tx("p1b", 3, -280, "Appliance shop"), tx("p2b", 3, -46, "Bistro"), tx("t1", 3, -54.2, "Grocer")]
+    FakeMM.transactions = [tx("p1b", 3, -280, "Appliance shop"), tx("p2b", 3, -46, "Bistro"), tx("p4b", 3, -9, "Newsstand"),
+                           tx("t1", 3, -54.2, "Grocer")]
     assert client.post("/api/monarch/sync").json()["ok"]
     new, tipped = one("appliance"), one("bistro")
+    assert new["ownTags"] == ["warranty"] and one("newsstand")["ownTags"] == ["trip"] and one("newsstand")["pending"] is False
+    assert client.get("/api/transactions?q=warranty").json()["total"] == 1
     assert new["id"] != shop["id"] and new["pending"] is False
     assert [r["name"] for r in new["receipts"]] == ["slip.pdf"] and client.get(f"/api/receipts/{new['receipts'][0]['id']}").content == pdf
     assert [(p["amount"], p["category"]) for p in new["splits"]] == [(-200, "Home"), (-80, "Gifts")]
@@ -394,3 +399,64 @@ def test_an_account_made_again_in_monarch_is_not_there_twice(client, mm):
     assert client.get("/api/monarch/new").json()["items"] == []
     assert client.post("/api/monarch/sync").json()["ok"]
     assert client.get("/api/transactions").json()["total"] == 4
+
+
+def test_back_to_monarchs_own(client, mm):
+    """What was changed here on a transaction from Monarch is undone in one go, and the syncs are let in again."""
+    put_keys()
+    assert client.post("/api/monarch/sync").json()["ok"]
+    g = grocer(client)
+    client.patch(f"/api/transactions/{g['id']}", json={"category": "Food", "merchant": "Corner grocer", "tags": ["weekly"]})
+    client.patch(f"/api/transactions/{g['id']}", json={"notes": "with the neighbours", "hidden": True})
+    client.put(f"/api/transactions/{g['id']}/splits", json={"items": [{"amount": 50, "category": "Food"}, {"amount": 4.2, "category": "Gifts"}]})
+    FakeMM.transactions[0] = tx("t1", 3, -54.2, "Grocer & Sons")  # Monarch renames it meanwhile: kept out while changed here
+    assert client.post("/api/monarch/sync").json()["ok"]
+    assert client.get(f"/api/transactions/{g['id']}").json()["merchant"] == "Corner grocer"
+    r = client.post(f"/api/transactions/{g['id']}/reset")
+    assert r.status_code == 200, r.text
+    t = r.json()
+    assert (t["merchant"], t["category"], t["notes"], t["hidden"], t["edited"], t["ownTags"], t["splits"]) == \
+        ("Grocer", "Groceries", None, False, False, [], [])
+    ch = client.get(f"/api/transactions/{g['id']}/changes").json()["items"]
+    assert ch[0]["what"] == "reset" and {f["field"] for f in ch[0]["fields"]} == {"payee", "category", "notes", "hidden", "tags"}
+    assert client.post("/api/monarch/sync").json()["ok"]
+    assert client.get(f"/api/transactions/{g['id']}").json()["merchant"] == "Grocer & Sons"  # the sync is let in again
+    assert client.get("/api/transactions?review=yes").json()["total"] >= 0
+
+
+def test_balance_check(client, mm):
+    """An account's balance should move by what its transactions add up to; where it does not, it says by how much."""
+    put_keys()
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    cred = {"id": "c", "updateRequired": False, "disconnectedFromDataProviderAt": None, "institution": {"name": "Bank", "status": None}}
+    FakeMM.accounts = [acct("101", "Checking", "depository", 5000, displayLastUpdatedAt=now, credential=cred),
+                       acct("103", "Brokerage", "brokerage", 12000, holdingsCount=2, displayLastUpdatedAt=now, credential=cred),
+                       acct("109", "Typed in", "depository", 50, isManual=True)]
+    # Monarch's history: 4000 thirty days ago, 4500 ten days ago, 5000 now
+    FakeMM.transactions = [tx("b1", 20, 500, "Employer"), tx("b2", 8, 700, "Employer"), tx("b3", 5, -200, "Plumber"),
+                           tx("b4", 1, -12, "Cafe", pending=True)]
+    assert client.post("/api/monarch/sync").json()["ok"]
+    chk = next(a["id"] for a in client.get("/api/accounts").json()["items"] if a["name"] == "Checking")
+    r = client.get("/api/balance-check").json()
+    assert [(x["name"], x["status"], x["gap"]) for x in r["items"]] == [("Checking", "ok", 0)] and r["gaps"] == 0  # only what has a bank and transactions
+    one = r["items"][0]
+    assert (one["from"], one["opening"], one["balance"], one["moved"], one["count"], one["pending"]) == (D(30), 4000, 5000, 1000, 3, -12)
+    # the bank counts the pending one in the balance: explained
+    FakeMM.accounts[0] = acct("101", "Checking", "depository", 4988, displayLastUpdatedAt=now, credential=cred)
+    assert client.post("/api/monarch/sync").json()["ok"]
+    assert [(x["status"], x["gap"]) for x in client.get("/api/balance-check").json()["items"]] == [("pending", -12)]
+    # the plumber's is gone from Monarch (hidden there): the balance says 200 less than the transactions do
+    FakeMM.accounts[0] = acct("101", "Checking", "depository", 5000, displayLastUpdatedAt=now, credential=cred)
+    FakeMM.transactions = [tx("b1", 20, 500, "Employer"), tx("b2", 8, 700, "Employer"), tx("b3", 5, -200, "Plumber", hideFromReports=True)]
+    assert client.post("/api/monarch/sync").json()["ok"]
+    r = client.get("/api/balance-check").json()
+    one = r["items"][0]
+    assert r["gaps"] == 1 and (one["status"], one["gap"]) == ("gap", -200) and client.get("/api/tidy").json()["balanceGaps"] == 1
+    assert one["weeks"] == [{"from": D(9), "to": D(0), "change": -200, "gap": -200}]  # it agreed ten days ago
+    # looked at and fine: quiet while it stays the same, flagged again when it moves
+    assert client.post(f"/api/balance-check/{chk}/ok", json={"gap": -200}).json()["ok"]
+    assert client.get("/api/balance-check").json()["items"][0]["status"] == "accepted" and client.get("/api/balance-check").json()["gaps"] == 0
+    FakeMM.transactions.append(tx("b5", 2, 30, "Refund"))
+    assert client.post("/api/monarch/sync").json()["ok"]
+    assert [(x["status"], x["gap"]) for x in client.get("/api/balance-check").json()["items"]] == [("gap", -230)]
+    assert client.post(f"/api/balance-check/{chk}/ok", json={"gap": None}).json()["ok"]

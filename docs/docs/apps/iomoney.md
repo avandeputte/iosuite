@@ -72,6 +72,28 @@ quotes, and what the house and the cars are worth after their loans.
   with or without. Whoever sees the transaction sees its receipts. A receipt is deleted with its transaction; when
   a pending transaction posts, its receipts move to the posted one.
 - **Reconciled**: tick each transaction as checked against the bank's statement, filter on it, or tick every one shown.
+- **Tidy up**: one page for what keeps the transactions right, each with how much there is to do. The sidebar shows
+  how many transactions need a look.
+- **Change many at once**: tick transactions in the list and give them a category, a payee or tags, hide them or mark
+  them reconciled in one go. Undo takes it all back.
+- **Needs a look**: the transactions that came in since you last looked, and the ones without a category. Correct
+  one, tick it as it is, or mark them all looked at.
+- **Payees**: everyone you paid or were paid by, with how many transactions and how much. Rename a payee, merge two,
+  and give each its usual category; what comes in later follows.
+- **Tags** of your own (trip, reimbursable, tax) on any transaction, beside the ones Monarch sends: filter on a tag
+  and see its total.
+- **Likely duplicates**: the same transaction kept twice (typed in and from the bank, or pending and posted) is
+  pointed out: keep one and hide the other, or say they are different.
+- **Reconcile with a statement**: give the statement's days and its two balances, tick what it shows, and finish when
+  the difference is zero. The next statement starts where this one ended.
+- **Balance check**: does each account's balance at the bank agree with its transactions here? Where it does not,
+  ioMoney says by how much, which way, and in which days the gap appeared.
+- **Rules kept in order**: each rule shows how many transactions it is for; one that matches nothing or never decides
+  is marked, and a rule is offered when you gave the same payee the same category by hand again and again.
+- **History and undo**: every change made by hand is kept with who and when, and can be taken back; a transaction
+  from Monarch can go back to Monarch's own.
+- **Saved searches**: keep the filters of the Transactions page under a name, one click away in the sidebar.
+- **Import a bank file** (CSV, OFX or QFX) into an account kept by hand; what the account has already is left out.
 - **Bank details** on each account: account and routing numbers (hidden until shown, with copy), IBAN, customer
   service phone, website, address and notes, to have at hand. AI assistants only get the phone, website and address.
 - **Rules** that rename the payee, set the category or hide a transaction when its payee or the bank's text matches,

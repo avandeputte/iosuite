@@ -110,6 +110,51 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   summary or MCP tool carries them; the MCP tool `bank_contact` gives the phone, website, email and address only.
 - **Transactions by hand** in any account that follows its transactions, one from Monarch too (a cash payment, one
   the bank has not sent yet): kept through the syncs, and in an account kept by hand each one moves the balance.
+- **Tidy up**: one page for what keeps the transactions right, each with how much there is to do: the ones that need
+  a look, likely duplicates, transfers to check, the balance check, the payees, the categories and tags, the rules,
+  the recent changes, reconciling against a statement and importing a bank file. The sidebar shows how many need a look.
+- **Many at once**: tick transactions in the list (or all shown) and give them a category, a payee or tags, hide or
+  show them, or mark them reconciled, in one go (up to 2000). **Undo** in the note that follows takes it all back.
+- **Needs a look**: the transactions that came in since the list was first opened and nobody looked at yet (what was
+  there before counts as seen), and the ones without a category (not a split one or half of a transfer; not the
+  pending or hidden ones). Saving a change takes one off the list; so does its tick, **All looked at**, or the bar
+  for the ones ticked. The Transactions page filters on it too.
+- **Payees**: everyone the transactions were paid to or came from, with how many, how much, the last day and the
+  category (and a mark when its transactions are in several). Editors rename a payee, give it the name of another to
+  make the two one, and set its usual category (for those not changed by hand, or all of them). Each is kept as a
+  rule, so what comes in later follows; a rule that looks at the payee is for the name a rule gave it too.
+- **Tags**: a transaction has the household's own tags (trip, reimbursable, tax) beside the ones Monarch Money sends,
+  which stay Monarch's. Typed in the transaction's dialog or given to many at once; the list filters on a tag, and
+  the Categories page lists every tag with its count and total, where editors rename, merge and delete their own.
+- **Likely duplicates**: transactions in one account, of the same amount, at most three days apart, that look like
+  one kept twice (the same payee or bank's text; one added here and one from Monarch; one pending and one posted).
+  Keep one and hide the other (one added here can be deleted), or say they are different: not shown again.
+- **Reconcile with a statement** (an account's menu): the statement's first and last day and the balance at its start
+  and its end; tick the transactions it shows (the hidden ones too; the earlier ones the statement before left open
+  come first). When the ticked ones add up to what the balance moved by, **Finish** marks them reconciled and keeps
+  the statement, so the next one starts where it ended. It can be finished with a difference, which is then kept with it.
+- **Balance check**: for each cash account and card from Monarch Money with a bank behind it, whether its balance
+  moved over the past 90 days by what its transactions add up to. Where it did not: by how much, whether money out or
+  money in is missing (or kept twice), and between which days the gap appeared, with the way to that month's
+  transactions. The pending ones explain a gap of exactly their sum; a gap looked at can be accepted, and is flagged
+  again once it changes.
+- **Rules kept in order**: the Rules page says for each rule how many transactions of the past two years it is for
+  and the last one, and marks a rule that matches nothing or that an earlier rule always decides before. When the
+  same payee was given the same category by hand three times and more and no rule does it, the rule is offered
+  (**Add the rule**, or **No thanks**: not offered again).
+- **History and undo**: what a person changes on a transaction (payee, category, notes, tags, hidden; date and amount
+  in an account kept by hand) is kept for 400 days with who and when. A transaction's dialog shows its history, each
+  change with **Undo**; **Recent changes** lists them all, a change to many as one line. A transaction from Monarch
+  Money that was changed here can go **Back to Monarch's own**: the next sync refreshes it and the rules apply again.
+  What the rules and the syncs change is not kept.
+- **Saved searches**: the filters of the Transactions page kept under a name (**Save this search**), for each person
+  their own, listed above the filters and in the sidebar under Transactions. What is kept is the search, not what
+  it found.
+- **Import a bank file** into an account kept by hand (its menu): CSV, OFX or QFX. A CSV file's columns are found
+  from their headings or their content (date, amount or money out and money in, payee, notes, category) and can be
+  set by hand, as can the order of day and month and whether money out is written as a positive number. What the
+  account has already is left out (the bank's own id in OFX; otherwise the same day and amount), unless asked. The
+  rules apply, transfers are linked, and the balance moves by what came in, stays, or becomes the file's.
 - **Recurring**: the bills, subscriptions and paychecks, found by ioMoney itself (Monarch's recurring transactions are
   not brought in) in the past two years: the same payee in the same account, money out or in, at least three times (a
   yearly one twice) at a steady pace (every week, two weeks, twice a month, monthly, every two months, every three
@@ -283,6 +328,18 @@ Updates, releases, the reverse proxy and Cloudflare Access work as in every app 
 | Categories: list, add, rename / merge / regroup, delete | `GET`, `POST`, `PUT /api/categories` (`{name, newName?, group?}`), `POST /api/categories/delete` (`{name, moveTo?}`) |
 | Monarch Money (admins) | `GET /api/monarch` (with the running sync's progress), `POST /api/monarch/sync` (`{full, accountId, years, wait}`), `POST /api/monarch/code`, `DELETE /api/monarch/session` |
 | Accounts Monarch reports as new (admins) | `GET /api/monarch/new`, `POST /api/monarch/new/{monarch id}` (`{as: "new"}` or `{as: "existing", accountId}`) |
+| Many at once (`set`: category, merchant, notes, hidden, reconciled, reviewed, addTags, removeTags) | `POST /api/transactions/bulk` (`{ids, set}`) |
+| Needs a look: filter, mark (`{all: true}`: every one) | `GET /api/transactions?review=yes`, `POST /api/transactions/review` (`{ids, reviewed}`) |
+| What there is to tidy up, in numbers | `GET /api/tidy` |
+| Payees: list, rename or merge, usual category | `GET /api/payees?q=`, `POST /api/payees/rename` (`{name, newName}`), `POST /api/payees/category` (`{name, category, all?}`) |
+| Tags: list, filter, set on a transaction, rename or merge, delete | `GET /api/tags`, `GET /api/transactions?tag=`, `PATCH /api/transactions/{id}` (`tags`), `PUT /api/tags` (`{name, newName}`), `POST /api/tags/delete` (`{name}`) |
+| Likely duplicates: list, not duplicates | `GET /api/duplicates`, `POST /api/duplicates/not` (`{ids}`) |
+| Statements: list and where the next starts, the lines to tick, finish, forget | `GET /api/accounts/{id}/statements`, `GET /api/accounts/{id}/statement?start=&end=`, `POST /api/accounts/{id}/statements` (`{start, end, opening, closing, ids, anyway?}`), `DELETE /api/statements/{id}` |
+| The balance check; accept a gap (`{gap: null}`: flag it again) | `GET /api/balance-check?days=90`, `POST /api/balance-check/{id}/ok` (`{gap}`) |
+| What each rule does, suggested rules; not this one | `GET /api/rules/upkeep`, `POST /api/rules/suggestions/not` (`{key}`) |
+| History: of a transaction, recent, undo, back to Monarch's own | `GET /api/transactions/{id}/changes`, `GET /api/changes`, `POST /api/changes/undo` (`{id}` or `{batch}`), `POST /api/transactions/{id}/reset` |
+| Saved searches (your own): list, keep, change, forget | `GET`, `POST /api/searches` (`{name, query}`), `PATCH`, `DELETE /api/searches/{id}` |
+| Import a bank file (`preview: true` adds nothing) | `POST /api/accounts/{id}/import` (`{text, name?, mapping?, dateOrder?, flip?, duplicates?, balance?, preview?}`) |
 | The household's currency, the automatic sync | `GET /api/settings`, `PUT /api/settings` (admins) |
 
 Amounts are signed as Monarch signs them: money out is negative. Settings › Account makes **app passwords** for the
@@ -297,7 +354,7 @@ curl -u alex:APP-PASSWORD -X PATCH -H 'Content-Type: application/json' -d '{"cat
 ## MCP server
 
 Off until an admin turns it on in **Settings › Server**. The tools: `overview`, `net_worth_history`,
-`search_transactions`, `bank_contact`, `spending`, `cash_flow`, `categories`, `update_transaction`, `add_transaction`, `rules`, `add_rule`,
+`search_transactions` (by tag and needing a look too), `data_checks`, `payees`, `bank_contact`, `spending`, `cash_flow`, `categories`, `update_transaction` (its tags and reviewed too), `add_transaction`, `rules`, `add_rule`,
 `test_rule`, `update_rule`, `delete_rule`, `apply_rules`, `link_transfers`, `possible_transfers`, `link_transaction`, `unlink_transaction`,
 `transfer_rules`, `add_transfer_rule`, `delete_transfer_rule`, `portfolio`,
 `get_quote`, `add_holding`, `update_holding`, `delete_holding`, `add_account`, `update_account`, `add_valuation`,
@@ -324,7 +381,11 @@ currency, a house's estimate and its equity after the mortgage, recurring transa
 whose they are) and subscriptions, the bills, transactions by hand in a Monarch account, categories (renamed, merged,
 deleted, with their rules and what a sync brings later), the Monarch sync against a stand-in for the
 library (first sync, later syncs keeping local changes, a session Monarch no longer takes, a wrong sign-in, a code by
-hand, an account made again in Monarch matched with its transactions none twice, a new one held until said), the MCP server and a person's data deleted.
+hand, an account made again in Monarch matched with its transactions none twice, a new one held until said), the MCP server and a person's data deleted;
+and putting the data in order: many transactions changed at once and taken back, needing a look, the payees (renamed,
+merged, their category), own tags, likely duplicates, a statement reconciled, the balance check, what each rule does
+and the rules suggested, a transaction's history and back to Monarch's own, saved searches, and a bank file imported
+(CSV and OFX, what is there already left out).
 
 ## Layout
 
@@ -339,6 +400,16 @@ app/transfers.py   transfers between the household's own accounts: found, linked
 app/forecast.py    the cash forecast of an account: what is known to come, day by day
 app/payoff.py      a loan's payoff from its rate and its payment
 app/splits.py      a transaction split over categories
+app/review.py      needs a look: the transactions nobody looked at yet
+app/payees.py      the payees: counted, renamed, merged, their usual category
+app/tags.py        the household's own tags on transactions, beside Monarch's
+app/duplicates.py  likely duplicates: the same transaction kept twice
+app/statements.py  an account reconciled against the bank's statement
+app/balancecheck.py  whether an account's balance agrees with its transactions
+app/rulecheck.py   what each rule does, the ones that do nothing, the rules missing
+app/history.py     what was changed by hand on a transaction, and the way back
+app/searches.py    a person's saved searches of the transactions
+app/importer.py    a bank's file (CSV, OFX, QFX) into an account kept by hand
 app/receipts.py    the receipts kept with a transaction, and what follows a transaction to its new id
 app/quotes.py      quotes and exchange rates from Yahoo Finance
 app/persondata.py  what a person keeps here, for the suite's delete-a-person
