@@ -7,9 +7,9 @@ name: @@LABEL@@
 on:
   push:
     branches: [main]
-    paths: ["@@NAME@@/**", "shared/**", ".github/workflows/@@NAME@@.yml"]
+    paths: ["@@NAME@@/**", "shared/**", "demo/**", ".github/workflows/@@NAME@@.yml"]
   pull_request:
-    paths: ["@@NAME@@/**", "shared/**", ".github/workflows/@@NAME@@.yml"]
+    paths: ["@@NAME@@/**", "shared/**", "demo/**", ".github/workflows/@@NAME@@.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/
