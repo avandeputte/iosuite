@@ -1,9 +1,9 @@
-"""Demo data (iosuite_shared.demo): each Calloway's own notes (notes are private to their account). Folders, tags,
+"""Demo data for ionote (the iosuite_demo package): each Calloway's own notes (notes are private to their account). Folders, tags,
 pinned notes, a few weeks of history: Morgan's work and house notes, Riley's lesson ideas and the car, Ava's school
 notes, Theo's lists."""
 import time
 
-from iosuite_shared import demo
+import iosuite_demo as demo
 
 from app import notes
 

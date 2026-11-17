@@ -1,4 +1,4 @@
-"""Demo data (iosuite_shared.demo): ioBackup set up the way the Calloways would: the suite's own database server (no
+"""Demo data for iobackup (the iosuite_demo package): ioBackup set up the way the Calloways would: the suite's own database server (no
 password kept: a suite admin types it to use it), a local folder for the backups, a nightly job for every database
 and a weekly one for ioPix, both turned off, and two weeks of past runs (one that failed), so the pages have
 something to show. Nothing runs until someone turns a job on."""

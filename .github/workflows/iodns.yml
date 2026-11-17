@@ -7,9 +7,9 @@ name: ioDNS
 on:
   push:
     branches: [main]
-    paths: ["iodns/**", "shared/**", ".github/workflows/iodns.yml"]
+    paths: ["iodns/**", "shared/**", "demo/**", ".github/workflows/iodns.yml"]
   pull_request:
-    paths: ["iodns/**", "shared/**", ".github/workflows/iodns.yml"]
+    paths: ["iodns/**", "shared/**", "demo/**", ".github/workflows/iodns.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/

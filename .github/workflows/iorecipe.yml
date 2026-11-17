@@ -7,9 +7,9 @@ name: ioRecipe
 on:
   push:
     branches: [main]
-    paths: ["iorecipe/**", "shared/**", ".github/workflows/iorecipe.yml"]
+    paths: ["iorecipe/**", "shared/**", "demo/**", ".github/workflows/iorecipe.yml"]
   pull_request:
-    paths: ["iorecipe/**", "shared/**", ".github/workflows/iorecipe.yml"]
+    paths: ["iorecipe/**", "shared/**", "demo/**", ".github/workflows/iorecipe.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/

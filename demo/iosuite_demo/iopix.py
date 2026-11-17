@@ -1,7 +1,9 @@
-"""Demo data (iosuite_shared.demo): the Calloways' photos. Drawn pictures (a gradient, a few shapes and cartoon faces:
-no photo of anyone real) in folders of days out (the coast, a hike, a birthday, Christmas, a summer at Grandma's, the
-science fair), each a JPEG with its date, camera and place in Exif and a sidecar with the people's faces, keywords,
-a caption and a rating, as digiKam writes them. The file scanner then adds them to the library like any photo put in
+"""Demo data for iopix (the iosuite_demo package): the Calloways' photos. First choice: real photos, about 200 Wikimedia Commons and
+StockSnap pictures (Creative Commons or public domain, credits in CREDITS.md beside them) of family days and trips,
+downloaded once from the suite's release (PHOTOS_URL, checked against PHOTOS_SHA256), each with a sidecar naming the
+faces (made-up people: the stock photos' family became the Calloways), keywords, captions and ratings. When that
+download fails (no internet), or DEMO_PHOTOS_URL is set empty: drawn pictures (a gradient, a few shapes and cartoon
+faces) in folders of days out, made here. Either way the file scanner adds them to the library like any photo put in
 the folder, and each account is linked to its person (the family's faces in every app).
 
 Only when ioPix keeps its own library (no digiKam database, as in a Docker stack): a real digiKam library is never
@@ -9,10 +11,15 @@ added to. The photos go in "Calloway family (demo)" in the photos folder; delete
 import datetime as dt
 import logging
 import os
+import hashlib
 import random
+import shutil
+import tempfile
+import urllib.request
+import zipfile
 from pathlib import Path
 
-from iosuite_shared import demo
+import iosuite_demo as demo
 
 from app import config
 
@@ -20,6 +27,8 @@ log = logging.getLogger("app.demo")
 FOLDER = "Calloway family (demo)"
 FAMILY = ["Morgan Calloway", "Riley Calloway", "Ava Calloway", "Theo Calloway"]
 SKIN = [(236, 200, 170), (198, 150, 112), (241, 214, 190), (172, 120, 90)]
+PHOTOS_URL = "https://github.com/avandeputte/iosuite/releases/download/demo-photos-1/iopix-demo-photos.zip"
+PHOTOS_SHA256 = "334879a4fc533d92f88b660c3f1ed3acc211fe34a4f052ce9ed8e045454f6fae"
 CAMERAS = [("Apple", "iPhone 15", "iPhone 15 back camera 6.1mm f/1.6"), ("FUJIFILM", "X-T5", "XF23mmF2 R WR")]
 
 
@@ -142,6 +151,43 @@ def write_photos(root: Path, seed: int = 20261117) -> int:
     return n
 
 
+def unpack_photos(archive: Path, root: Path) -> int:
+    """The real demo photos of a downloaded zip (photos/<year>/<day out>/x.jpg and its .xmp, CREDITS.md) under
+    root/FOLDER; how many photos. A name that would land outside that folder is refused."""
+    dest = (root / FOLDER).resolve()
+    n = 0
+    with zipfile.ZipFile(archive) as z:
+        for info in z.infolist():
+            name = info.filename
+            if info.is_dir() or not (name.startswith("photos/") or name == "CREDITS.md"):
+                continue
+            target = (dest / (name[len("photos/"):] if name.startswith("photos/") else name)).resolve()
+            if dest not in target.parents:
+                raise ValueError(f"demo photos: {name} is outside the folder")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with z.open(info) as src, open(target, "wb") as out:
+                shutil.copyfileobj(src, out)
+            n += name.lower().endswith(".jpg")
+    return n
+
+
+def download_photos(root: Path) -> int:
+    """The real demo photos from the release, checked against PHOTOS_SHA256; how many (0 when there is no URL)."""
+    url = os.environ.get("DEMO_PHOTOS_URL", PHOTOS_URL).strip()
+    if not url:
+        return 0
+    with tempfile.TemporaryDirectory(dir=config.DATA_DIR) as tmp:
+        path = Path(tmp) / "demo-photos.zip"
+        digest = hashlib.sha256()
+        with urllib.request.urlopen(url, timeout=60) as r, open(path, "wb") as out:  # noqa: S310 - our own release
+            while chunk := r.read(1 << 20):
+                digest.update(chunk)
+                out.write(chunk)
+        if url == PHOTOS_URL and digest.hexdigest() != PHOTOS_SHA256:
+            raise ValueError("demo photos: the download is not the expected file")
+        return unpack_photos(path, root)
+
+
 def seed(people: dict) -> None:
     from app.digikam import dkdb
     if not dkdb.no_digikam():
@@ -149,7 +195,14 @@ def seed(people: dict) -> None:
         return
     root = Path(config.PHOTOS_ROOT)
     root.mkdir(parents=True, exist_ok=True)
-    n = write_photos(root)
+    try:
+        n = download_photos(root)
+    except Exception as e:  # noqa: BLE001 - no internet, or the release is gone: the drawn photos instead
+        log.warning("demo: the demo photos could not be downloaded (%s); drawing some instead", e)
+        shutil.rmtree(root / FOLDER, ignore_errors=True)
+        n = 0
+    if not n:
+        n = write_photos(root)
     from app.photos import scanner
     res = scanner.scan(require_digikam_closed=False)
     log.info("demo: %d photos written, the scanner added %s", n, res.get("added"))

@@ -14,7 +14,7 @@ from iosuite_shared import chores, mcp as shared_mcp, pages
 from iosuite_shared import demo as suite_demo
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, carddav, config, db, demo, enrich, iopix, ldapd, mcp, model, notify, quality, users
+from app import __version__, api, carddav, config, db, enrich, iopix, ldapd, mcp, model, notify, quality, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -30,7 +30,7 @@ OPEN_PREFIXES = ("/static/", "/cal/", "/dav", "/.well-known/", "/mcp", "/profile
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
     await run_in_threadpool(users.init)
-    await run_in_threadpool(suite_demo.at_start, config.APP, demo.seed)  # the demo data while the suite's demo switch is on (iosuite_shared.demo)
+    await run_in_threadpool(suite_demo.at_start, config.APP)  # the demo data while the suite's demo switch is on (iosuite_shared.demo fetches the iosuite_demo package)
     server = None
     if config.LDAP_PORT:
         try:

@@ -1,4 +1,4 @@
-"""Demo data (iosuite_shared.demo): the Calloways' start page. Shared bookmark folders everyone sees (Family, School,
+"""Demo data for iostart (the iosuite_demo package): the Calloways' start page. Shared bookmark folders everyone sees (Family, School,
 Home), and each person's own: Morgan's work links, Riley's teaching links, Ava's and Theo's. The web addresses are
 public sites, not anyone's account."""
 from iosuite_shared import users as shared_users

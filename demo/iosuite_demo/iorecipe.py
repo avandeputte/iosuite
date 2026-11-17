@@ -1,6 +1,12 @@
-"""Demo data (iosuite_shared.demo): the Calloways' recipes. Family recipes with drawn pictures, a family cookbook for
-weeknights and one for holidays, Ava's own baking, favourites and ratings from each of them."""
-from iosuite_shared import demo
+"""Demo data for iorecipe (the iosuite_demo package): the Calloways' recipes. Family recipes, each with a photo of the
+dish from Wikimedia Commons (recipes/ beside this file, credited in recipes/credits.json and in the recipe's notes; a
+drawn picture when a recipe has none), a family cookbook for weeknights and one for holidays, Ava's own baking,
+favourites and ratings from each of them."""
+import json
+import re
+from importlib import resources
+
+import iosuite_demo as demo
 
 from app import model, users
 
@@ -51,16 +57,41 @@ AVA = [
 ]
 
 
+def _photos() -> dict:
+    """{recipe title: (JPEG bytes, credit line)} of the photos in recipes/ (readable from the release's zip too)."""
+    folder = resources.files(demo).joinpath("recipes")
+    try:
+        credits = json.loads(folder.joinpath("credits.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, NotADirectoryError):
+        return {}
+    return {c["recipe"]: (folder.joinpath(c["file"]).read_bytes(),
+                          f"Photo: {c['title'].removeprefix('File:')} by {c['author']}, {c['license']}, via Wikimedia Commons ({c['page']})")
+            for c in credits}
+
+
+def _with_photo(data: dict, photos: dict, label: str):
+    """The recipe's fields (its photo's credit added to the notes) and the photo: the real one, else drawn."""
+    rec = {k: v for k, v in data.items() if k != "color"}
+    key = re.sub(r" \(.*\)$", "", data["title"])
+    if key in photos:
+        raw, credit = photos[key]
+        rec["notes"] = (rec.get("notes", "") + "\n\n" + credit).strip()
+        return rec, raw
+    return rec, demo.picture(label, data["color"], (1200, 800))
+
+
 def seed(people: dict) -> None:
     m, r, a, t = (users.get(people[k]["id"]) for k in ("morgan", "riley", "ava", "theo"))
-    made = {}
+    made, photos = {}, _photos()
     for i, data in enumerate(RECIPES):
-        rec = model.create(m if i % 2 == 0 else r, {k: v for k, v in data.items() if k != "color"}, True)
+        fields, raw = _with_photo(data, photos, data["title"])
+        rec = model.create(m if i % 2 == 0 else r, fields, True)
         made[data["title"]] = rec
-        model.add_photo(m, rec, demo.picture(data["title"].split(" (")[0], data["color"], (1200, 800)))
+        model.add_photo(m, rec, raw)
     for data in AVA:
-        rec = model.create(a, {k: v for k, v in data.items() if k != "color"}, False)
-        model.add_photo(a, rec, demo.picture("Cookies!", data["color"], (1200, 800)))
+        fields, raw = _with_photo(data, photos, "Cookies!")
+        rec = model.create(a, fields, False)
+        model.add_photo(a, rec, raw)
 
     week = model.create_book(m, {"name": "Weeknight dinners", "description": "Quick ones for school nights"}, True)
     hol = model.create_book(m, {"name": "Holidays", "description": "Thanksgiving, Christmas and birthdays"}, True)

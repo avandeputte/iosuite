@@ -1,9 +1,9 @@
-"""Demo data (iosuite_shared.demo): the Calloways' calendars. The shared Family calendar with the week's routine
+"""Demo data for iocalendar (the iosuite_demo package): the Calloways' calendars. The shared Family calendar with the week's routine
 (school, piano, soccer, swimming), outings and appointments from a month ago to two months ahead, a Work calendar for
 each parent, the children's own, and the public holidays of the United States (Oregon). Birthdays come from ioContact."""
 import datetime as dt
 
-from iosuite_shared import demo
+import iosuite_demo as demo
 
 from app import holiday, ical, model
 
