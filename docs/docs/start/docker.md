@@ -71,6 +71,11 @@ docker compose up -d
 
 Remove the services you don't want; the rest keep working.
 
+**A new stack file on an old database volume.** MariaDB keeps the root password it was first started with, so a stack
+file made again (new passwords) on the volume of an earlier one is refused: the first app's log says *Access denied
+for user 'root'*. Start over with `docker compose down -v` (it deletes the stack's data), or keep the data by putting
+the earlier passwords back (open the earlier file in the builder).
+
 ## Updating
 
 ```sh
