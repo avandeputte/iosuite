@@ -64,7 +64,7 @@
         <fieldset class="cstep">
           <legend><span class="chip">2</span> The database</legend>
           <div class="choices">
-            <label class="choice"><input type="radio" name="db.mode" value="bundled"><b>Include MariaDB</b><small>A database container in the stack, with its data in a Docker volume. Nothing to set up.</small></label>
+            <label class="choice"><input type="radio" name="db.mode" value="bundled"><b>Include MariaDB</b><small>A database container in the stack, with its data in the stack's data folder. Nothing to set up.</small></label>
             <label class="choice"><input type="radio" name="db.mode" value="existing"><b>Use a server I already run</b><small>MariaDB or MySQL on this machine or on your network.</small></label>
           </div>
           <div data-if="db.mode=existing">
@@ -104,6 +104,7 @@
           <p class="hint">A suite admin: an admin of every app, and the one who adds the family's accounts.</p>
           <label class="check"><input type="checkbox" data-k="demo"><span>Fill it with demo data <small>(a made-up family of four, the Calloways, with something in every app: to show the suite or try it out. Added once, on the first start; ioPix's drawn photos go in a folder of their own in the photos folder)</small></span></label>
           <label class="field"><span>Time zone</span><input type="text" data-k="tz" list="zones" spellcheck="false"><datalist id="zones"></datalist></label>
+          <label class="field"><span>The folder for the stack's data, on this server</span><input type="text" data-k="data" placeholder="/opt/iosuite" spellcheck="false" autocapitalize="off"><small>Every container keeps its data and settings in a folder of its own under it (db, ionote, iopix, iobackup, caddy), instead of in Docker volumes.</small></label>
         </fieldset>
 
         <fieldset class="cstep">
@@ -163,7 +164,7 @@
           </div>
           <div class="appq" data-if="apps.iobackup">
             <h3><img src="/img/iobackup.svg" alt="" width="24" height="24"> ioBackup</h3>
-            <label class="field"><span>The folder that keeps the backups, on this server <i>(optional)</i></span><input type="text" data-k="iobackup.folder" placeholder="/srv/backups" spellcheck="false" autocapitalize="off"><small>Empty: a Docker volume. A folder on another disk is the safer place.</small></label>
+            <label class="field"><span>The folder that keeps the backups, on this server <i>(optional)</i></span><input type="text" data-k="iobackup.folder" placeholder="/srv/backups" spellcheck="false" autocapitalize="off"><small>Empty: iobackup/backups in the stack's data folder. A folder on another disk is the safer place.</small></label>
           </div>
         </fieldset>
 

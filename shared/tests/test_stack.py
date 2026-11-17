@@ -104,3 +104,10 @@ def test_the_app_after_the_dashes_is_started_without_the_passwords_only_the_setu
 def test_nothing_is_started_without_the_dashes(monkeypatch):
     monkeypatch.setattr(stack.os, "execvp", lambda *_: pytest.fail("started something"))
     cli.main(["stack", "--one-address", "off"])
+
+
+def test_a_refused_password_is_said_at_once_with_what_to_do():
+    def refused(*a, **k):
+        raise SystemExit("error: could not connect to db:3306 as root: (1045, \"Access denied for user 'root'@'10.186.30.10'\")")
+    with pytest.raises(SystemExit, match="docker compose down -v"):  # an old volume's root password: no minute of waiting
+        stack.provision_from_env("root", "iostart", "%", env=ENV, run=refused, sleep=lambda s: pytest.fail("waited"))

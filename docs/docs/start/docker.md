@@ -40,6 +40,18 @@ browser alone: nothing you type is sent anywhere. To add or remove an app later,
 it holds its own answers. Ticking *Fill it with demo data* adds a made-up family with something in every app
 ([Demo data](demo.md)).
 
+The data lives in one folder of the server that you choose (`/opt/iosuite` unless you say otherwise), not in Docker
+volumes: a folder per container under it (`db`, `ionote`, `iopix`, `iobackup`, `caddy`), so it is easy to see, move
+and back up. The apps write as user 1000, so their folders are made and given to that user once, before the first
+start; the file and the page's steps hold the one command for it, such as:
+
+```sh
+sudo mkdir -p /opt/iosuite/ionote /opt/iosuite/iopix && sudo chown 1000:1000 /opt/iosuite/ionote /opt/iosuite/iopix
+```
+
+MariaDB and Caddy see to their own folders. A folder Docker makes by itself belongs to root, and an app can't write
+there.
+
 ## One app
 
 ```sh
@@ -70,6 +82,12 @@ docker compose up -d
 ```
 
 Remove the services you don't want; the rest keep working.
+
+**A new stack file on an old database.** MariaDB keeps the root password it was first started with, so a stack file
+made again (new passwords) on the database of an earlier one is refused: the first app's log says *Access denied for
+user 'root'*. Start over by stopping the stack and emptying the `db` folder of its data folder (`docker compose down -v`
+for a stack on Docker volumes); it deletes the stack's data. Or keep the data by putting the earlier passwords back
+(open the earlier file in the builder).
 
 ## Updating
 

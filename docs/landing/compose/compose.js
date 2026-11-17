@@ -47,6 +47,7 @@
            user: "suite", password: password(), sharedName: "iosuite", sharedUser: "iosuite", sharedPassword: password()},
       admin: {user: "admin", password: ""},
       tz: tz || "Europe/Brussels",
+      data: "/opt/iosuite",
       reach: {layout: "one", https: "none", address: "", port: "8630", domain: "", internalCert: false, proxyAt: "here", proxyIp: "", names: names},
       iopix: {photos: "", ai: true},
       iocontact: {ldap: false, ldapPort: "389"},
@@ -90,11 +91,27 @@
   var HOSTNAME = /^(?=.{1,253}$)([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
   var IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
   var LABEL = /^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+  var FULL = /^(\/|[A-Za-z]:[\\/])/;  // a full path on the server
   var SUBNET = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.0\/24$/;
 
   function port(v) { return /^\d{1,5}$/.test(v) && +v >= 1 && +v <= 65535; }
   function picked(s) { return APPS.filter(function (a) { return s.apps[a.key]; }); }
   function layout(s) { return s.reach.layout === "one" && s.apps.iostart ? "one" : "each"; }
+  function under(s, sub) { return s.data.trim().replace(/[\\/]+$/, "") + "/" + sub; }  // a folder of the stack's data folder
+  /* the folders of the data folder that the apps' containers write to as uid 1000 (MariaDB and Caddy see to their own) */
+  function userFolders(s) {
+    var out = [];
+    if (s.apps.ionote) out.push(under(s, "ionote"));
+    if (s.apps.iopix) out.push(under(s, "iopix"));
+    if (s.apps.iobackup) { out.push(under(s, "iobackup/data")); if (!s.iobackup.folder.trim()) out.push(under(s, "iobackup/backups")); }
+    return out;
+  }
+  function shq(p) { return /^[A-Za-z0-9_\/.:\\-]+$/.test(p) ? p : "'" + p.replace(/'/g, "'\\''") + "'"; }
+  /* the one command to run before the first start: the folders the apps write to, theirs */
+  function prepare(s) {
+    var f = userFolders(s).map(shq).join(" ");
+    return f ? "sudo mkdir -p " + f + " && sudo chown 1000:1000 " + f : "";
+  }
   function loopback(h) { return /^(localhost|127(\.\d+){3}|::1|\[::1\])$/i.test(h); }
 
   /* [{at: the field (its data-k), text}] : what is still missing or wrong; empty when the file can be used */
@@ -144,9 +161,10 @@
       if (r.https === "proxy" && r.proxyAt === "other" && !IPV4.test(r.proxyIp.trim())) bad("reach.proxyIp", "The address the reverse proxy connects from (192.168.1.2).");
       if (r.https === "proxy" && one && !port(r.port)) bad("reach.port", "The port the suite answers on is a number (8630).");
     }
-    if (s.apps.iopix && !/^(\/|[A-Za-z]:[\\/])/.test(s.iopix.photos.trim())) bad("iopix.photos", "ioPix: the folder with the photos on this server, as a full path (/srv/photos).");
+    if (s.apps.iopix && !FULL.test(s.iopix.photos.trim())) bad("iopix.photos", "ioPix: the folder with the photos on this server, as a full path (/srv/photos).");
     if (s.apps.iocontact && s.iocontact.ldap && !port(s.iocontact.ldapPort)) bad("iocontact.ldapPort", "ioContact: the LDAP port is a number (389).");
-    if (s.apps.iobackup && s.iobackup.folder.trim() && !/^(\/|[A-Za-z]:[\\/])/.test(s.iobackup.folder.trim())) bad("iobackup.folder", "ioBackup: the backups folder as a full path (/srv/backups), or empty for a Docker volume.");
+    if (!FULL.test(s.data.trim())) bad("data", "The folder for the stack's data, as a full path on this server (/opt/iosuite).");
+    if (s.apps.iobackup && s.iobackup.folder.trim() && !FULL.test(s.iobackup.folder.trim())) bad("iobackup.folder", "ioBackup: the backups folder as a full path (/srv/backups), or empty for the stack's data folder.");
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(s.tag.trim())) bad("tag", "The version is latest, or a release such as v3.13.0.");
     var m = SUBNET.exec(s.subnet.trim());
     if (!m || +m[1] > 255 || +m[2] > 255 || +m[3] > 255) bad("subnet", "The stack's own network is written like 10.186.30.0/24.");
@@ -210,7 +228,6 @@
     var hostGateway = !bundled && /^host\.docker\.internal$/i.test(dbHost);
     var cookie = !one && r.https !== "none" ? r.domain.trim().toLowerCase() : "";
     var listen = r.https === "proxy" && r.proxyAt === "here" ? "127.0.0.1:" : "";
-    var volumes = [];
     var first = firstApp(s);
     function add() { for (var i = 0; i < arguments.length; i++) L.push(arguments[i]); }
 
@@ -222,6 +239,9 @@
         "# Nothing to edit. " + first + " goes first, at every start: before it starts it makes the databases" + (admin ? "" : "' tables") + ", the first admin and",
         "# writes how the suite is reached into the Shared ioSuite database" + (sel.length > 1 ? "; the other apps start once it is up" : "") + ".",
         "# This file holds passwords: keep it private.",
+        "# The data is in " + s.data.trim() + ", a folder per container." + (userFolders(s).length ? " Before the first start:" : ""));
+    if (userFolders(s).length) add("#   " + prepare(s) + "   # the apps write as user 1000");
+    add(
         "# To add or remove an app later, open this file on that page (Open a file), change the answers and start it again.",
         "",
         "name: iosuite",
@@ -249,7 +269,6 @@
     add("", "services:");
 
     if (bundled) {
-      volumes.push("iosuite-db");
       add("  db:",
           "    image: mariadb:11",
           "    container_name: iosuite-db",
@@ -258,7 +277,7 @@
           "    environment:",
           "      MARIADB_ROOT_PASSWORD: " + q(d.rootPassword),
           "    volumes:",
-          "      - iosuite-db:/var/lib/mysql",
+          "      - " + q(under(s, "db") + ":/var/lib/mysql") + "   # the databases",
           "    healthcheck:",
           "      test: [\"CMD\", \"healthcheck.sh\", \"--connect\", \"--innodb_initialized\"]",
           "      interval: 10s",
@@ -281,19 +300,16 @@
       env.push("DB_NAME: " + k);
       if (urls[k]) env.push("PUBLIC_URL: " + q(urls[k]));
       env.push("INTERNAL_URL: " + q("http://" + k + ":" + a.port) + "   # where the other apps of the stack find it");
-      if (k === "ionote") { vols.push("ionote-data:/data             # the session secret and the log; the notes are in the database"); volumes.push("ionote-data"); }
+      if (k === "ionote") vols.push(q(under(s, "ionote") + ":/data") + "   # the session secret and the log; the notes are in the database");
       if (k === "iopix") {
         vols.push(q(s.iopix.photos.trim() + ":/library/photos") + "   # the photos (read and write: ioPix keeps sidecar files beside them)");
-        vols.push("iopix-data:/data              # index, thumbnails, models (the container runs as uid 1000)");
-        volumes.push("iopix-data");
+        vols.push(q(under(s, "iopix") + ":/data") + "   # index, thumbnails, models");
         env.push("DIGIKAM_DB_TYPE: none", "DIGIKAM_CHECK: none", "PHOTOS_ROOT: /library/photos",
                  "AUTO_MODELS: " + q(s.iopix.ai ? "siglip2,yolox,geonames" : "") + (s.iopix.ai ? "   # search by content, objects, places: about 1.6 GB, fetched on the first start" : ""));
       }
       if (k === "iobackup") {
-        vols.push("iobackup-data:/data           # where a backup is put together before it is stored");
-        volumes.push("iobackup-data");
-        if (s.iobackup.folder.trim()) vols.push(q(s.iobackup.folder.trim() + ":/backups") + "   # where a local destination keeps the backups");
-        else { vols.push("iobackup-backups:/backups     # where a local destination keeps the backups"); volumes.push("iobackup-backups"); }
+        vols.push(q(under(s, "iobackup/data") + ":/data") + "   # where a backup is put together before it is stored");
+        vols.push(q((s.iobackup.folder.trim() || under(s, "iobackup/backups")) + ":/backups") + "   # where a local destination keeps the backups");
       }
       add("  " + k + ":" + (k === "iostart" ? "                               # the start page" + (one ? ": answers for every app, each in its folder" : "") : ""),
           "    <<: *app",
@@ -318,7 +334,6 @@
     });
 
     if (r.https === "caddy") {
-      volumes.push("caddy-data", "caddy-config");
       add("  caddy:                                 # HTTPS: gets and renews the certificate" + (one ? "" : "s") + " by itself",
           "    image: caddy:2",
           "    container_name: iosuite-caddy",
@@ -335,8 +350,8 @@
           "      - source: caddyfile",
           "        target: /etc/caddy/Caddyfile",
           "    volumes:",
-          "      - caddy-data:/data                # the certificates",
-          "      - caddy-config:/config",
+          "      - " + q(under(s, "caddy/data") + ":/data") + "   # the certificates",
+          "      - " + q(under(s, "caddy/config") + ":/config"),
           "");
       add("configs:", "  caddyfile:", "    content: |");
       caddyfile(s, function (a) { return a.key + ":" + a.port; }).forEach(function (l) { add("      " + l); });
@@ -352,11 +367,6 @@
           "          ip_range: " + n.range + "    # what Docker hands out by itself, clear of the addresses set above",
           "          gateway: " + n.gateway,
           "");
-    }
-    if (volumes.length) {
-      add("volumes:");
-      volumes.forEach(function (v) { add("  " + v + ":"); });
-      add("");
     }
     add("# The answers this file was made from, for " + SITE + " to read back (Open a file):", MARK + b64(JSON.stringify(s)), "");
 
@@ -392,7 +402,7 @@
     out.push({title: "Start it", head: "on the server",
               text: "Save the file as docker-compose.yml in a folder of its own, then start it there. The first start pulls the images and takes a minute or two." +
                     (notes.length ? " " + notes.join(" ") : ""),
-              code: "docker compose up -d\ndocker compose logs " + first + "     # what was set up (its first lines, up to ok)"});
+              code: (prepare(s) ? prepare(s) + "   # the folders the apps write to, as user 1000\n" : "") + "docker compose up -d\ndocker compose logs " + first + "     # what was set up (its first lines, up to ok)"});
 
     if (r.https === "proxy") {
       var at = local ? "127.0.0.1" : (r.address.trim() || "<this server>");
@@ -413,12 +423,13 @@
               code: open.join("\n")});
 
     out.push({title: "Later", head: "on the server",
-              text: "Update by pulling the images. To add or remove an app, or change an answer, open your file on this page (Open a file), change it and start the new file the same way: the data stays in the Docker volumes" + (d.mode === "existing" ? " and on your database server" : "") + "." +
+              text: "Update by pulling the images. To add or remove an app, or change an answer, open your file on this page (Open a file), change it and start the new file the same way: the data stays in " + s.data.trim() + (d.mode === "existing" ? " and on your database server" : "") + "." +
+                    (d.mode !== "existing" ? " To start over from nothing, stop the stack and empty " + under(s, "db") + "." : "") +
                     (d.mode === "existing" && d.create === "admin" ? " Once it has started, the administrator's password can be taken out of the file (DB_ADMIN_PASSWORD and --db-admin … --databases … of " + first + ") until you add an app." : ""),
               code: "docker compose pull && docker compose up -d"});
     void n;
     return out;
   }
 
-  return {APPS: APPS, quoted: q, MARK: MARK, defaults: defaults, merge: merge, answersIn: answersIn, problems: problems, build: build, addresses: addresses, proxies: proxies, layout: layout, net: net};
+  return {APPS: APPS, quoted: q, prepare: prepare, MARK: MARK, defaults: defaults, merge: merge, answersIn: answersIn, problems: problems, build: build, addresses: addresses, proxies: proxies, layout: layout, net: net};
 });

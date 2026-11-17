@@ -63,18 +63,31 @@ def _cfg(env) -> dict:
     return {k: env[k] for k in keys if env.get(k)}
 
 
+DENIED = ("(1045",)  # MariaDB: Access denied for user (a wrong password)
+REFUSED_HINT = ("the database server refuses this password. With the stack's own MariaDB this nearly always means its "
+                "data was made by an earlier stack file, with another root password (MariaDB keeps the one it first "
+                "started with): start over with an empty database folder (stop the stack, empty db/ in the stack's "
+                "data folder; on Docker volumes, `docker compose down -v`), which deletes the stack's data, or put the "
+                "earlier passwords back in this file (the compose builder's Open a file shows them)")
+
+
 def _wait(what, attempt, log, wait_s=WAIT_S, sleep=time.sleep):
-    """Run attempt() until it stops raising SystemExit / an exception that says the server is not there yet."""
+    """Run attempt() until it stops raising SystemExit / an exception that says the server is not there yet. A refused
+    password is not waited for: it does not change while the server starts."""
     until = time.time() + wait_s
     while True:
         try:
             return attempt()
         except SystemExit as exc:
             msg = str(exc)
+            if any(d in msg for d in DENIED):
+                raise SystemExit(f"{msg[:300]}\n  {REFUSED_HINT}") from None
             if "could not connect" not in msg or time.time() >= until:
                 raise
         except Exception as exc:  # noqa: BLE001 - whatever the driver says while the server starts
             msg = str(exc)
+            if any(d in msg for d in DENIED):
+                raise SystemExit(f"error: {what}: {msg[:300]}\n  {REFUSED_HINT}") from None
             if time.time() >= until:
                 raise SystemExit(f"error: {what}: {msg[:300]}")
         log(f"  waiting for the database ({msg[:120]})")

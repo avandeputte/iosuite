@@ -64,7 +64,7 @@ later adds its own at its first start too, until `iosuite-shared --config /opt/i
 that and removes nothing.
 
 The demo data is added once per app, and it is meant for a suite that starts with it: the easiest way out is to start
-over (on Docker, with new volumes). Deleting the four accounts under Settings › Security › People removes each one's
+over (on Docker, with an empty data folder). Deleting the four accounts under Settings › Security › People removes each one's
 own data in every app, but what the family shares (the Family calendar and lists, the household's accounts, the
 things, the family recipes) stays, as it would for a real person. ioPix adds demo photos only when it keeps its own
 library, in a folder `Calloway family (demo)` of the photos folder: a digiKam library is never added to.
