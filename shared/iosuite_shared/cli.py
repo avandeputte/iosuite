@@ -47,7 +47,7 @@ def main(argv=None):
         return provision.main(a)
     if a.cmd == "demo":  # the family's accounts and the switch; every app adds its own at its next start
         return demo.main(a)
-    if a.cmd == "stack":  # a Docker stack's setup service: the databases first, then the tables
+    if a.cmd == "stack":  # a Docker stack's first app, ahead of itself: the databases first, then the tables
         return stack.main(a)
 
     from iosuite_shared import users

@@ -40,7 +40,7 @@ The dates follow the day the demo is made: the events are this week and the next
 ## Turning it on
 
 **Docker**: tick *Fill it with demo data* in the [Docker Compose builder](https://iosuite.iothing.net/compose/). The
-stack's `setup` service makes the four accounts, and every app fills itself at its first start. It is only done for
+stack's first app makes the four accounts before it starts, and every app fills itself at its first start. It is only done for
 a new suite: a stack whose suite has accounts of its own besides the admin's is left alone.
 
 **An installed server** (Proxmox, Linux, Mac): with any app's config.env,

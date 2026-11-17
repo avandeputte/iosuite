@@ -1,6 +1,8 @@
 """`iosuite-shared stack`: what a Docker stack of the suite needs done before its apps start, in one command that the
-stack's `setup` service runs at every `docker compose up` (the compose file builder on the website writes that
-service; any app's image can run it, since every image holds this library):
+stack's first app runs at every start, ahead of itself: `iosuite-shared stack ... -- python -m app` (the compose file
+builder on the website writes that command; any app's image can run it, since every image holds this library). The
+other apps of the stack wait until that app is healthy. No container of its own, so none is left stopped when the
+work is done:
 
   1. with `--db-admin USER` (its password in DB_ADMIN_PASSWORD): the databases named by `--databases a,b,c` for the
      apps' user (DB_USER / DB_PASSWORD), and the Shared ioSuite database and user (IOSUITE_DB_*), made when missing
@@ -20,6 +22,9 @@ service; any app's image can run it, since every image holds this library):
      yet, so a later `up` of a stack that has been used for real never adds it.
 
 The database is waited for (a container that was only just started), a minute at most.
+
+What follows `--` is the app: this process becomes it once the work is done (exec, so the app gets the container's
+signals), without the two passwords only this command needs (DB_ADMIN_PASSWORD, ADMIN_PASSWORD) in its environment.
 """
 import os
 import sys
@@ -27,6 +32,7 @@ import time
 
 DECLARED = "stack_declared"  # ios_settings, app '': what this command last wrote, as "one=1;proxies=a,b"
 WAIT_S = 60
+ONLY_HERE = ("DB_ADMIN_PASSWORD", "ADMIN_PASSWORD")  # not handed on to the app that is started after `--`
 
 
 def add_parser(sub):
@@ -37,7 +43,14 @@ def add_parser(sub):
     p.add_argument("--one-address", choices=("on", "off"), default=None, help="the start page answers for every app, each in its folder")
     p.add_argument("--demo", action="store_true", help="fill a new suite with demo data: a made-up family of four, something in every app")
     p.add_argument("--proxies", default=None, help="the addresses or networks the reverse proxies connect from, commas between them ('' for none)")
+    p.add_argument("then", nargs="...", metavar="-- COMMAND", help="after --: the app to become once the work is done (python -m app)")
     return p
+
+
+def then_command(a) -> list:
+    """What follows `--` on the command line, without the `--`."""
+    cmd = list(getattr(a, "then", None) or [])
+    return cmd[1:] if cmd[:1] == ["--"] else cmd
 
 
 def _names(spec) -> list:
@@ -137,4 +150,9 @@ def main(a, log=print):
         demo_once(log=log)
     log("ok")
     sys.stdout.flush()
+    cmd = then_command(a)
+    if cmd:
+        for k in ONLY_HERE:
+            os.environ.pop(k, None)
+        os.execvp(cmd[0], cmd)  # does not return: this process is the app from here on
     return 0

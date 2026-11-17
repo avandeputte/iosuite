@@ -1,4 +1,4 @@
-"""`iosuite-shared stack`: what a Docker stack's setup service does before the apps start (iosuite_shared.stack)."""
+"""`iosuite-shared stack`: what a Docker stack's first app does before it and the others start (iosuite_shared.stack)."""
 import pytest
 
 from iosuite_shared import cli, db, proxyauth, stack, suite, users
@@ -86,3 +86,21 @@ def test_the_command_makes_the_tables_and_the_first_admin(monkeypatch, capsys):
     assert "1 account(s)" in out and out.rstrip().endswith("ok")
     cli.main(["stack", "--one-address", "on", "--proxies", "10.186.30.10"])  # again: nothing to do, nobody made twice
     assert len(users.list_users()) == 1
+
+
+def test_the_app_after_the_dashes_is_started_without_the_passwords_only_the_setup_needs(monkeypatch):
+    ran = []
+    monkeypatch.setenv("DB_ADMIN_PASSWORD", "r00t")
+    monkeypatch.setenv("ADMIN_PASSWORD", "long-enough-1")
+    monkeypatch.setenv("DB_PASSWORD", "kept")
+    monkeypatch.setattr(stack.os, "execvp", lambda f, argv: ran.append((f, argv, dict(stack.os.environ))))
+    cli.main(["stack", "--one-address", "off", "--proxies", "", "--", "python", "-m", "app"])
+    (f, argv, env), = ran
+    assert (f, argv) == ("python", ["python", "-m", "app"])
+    assert "DB_ADMIN_PASSWORD" not in env and "ADMIN_PASSWORD" not in env and env["DB_PASSWORD"] == "kept"
+    assert not suite.one_address()  # the options before the dashes were read as before
+
+
+def test_nothing_is_started_without_the_dashes(monkeypatch):
+    monkeypatch.setattr(stack.os, "execvp", lambda *_: pytest.fail("started something"))
+    cli.main(["stack", "--one-address", "off"])

@@ -28,11 +28,12 @@ plain HTTP, a Caddy container that gets the certificates, or your own reverse pr
 
 ```sh
 docker compose up -d
-docker compose logs setup     # what was set up; it ends with ok
+docker compose logs iostart   # what was set up (its first lines, up to ok)
 ```
 
-The file's `setup` service runs before the apps at every start (`iosuite-shared stack`, which every image holds): it
-makes the databases and users that are missing, the first admin, and writes how the suite is reached into the Shared
+One app of the file (the start page when it is picked) sets the stack up before it starts, at every start
+(`iosuite-shared stack`, which every image holds), and the other apps wait until it is up. No container is left
+stopped for it, so Dockge and Portainer show the stack as running. It makes the databases and users that are missing, the first admin, and writes how the suite is reached into the Shared
 ioSuite database (the one-address switch and the reverse proxy addresses), so there is nothing to click afterwards.
 What a suite admin changes under Settings later stays until the file says something new. The page works in your
 browser alone: nothing you type is sent anywhere. To add or remove an app later, open your file on the page again;

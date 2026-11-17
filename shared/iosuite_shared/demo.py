@@ -8,8 +8,8 @@ The pictures are drawn by the apps' seeds; none is a photo of a real person.
 How it works:
 
   * The switch is one suite-wide setting in the Shared ioSuite database (ios_settings 'demo'), set by
-    `iosuite-shared demo` (an installed server) or `iosuite-shared stack --demo` (the setup service of a Docker stack,
-    what the compose file builder's "Demo data" box writes).
+    `iosuite-shared demo` (an installed server) or `iosuite-shared stack --demo` (the first app of a Docker stack,
+    before it starts: what the compose file builder's "Demo data" box writes).
   * Each app keeps its own demo data in app/demo.py, `seed(family)`, written with the app's own code, so it follows the
     app's tables as they change. At start, after its tables are made, every app calls `at_start(APP, seed)`: while the
     switch is on and the app has not been seeded yet (ios_settings 'demo_seeded' for the app), the family's accounts are
