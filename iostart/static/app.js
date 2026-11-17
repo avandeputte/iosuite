@@ -1016,7 +1016,7 @@ async function drawHomeCard(el, again = false) {
 }
 function renderHomeCard(el, d) {
   S.ha = d.enabled ? d : false;
-  if (!d.enabled) { el.hidden = S.user.role !== 'admin'; if (!el.hidden) el.replaceChildren(wgHead('Home'), h('a', { class: 'lnk small', href: '#/settings/ha' }, 'Add Home Assistant')); return; }
+  if (!d.enabled) { el.hidden = true; el.replaceChildren(); return; }  // no Home Assistant set up: no Home card at all (Settings › Home Assistant adds it)
   el.hidden = false;
   const title = wgHead(d.name || 'Home', null);
   title.append(h('a', { class: 'muted', href: d.url, title: d.url, target: '_blank', rel: 'noreferrer' }, 'Home Assistant'));
