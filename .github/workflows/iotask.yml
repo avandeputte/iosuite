@@ -7,9 +7,9 @@ name: ioTask
 on:
   push:
     branches: [main]
-    paths: ["iotask/**", "shared/**", ".github/workflows/iotask.yml"]
+    paths: ["iotask/**", "shared/**", "demo/**", ".github/workflows/iotask.yml"]
   pull_request:
-    paths: ["iotask/**", "shared/**", ".github/workflows/iotask.yml"]
+    paths: ["iotask/**", "shared/**", "demo/**", ".github/workflows/iotask.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/

@@ -7,9 +7,9 @@ name: ioThings
 on:
   push:
     branches: [main]
-    paths: ["iothings/**", "shared/**", ".github/workflows/iothings.yml"]
+    paths: ["iothings/**", "shared/**", "demo/**", ".github/workflows/iothings.yml"]
   pull_request:
-    paths: ["iothings/**", "shared/**", ".github/workflows/iothings.yml"]
+    paths: ["iothings/**", "shared/**", "demo/**", ".github/workflows/iothings.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/

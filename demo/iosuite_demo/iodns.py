@@ -1,4 +1,4 @@
-"""Demo data (iosuite_shared.demo): the Calloways' home network names. Entries for the house's devices and the suite
+"""Demo data for iodns (the iosuite_demo package): the Calloways' home network names. Entries for the house's devices and the suite
 under home.calloway.example (internal addresses for the LAN, the public ones where the suite is reached from outside),
 and a Pi-hole and an AdGuard Home server, turned off (no real server is behind them, so nothing is synced)."""
 from app import model

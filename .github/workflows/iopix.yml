@@ -6,9 +6,9 @@ name: ioPix
 on:
   push:
     branches: [main]
-    paths: ["iopix/**", "shared/**", ".github/workflows/iopix.yml"]
+    paths: ["iopix/**", "shared/**", "demo/**", ".github/workflows/iopix.yml"]
   pull_request:
-    paths: ["iopix/**", "shared/**", ".github/workflows/iopix.yml"]
+    paths: ["iopix/**", "shared/**", "demo/**", ".github/workflows/iopix.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/
