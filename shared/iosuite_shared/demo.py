@@ -3,8 +3,8 @@ with something in every app). The demo data itself is a package of its own, iosu
 folder), never installed: an app fetches it only when it needs it.
 
   * The switch is one suite-wide setting in the Shared ioSuite database (ios_settings 'demo'), set by
-    `iosuite-shared demo` (an installed server) or `iosuite-shared stack --demo` (a Docker stack, what the compose file
-    builder's "Fill it with demo data" box writes).
+    `iosuite-shared demo` (an installed server) or `iosuite-shared stack --demo` (the first app of a Docker stack,
+    before it starts: what the compose file builder's "Fill it with demo data" box writes).
   * At start, after its tables are made, every app calls `at_start(APP)`: while the switch is on and the app has not
     been seeded yet (ios_settings 'demo_seeded' for the app), it fetches the package (`package()`), runs the app's
     seed from it (the family's accounts are made when missing) and removes the download. A package that cannot be

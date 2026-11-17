@@ -1,10 +1,12 @@
 /* The Docker Compose file builder of iosuite.iothing.net/compose/: build(answers) writes the stack file and what to
    do with it. Nothing here touches the page or the network, so tools/check-compose.js runs the same code under Node.
 
-   The stack it writes: the apps that were picked, MariaDB (or a server that exists), and a `setup` service that runs
-   once at every `docker compose up`, before the apps (`iosuite-shared stack`, in every app's image): it makes the
-   databases, the first admin, and writes how the suite is reached into the Shared ioSuite database. So the file is
-   the whole install: nothing to edit, nothing to click afterwards.
+   The stack it writes: the apps that were picked, MariaDB (or a server that exists). One of the apps sets the
+   stack up before it starts, at every start (`iosuite-shared stack ... -- python -m app`, in every app's image): it
+   makes the databases, the first admin, and writes how the suite is reached into the Shared ioSuite database; the
+   other apps wait until it is healthy. No service of its own for that: a container that stops when its work is done
+   has Dockge and Portainer show the whole stack as exited. So the file is the whole install: nothing to edit, nothing
+   to click afterwards.
 
    The apps, their ports and their folders on the suite's one address are the ones of the shared library
    (shared/iosuite_shared/install.py APPS, suite.py FOLDERS); tools/check-facts.py holds this list to them. */
@@ -209,6 +211,7 @@
     var cookie = !one && r.https !== "none" ? r.domain.trim().toLowerCase() : "";
     var listen = r.https === "proxy" && r.proxyAt === "here" ? "127.0.0.1:" : "";
     var volumes = [];
+    var first = firstApp(s);
     function add() { for (var i = 0; i < arguments.length; i++) L.push(arguments[i]); }
 
     add("# ioSuite in one Docker stack: " + sel.map(function (a) { return a.name; }).join(", ") + (bundled ? ", and MariaDB." : ", on the database server " + dbHost + "."),
@@ -216,8 +219,9 @@
         "#",
         "#   docker compose up -d        # in the folder that holds this file; or paste it as a stack in Dockge or Portainer",
         "#",
-        "# Nothing to edit. `setup` runs first, at every start: it makes the databases" + (admin ? "" : "' tables") + ", the first admin and writes how the",
-        "# suite is reached into the Shared ioSuite database; then the apps start. This file holds passwords: keep it private.",
+        "# Nothing to edit. " + first + " goes first, at every start: before it starts it makes the databases" + (admin ? "" : "' tables") + ", the first admin and",
+        "# writes how the suite is reached into the Shared ioSuite database" + (sel.length > 1 ? "; the other apps start once it is up" : "") + ".",
+        "# This file holds passwords: keep it private.",
         "# To add or remove an app later, open this file on that page (Open a file), change the answers and start it again.",
         "",
         "name: iosuite",
@@ -228,10 +232,7 @@
         "    driver: json-file",
         "    options: {max-size: 5m, max-file: \"3\"}");
     if (hostGateway) add("  extra_hosts: [\"host.docker.internal:host-gateway\"]   # the database server is this machine");
-    add("  depends_on:",
-        "    setup:",
-        "      condition: service_completed_successfully",
-        "",
+    add("",
         "x-env: &env                            # the same for every app: one database server, one Shared ioSuite database",
         "  TZ: " + q(s.tz.trim()),
         "  DB_TYPE: mysql",
@@ -267,24 +268,11 @@
           "");
     }
 
-    var first = SETUP_FIRST.filter(function (k) { return s.apps[k]; })[0] || "iostart";
     var cmd = ["iosuite-shared", "stack"];
     if (admin) cmd = cmd.concat(["--db-admin", admin, "--databases", sel.map(function (a) { return a.key; }).join(",")]);
     cmd = cmd.concat(["--one-address", one ? "on" : "off", "--proxies", trusted.join(",")]);
     if (s.demo) cmd.push("--demo");  // the made-up Calloway family's accounts, and every app fills itself at its first start
-    add("  setup:                                 # runs once at every start, before the apps, then stops",
-        "    image: " + IMAGE + first + ":" + tag,
-        "    container_name: iosuite-setup",
-        "    restart: \"no\"",
-        "    logging: *logging");
-    if (hostGateway) add("    extra_hosts: [\"host.docker.internal:host-gateway\"]");
-    if (bundled) add("    depends_on:", "      db:", "        condition: service_healthy");
-    add("    environment:",
-        "      <<: *env",
-        "      ADMIN_USER: " + q(s.admin.user.trim()) + "               # the first admin: made when there is no account yet",
-        "      ADMIN_PASSWORD: " + q(s.admin.password));
-    if (admin) add("      DB_ADMIN_PASSWORD: " + q(adminPassword) + "   # the database administrator " + admin + ": creates the databases and users that are missing");
-    add("    command: [" + cmd.map(q).join(", ") + "]", "");
+    cmd = cmd.concat(["--", "python", "-m", "app"]);  // what the image runs by itself: the app, once the stack is set up
 
     sel.forEach(function (a) {
       var k = a.key, ports = [], vols = [], env = [];
@@ -311,11 +299,21 @@
           "    <<: *app",
           "    image: " + IMAGE + k + ":" + tag,
           "    container_name: " + k);
+      if (k !== first) add("    depends_on:", "      " + first + ":", "        condition: service_healthy       # " + first + " sets the stack up before it starts");
+      else if (bundled) add("    depends_on:", "      db:", "        condition: service_healthy");
       if (ports.length) { add("    ports:"); ports.forEach(function (p) { add("      - " + p); }); }
       if (k === "iostart" && one) add("    networks:", "      default:", "        ipv4_address: " + n.iostart + "      # the address the other apps know the start page by");
       if (vols.length) { add("    volumes:"); vols.forEach(function (v) { add("      - " + v); }); }
       add("    environment:", "      <<: *env");
       env.forEach(function (e) { add("      " + e); });
+      if (k === first) {
+        add("      ADMIN_USER: " + q(s.admin.user.trim()) + "               # the first admin: made when there is no account yet",
+            "      ADMIN_PASSWORD: " + q(s.admin.password));
+        if (admin) add("      DB_ADMIN_PASSWORD: " + q(adminPassword) + "   # the database administrator " + admin + ": creates the databases and users that are missing");
+        add("    # sets the stack up, then starts the app (no container of its own for that, so none is left stopped)",
+            "    command: [" + cmd.map(q).join(", ") + "]");
+        if (sel.length > 1) add("    healthcheck:", "      interval: 10s                      # the other apps start as soon as this one answers");
+      }
       add("");
     });
 
@@ -366,7 +364,9 @@
   }
 
   /* ---- what to do with the file: [{title, text, code?, head?}] ---- */
+  function firstApp(s) { return SETUP_FIRST.filter(function (k) { return s.apps[k]; })[0] || "iostart"; }  // sets the stack up before it starts; the others wait for it
   function steps(s) {
+    var first = firstApp(s);
     var sel = picked(s), r = s.reach, d = s.db, n = net(s), one = layout(s) === "one", urls = addresses(s), out = [];
     var local = r.https === "proxy" && r.proxyAt === "here";
 
@@ -392,7 +392,7 @@
     out.push({title: "Start it", head: "on the server",
               text: "Save the file as docker-compose.yml in a folder of its own, then start it there. The first start pulls the images and takes a minute or two." +
                     (notes.length ? " " + notes.join(" ") : ""),
-              code: "docker compose up -d\ndocker compose logs setup     # what was set up; it ends with ok"});
+              code: "docker compose up -d\ndocker compose logs " + first + "     # what was set up (its first lines, up to ok)"});
 
     if (r.https === "proxy") {
       var at = local ? "127.0.0.1" : (r.address.trim() || "<this server>");
@@ -414,7 +414,7 @@
 
     out.push({title: "Later", head: "on the server",
               text: "Update by pulling the images. To add or remove an app, or change an answer, open your file on this page (Open a file), change it and start the new file the same way: the data stays in the Docker volumes" + (d.mode === "existing" ? " and on your database server" : "") + "." +
-                    (d.mode === "existing" && d.create === "admin" ? " Once it has started, the administrator's password can be taken out of the file (DB_ADMIN_PASSWORD and --db-admin … --databases … in setup) until you add an app." : ""),
+                    (d.mode === "existing" && d.create === "admin" ? " Once it has started, the administrator's password can be taken out of the file (DB_ADMIN_PASSWORD and --db-admin … --databases … of " + first + ") until you add an app." : ""),
               code: "docker compose pull && docker compose up -d"});
     void n;
     return out;

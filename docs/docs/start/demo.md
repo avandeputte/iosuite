@@ -48,7 +48,8 @@ The dates follow the day the demo is made: the events are this week and the next
 ## Turning it on
 
 **Docker**: tick *Fill it with demo data* in the [Docker Compose builder](https://iosuite.iothing.net/compose/). The
-stack's `setup` service makes the four accounts, and every app fills itself at its first start. It is only done for
+stack's first app turns the demo on before it starts, and every app fills itself at its first start (the four
+accounts come with the first one). It is only done for
 a new suite: a stack whose suite has accounts of its own besides the admin's is left alone.
 
 **An installed server** (Proxmox, Linux, Mac): with any app's config.env,
@@ -57,7 +58,8 @@ a new suite: a stack whose suite has accounts of its own besides the admin's is 
 iosuite-shared --config /opt/iostart/app demo
 ```
 
-makes the accounts and restarts the apps installed there; each adds its demo data as it starts. An app installed
+turns the demo on and restarts the apps installed there; each fetches the demo data and adds its share as it
+starts (the four accounts come with the first one). An app installed
 later adds its own at its first start too, until `iosuite-shared --config /opt/iostart/app demo --off`, which stops
 that and removes nothing.
 
