@@ -65,8 +65,9 @@ def _cfg(env) -> dict:
 
 DENIED = ("(1045",)  # MariaDB: Access denied for user (a wrong password)
 REFUSED_HINT = ("the database server refuses this password. With the stack's own MariaDB this nearly always means its "
-                "volume was made by an earlier stack file, with another root password (MariaDB keeps the one it first "
-                "started with): start over with `docker compose down -v` (it deletes the stack's data), or put the "
+                "data was made by an earlier stack file, with another root password (MariaDB keeps the one it first "
+                "started with): start over with an empty database folder (stop the stack, empty db/ in the stack's "
+                "data folder; on Docker volumes, `docker compose down -v`), which deletes the stack's data, or put the "
                 "earlier passwords back in this file (the compose builder's Open a file shows them)")
 
 

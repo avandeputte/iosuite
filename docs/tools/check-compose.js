@@ -32,15 +32,25 @@ const CASES = {
     check("the start page has its fixed address", y.includes("ipv4_address: 10.186.30.10"));
     check("no demo data unless asked", !y.includes('"--demo"'));
   }],
+  "the data in a folder of the server": [answers({data: "/srv/io suite/", apps: {iobackup: true}, reach: {https: "caddy", domain: "home.example.com"}}), (y, s) => {
+    check("no Docker volumes at all", !/^volumes:/m.test(y) && !/^\s+- [a-z-]+:\//m.test(y));
+    for (const m of ["db:/var/lib/mysql", "ionote:/data", "iopix:/data", "iobackup/data:/data", "iobackup/backups:/backups", "caddy/data:/data", "caddy/config:/config"])
+      check("bind mounted: " + m, y.includes('- "/srv/io suite/' + m + '"'));
+    const prep = "sudo mkdir -p '/srv/io suite/ionote' '/srv/io suite/iopix' '/srv/io suite/iobackup/data' '/srv/io suite/iobackup/backups' && sudo chown 1000:1000 '/srv/io suite/ionote' '/srv/io suite/iopix' '/srv/io suite/iobackup/data' '/srv/io suite/iobackup/backups'";
+    check("the folders the apps write to are made theirs, in the file", y.includes("#   " + prep));
+    check("and in the steps", C.build(s).steps.some(st => (st.code || "").startsWith(prep)));
+  }],
   "with demo data": [answers({demo: true}), y => {
     check("the setup adds the demo", y.includes('"--proxies", "10.186.30.10", "--demo", "--", "python", "-m", "app"]'));
   }],
   "everything, with the admin tools": [answers({apps: {iodns: true, iobackup: true}, iobackup: {folder: "/srv/backups"}, iocontact: {ldap: true}}), y => {
     check("ldap is published", y.includes('- "389:3890"'));
     check("the backups folder is mounted", y.includes('- "/srv/backups:/backups"'));
+    check("the backups folder given is not made in the data folder", !y.includes("iobackup/backups"));
   }],
   "one app, an address per app, no https": [answers({apps: Object.assign(none(), {iocalendar: true}), reach: {layout: "each", address: "192.168.1.10"}}), y => {
-    check("no volumes section when nothing needs one besides the database", has(y, "volumes:") && has(y, "iosuite-db:"));
+    check("no Docker volumes: the database is in the data folder", !/^volumes:/m.test(y) && has(y, '- "/opt/iosuite/db:/var/lib/mysql"'));
+    check("nothing to make for an app that writes nothing", !y.includes("chown"));
     check("its public address", has(y, 'PUBLIC_URL: "http://192.168.1.10:8620"'));
     check("no network of its own without a proxy", !has(y, "networks:"));
     check("one address is off", y.includes('"--one-address", "off", "--proxies", ""'));
@@ -128,7 +138,7 @@ const REFUSED = [
   [{db: {mode: "existing", host: "localhost"}}, "db.host"], [{db: {mode: "existing", host: "db.lan", user: "a b"}}, "db.user"],
   [{reach: {https: "caddy"}}, "reach.domain"], [{reach: {https: "caddy", domain: "home"}}, "reach.domain"],
   [{reach: {layout: "each"}}, "reach.address"], [{reach: {layout: "each", https: "caddy", domain: "example.com", names: {ionote: "calendar"}}}, "reach.names.iocalendar"],
-  [{reach: {https: "proxy", domain: "home.example.com", proxyAt: "other"}}, "reach.proxyIp"], [{subnet: "10.0.0.0/8"}, "subnet"], [{tz: "Brussels time"}, "tz"],
+  [{reach: {https: "proxy", domain: "home.example.com", proxyAt: "other"}}, "reach.proxyIp"], [{subnet: "10.0.0.0/8"}, "subnet"], [{tz: "Brussels time"}, "tz"], [{data: "iosuite"}, "data"],
 ];
 for (const [change, at] of REFUSED) {
   check("refused: " + JSON.stringify(change), C.problems(answers(change)).some(p => p.at === at), "no problem at " + at);
