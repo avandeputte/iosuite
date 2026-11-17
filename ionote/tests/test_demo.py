@@ -1,0 +1,15 @@
+"""The demo data (app/demo.py, iosuite_shared.demo) goes into a fresh database with the app's own code, once, and the
+family signs in to see their notes."""
+from iosuite_shared import demo
+
+from app import config, db, demo as app_demo
+
+
+def test_the_demo_data_goes_in_once(client):
+    assert demo.run(config.APP, app_demo.seed)
+    with db.connect() as con:
+        assert con.execute("SELECT count(DISTINCT user_id) FROM nts_notes").fetchone()[0] == 4
+    assert not demo.run(config.APP, app_demo.seed)  # once
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"name": "theo", "password": demo.DEMO_PASSWORD}).status_code == 200
+    assert {n["title"] for n in client.get("/api/notes").json()["notes"]} >= {"My Lego sets"}

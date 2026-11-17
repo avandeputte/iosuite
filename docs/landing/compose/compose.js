@@ -49,6 +49,7 @@
       iopix: {photos: "", ai: true},
       iocontact: {ldap: false, ldapPort: "389"},
       iobackup: {folder: ""},
+      demo: false,
       tag: "latest",
       subnet: "10.186.30.0/24"
     };
@@ -270,6 +271,7 @@
     var cmd = ["iosuite-shared", "stack"];
     if (admin) cmd = cmd.concat(["--db-admin", admin, "--databases", sel.map(function (a) { return a.key; }).join(",")]);
     cmd = cmd.concat(["--one-address", one ? "on" : "off", "--proxies", trusted.join(",")]);
+    if (s.demo) cmd.push("--demo");  // the made-up Calloway family's accounts, and every app fills itself at its first start
     add("  setup:                                 # runs once at every start, before the apps, then stops",
         "    image: " + IMAGE + first + ":" + tag,
         "    container_name: iosuite-setup",
@@ -405,7 +407,8 @@
     var open = sel.filter(function (a) { return urls[a.key]; }).map(function (a) { return (a.name + "            ").slice(0, 12) + urls[a.key] + (a.key !== "iostart" && one ? "/" : ""); });
     var where = open.length ? "" : (one ? " The suite is at http://<this server>:" + r.port + ", each app in its folder (/" + sel.filter(function (a) { return a.folder; }).slice(0, 2).map(function (a) { return a.folder; }).join("/, /") + "/ and so on)." : "");
     out.push({title: "Sign in", head: "addresses",
-              text: "Sign in as " + (s.admin.user.trim() || "the admin") + " with the password you chose: it is a suite admin, an admin of every app. Add the family under Settings › Security › People." + where +
+              text: "Sign in as " + (s.admin.user.trim() || "the admin") + " with the password you chose: it is a suite admin, an admin of every app. " +
+                    (s.demo ? "The demo family signs in as morgan, riley, ava or theo, password calloway (Morgan is a suite admin too)." : "Add the family under Settings › Security › People.") + where +
                     (s.apps.iocontact && s.iocontact.ldap ? " ioContact's LDAP directory is on port " + s.iocontact.ldapPort + "." : ""),
               code: open.join("\n")});
 

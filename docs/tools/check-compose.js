@@ -30,6 +30,10 @@ const CASES = {
     check("every app's database is made", y.includes('"--databases", "' + C.APPS.filter(a => s.apps[a.key]).map(a => a.key).join(",") + '"'));
     check("the admin's password is quoted with $ doubled", has(y, 'ADMIN_PASSWORD: "It\'s $$ecret \\"1\\""'));
     check("the start page has its fixed address", y.includes("ipv4_address: 10.186.30.10"));
+    check("no demo data unless asked", !y.includes('"--demo"'));
+  }],
+  "with demo data": [answers({demo: true}), y => {
+    check("setup adds the demo", y.includes('"--proxies", "10.186.30.10", "--demo"]'));
   }],
   "everything, with the admin tools": [answers({apps: {iodns: true, iobackup: true}, iobackup: {folder: "/srv/backups"}, iocontact: {ldap: true}}), y => {
     check("ldap is published", y.includes('- "389:3890"'));

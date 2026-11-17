@@ -9,10 +9,10 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from iosuite_shared import chores, mcp as shared_mcp, pages, users
+from iosuite_shared import chores, demo as suite_demo, mcp as shared_mcp, pages, users
 from iosuite_shared.updates import setup_log
 
-from app import __version__, config, db, mcp, suitedb
+from app import __version__, config, db, demo, mcp, suitedb
 from app import notes as notes_mod
 from app.auth import auth, updater
 from app.routes import auth as auth_routes, notes as notes_routes, settings
@@ -35,6 +35,7 @@ async def lifespan(_app):
         log.error("the database could not be opened: %s", e)
         raise
     users.init()
+    suite_demo.at_start(config.APP, demo.seed)  # the demo data while the suite's demo switch is on (iosuite_shared.demo)
     updater.start_daily()
     purge = chores.start(notes_mod.housekeeping, every_s=6 * 3600, name="purge of the trash and of what deletions left behind")
     c = db.settings()

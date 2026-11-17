@@ -14,14 +14,14 @@ from contextlib import asynccontextmanager
 from fastapi import Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi import HTTPException
-from iosuite_shared import mcp as shared_mcp, pages
+from iosuite_shared import demo as suite_demo, mcp as shared_mcp, pages
 from iosuite_shared.fastapi import public_user
 from iosuite_shared.proxyauth import peer_of
 from iosuite_shared.updates import setup_log
 
 from app.ai import analysis, models as dlmodels
 from app.faces import facedetect, facemgr
-from app import access, config, events, jobs as bgjobs, mcp, thumbs, users
+from app import access, config, demo, events, jobs as bgjobs, mcp, thumbs, users
 from app.auth import auth, updater
 from app.photos import consistency, edits, history, lossless, scanner, tagmanager
 from app.data import index as photo_index, state as appstate, appdb
@@ -54,7 +54,8 @@ async def lifespan(_app):
     if tagmanager.pending_jobs():  # finish sidecar updates left over from a previous run
         tagmanager.start_worker()
     facemgr.resume_queue()  # and the face sidecar rewrites a restart interrupted
-    refresh(initial=True)
+    refresh(initial=True)  # also starts the library when there is no digiKam database
+    suite_demo.at_start(config.APP, demo.seed)  # the demo photos while the suite's demo switch is on (iosuite_shared.demo); the watcher indexes them
     threading.Thread(target=thumbs.keep_pruned, name="cache-prune", daemon=True).start()  # the previews and the cut-down thumbnails, under their caps
     threading.Thread(target=watch, name="reindex", daemon=True).start()
     scanner.start(events.after_write)  # the file scanner (Settings › Library › File scanner): passes only while it is on

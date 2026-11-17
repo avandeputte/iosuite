@@ -15,6 +15,9 @@ service; any app's image can run it, since every image holds this library):
      a Caddy container, the proxy on the host). They are written when they differ from what this command wrote the
      last time, so a later `up` of the same file leaves alone what a suite admin has changed under Settings since; a
      stack file that says something new is applied.
+  4. with `--demo`: the demo data (iosuite_shared.demo): the made-up Calloway family's accounts, and the switch that
+     has every app of the stack add its demo data at its first start. Only on a suite with no accounts but the admin's
+     yet, so a later `up` of a stack that has been used for real never adds it.
 
 The database is waited for (a container that was only just started), a minute at most.
 """
@@ -32,6 +35,7 @@ def add_parser(sub):
     p.add_argument("--databases", default="", help="with --db-admin: the apps' databases, commas between them (iostart,iocalendar)")
     p.add_argument("--client-host", default="%", help="with --db-admin: the host the users are made for (default %%: any)")
     p.add_argument("--one-address", choices=("on", "off"), default=None, help="the start page answers for every app, each in its folder")
+    p.add_argument("--demo", action="store_true", help="fill a new suite with demo data: a made-up family of four, something in every app")
     p.add_argument("--proxies", default=None, help="the addresses or networks the reverse proxies connect from, commas between them ('' for none)")
     return p
 
@@ -104,6 +108,20 @@ def declare(one_address=None, proxies=None, log=print):
     return wrote
 
 
+def demo_once(log=print) -> bool:
+    """Step 4: the demo on a new suite (no account but the first admin) or one that has it already."""
+    from iosuite_shared import demo, users
+    people = [u for u in users.list_users() if u["name"] not in {p["key"] for p in demo.FAMILY}]
+    if not demo.wanted() and len(people) > 1:
+        log("  demo data: not added, this suite has accounts of its own")
+        return False
+    demo.ensure()
+    if not demo.wanted():
+        demo.switch(True)
+        log(f"  demo data: the Calloway family (morgan, riley, ava, theo; password {demo.DEMO_PASSWORD}); every app adds its own at its first start")
+    return True
+
+
 def main(a, log=print):
     if a.db_admin:
         provision_from_env(a.db_admin, a.databases, a.client_host, log=log)
@@ -115,6 +133,8 @@ def main(a, log=print):
     _wait("the Shared ioSuite database", tables, log)
     log(f"  the Shared ioSuite database is ready: {len(users.list_users())} account(s)")
     declare(a.one_address, a.proxies, log=log)
+    if getattr(a, "demo", False):
+        demo_once(log=log)
     log("ok")
     sys.stdout.flush()
     return 0

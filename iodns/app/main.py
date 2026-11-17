@@ -12,9 +12,10 @@ from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from iosuite_shared import pages, users as shared_users
+from iosuite_shared import demo as suite_demo
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, config, db, ddns, model, sync
+from app import __version__, api, config, db, ddns, demo, model, sync
 from app.auth import auth, updater
 from app.providers import ProviderError
 
@@ -29,6 +30,7 @@ OPEN_PREFIXES = ("/static/",)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
+    await run_in_threadpool(suite_demo.at_start, config.APP, demo.seed)  # the demo data while the suite's demo switch is on (iosuite_shared.demo)
     await run_in_threadpool(shared_users.init)
     updater.start_daily()             # the daily "is there a newer version" check, while the setting allows it
     if config.env_flag("BACKGROUND", True):
