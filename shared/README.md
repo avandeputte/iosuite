@@ -685,7 +685,7 @@ administrator's password travels in `DB_ADMIN_PASSWORD`, never on a command line
 ### A Docker stack set up before its apps start: `stack`
 
 ```sh
-iosuite-shared stack [--db-admin root --databases iostart,iocalendar] [--one-address on|off] [--proxies 10.186.30.10,10.186.30.11]
+iosuite-shared stack [--db-admin root --databases iostart,iocalendar] [--one-address on|off] [--proxies 10.186.30.10,10.186.30.11] [--demo]
 ```
 
 The `setup` service of a stack file made by the [Docker Compose builder](https://iosuite.iothing.net/compose/) runs
@@ -698,7 +698,23 @@ the builder makes the passwords at random). It then makes the Shared ioSuite dat
 reached: the one-address switch and the reverse proxy addresses, which live in the Shared ioSuite database and not in
 any app's environment. Those two are written only when they differ from what `stack` wrote the last time, so starting
 the same file again leaves alone what a suite admin changed under Settings since. A database that is still starting
-is waited for, a minute at most.
+is waited for, a minute at most. With `--demo` (the builder's "Fill it with demo data") it also turns the demo on, below,
+but only on a suite with no account besides the first admin's.
+
+### Demo data: `demo`
+
+```sh
+iosuite-shared --config /opt/iostart/app demo [--off] [--no-restart]
+```
+
+A made-up family of four, the Calloways (`morgan`, `riley`, `ava`, `theo`, password `calloway`), with something in
+every app (`iosuite_shared.demo`). This makes the four accounts in the Shared ioSuite database (in the family list,
+with their colours), turns on the suite-wide `demo` setting and restarts the apps installed beside the given one. Each
+app keeps its own demo data in `app/demo.py` (`seed(people)`, written with the app's own code, so it follows the app's
+tables) and calls `demo.at_start(APP, seed)` at start, after its tables: while the setting is on and the app has not
+been seeded (`demo_seeded` in its settings), it is seeded once. `--off` stops further seeding and removes nothing. The
+dates are relative to the day the seed runs. Everything is invented: example.com addresses, 555-01xx numbers, drawn
+pictures (`demo.picture`).
 
 ## Tests
 

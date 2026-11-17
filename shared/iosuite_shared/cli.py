@@ -1,4 +1,4 @@
-"""iosuite-shared: init | check | list | create | admin | role | password | edge | install, remove, apps (see install.py) | provision (see provision.py) | stack (see stack.py).
+"""iosuite-shared: init | check | list | create | admin | role | password | edge | install, remove, apps (see install.py) | provision (see provision.py) | stack (see stack.py) | demo (see demo.py).
 
 Every app's setup.sh makes its first admin with `iosuite-shared admin NAME --app APP` (the password from ADMIN_PASSWORD,
 else asked for) and checks the Shared ioSuite database with `iosuite-shared check`; run them with the app's config.env
@@ -31,8 +31,9 @@ def main(argv=None):
     e.add_argument("--account-id", default=None, help="store the Cloudflare account id in the Shared ioSuite database")
     e.add_argument("--namespace-id", default=None, help="store the KV namespace id")
     e.add_argument("--token-file", default=None, help="store the API token read from this file ('-': standard input)")
-    from iosuite_shared import install, provision, stack
+    from iosuite_shared import demo, install, provision, stack
     install.add_parser(sub)
+    demo.add_parser(sub)
     provision.add_parser(sub)
     stack.add_parser(sub)
     a = p.parse_args(argv)
@@ -44,6 +45,8 @@ def main(argv=None):
         return install.main(a)
     if a.cmd == "provision":  # connects as the administrator, not as the app
         return provision.main(a)
+    if a.cmd == "demo":  # the family's accounts and the switch; every app adds its own at its next start
+        return demo.main(a)
     if a.cmd == "stack":  # a Docker stack's setup service: the databases first, then the tables
         return stack.main(a)
 

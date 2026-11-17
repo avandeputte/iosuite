@@ -36,7 +36,8 @@ makes the databases and users that are missing, the first admin, and writes how 
 ioSuite database (the one-address switch and the reverse proxy addresses), so there is nothing to click afterwards.
 What a suite admin changes under Settings later stays until the file says something new. The page works in your
 browser alone: nothing you type is sent anywhere. To add or remove an app later, open your file on the page again;
-it holds its own answers.
+it holds its own answers. Ticking *Fill it with demo data* adds a made-up family with something in every app
+([Demo data](demo.md)).
 
 ## One app
 

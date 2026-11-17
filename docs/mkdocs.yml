@@ -91,6 +91,7 @@ nav:
       - Any Linux or Mac: start/linux-mac.md
       - Several apps on one host: start/several-apps.md
       - First run: start/first-run.md
+      - Demo data: start/demo.md
   - The apps:
       - ioPix: apps/iopix.md
       - ioNote: apps/ionote.md

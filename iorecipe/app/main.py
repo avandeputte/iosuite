@@ -12,9 +12,10 @@ from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from iosuite_shared import mcp as shared_mcp, pages
+from iosuite_shared import demo as suite_demo
 from iosuite_shared.updates import setup_log
 
-from app import __version__, ai, api, config, db, mcp, model, users
+from app import __version__, ai, api, config, db, demo, mcp, model, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -31,6 +32,7 @@ OPEN_PREFIXES = ("/static/", "/mcp")
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
     await run_in_threadpool(users.init)
+    await run_in_threadpool(suite_demo.at_start, config.APP, demo.seed)  # the demo data while the suite's demo switch is on (iosuite_shared.demo)
     ai.start()              # the AI model on its way, where it is wanted and not there yet
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
     log.info("ioRecipe %s started, database %s:%s/%s", __version__, config.DB_HOST, config.DB_PORT, config.DB_NAME)
