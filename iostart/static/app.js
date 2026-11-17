@@ -254,10 +254,8 @@ async function showHome(page) {
   // each other, else each stands on its own
   S.birthdaysCard = shows('birthdays') && S.apps.some((a) => a.key === 'iocontact');  // then the calendar leaves birthdays to it
   const stripKind = L.strip || got.photoStrip;
-  const alerts = h('div', { class: 'alerts', hidden: true });  // what Home Assistant says needs attention (drawHomeCard fills it)
-  col.append(alerts);
   const cards = {
-    home: shows('home') ? () => { const c = h('div', { class: 'card homecard', hidden: true }); drawHomeCard(c, alerts); return c; } : null,
+    home: shows('home') ? () => { const c = h('div', { class: 'card homecard', hidden: true }); drawHomeCard(c); return c; } : null,
     birthdays: S.birthdaysCard ? () => { const c = h('div', { class: 'card capped birthdays' }); drawBirthdays(c); return c; } : null,
     week: shows('week') && S.apps.some((a) => a.key === 'iocalendar') ? () => { const c = h('div', { class: 'card capped week' }); drawWeek(c); return c; } : null,
     strip: shows('strip') && stripKind !== 'off' && S.apps.some((a) => a.key === 'iopix') ? () => { const c = h('div', { class: 'strip' }); drawStrip(c, stripKind); return c; } : null,
@@ -279,7 +277,7 @@ async function showHome(page) {
     drawWidgets(page, true); drawAppStatus(page); drawWeather(wx, true);
     for (const c of page.querySelectorAll('.card.birthdays.capped')) drawBirthdays(c, true);
     for (const c of page.querySelectorAll('.card.week.capped')) drawWeek(c, true);
-    const hc = page.querySelector('.homecard'); if (hc) drawHomeCard(hc, alerts, true);
+    const hc = page.querySelector('.homecard'); if (hc) drawHomeCard(hc, true);
     const bm = page.querySelector('.bookmarks'); if (bm) drawBookmarkStatus(bm);
   };
 }
@@ -372,7 +370,7 @@ function searchBox() {
       things.q === ql && things.items.length ? h('div', { class: 'qhead' }, 'Home') : null,
       things.q === ql ? things.items.map((t) => { const a = row(t.control ? '#' : haLink(t), [h('span', { class: `bmic ha${t.on ? ' on' : ''}` }, icon(haIcon(t), 's')), h('span', { class: 'qname' }, t.name), h('span', { class: `muted small${t.control ? ' tap' : ''}` }, t.control ? `${t.text || t.state} · tap` : t.text || t.state)]);
         if (t.control && HA_POPUPS[t.domain]) a.onclick = (e) => { e.preventDefault(); inp.blur(); haPopup(t, (r) => Object.assign(t, r)); };
-        else if (t.control) a.onclick = async (e) => { e.preventDefault(); const r = await haAct(t.id, 'toggle'); if (r) { Object.assign(t, r); build(); } const card = document.querySelector('.homecard'); if (card) setTimeout(() => drawHomeCard(card, document.querySelector('.alerts'), true), 4000); }; return a; }) : null,
+        else if (t.control) a.onclick = async (e) => { e.preventDefault(); const r = await haAct(t.id, 'toggle'); if (r) { Object.assign(t, r); build(); } const card = document.querySelector('.homecard'); if (card) setTimeout(() => drawHomeCard(card, true), 4000); }; return a; }) : null,
       // "dinner fri 19:00": a new event in ioCalendar (a dialog to check it first)
       cal ? [h('div', { class: 'qhead' }, 'Add to the calendar'), (() => { const a = row('#', [h('span', { class: 'bmic' }, icon('event', 's')), h('span', { class: 'qname' }, cal.title || '(no title)'), h('span', { class: 'muted small' }, eventWhen(cal))]);
         a.onclick = (e) => { e.preventDefault(); inp.blur(); quickAdd(cal); }; return a; })()] : null,
@@ -921,7 +919,7 @@ const haTile = (t) => {
     const r = await haAct(t.id, 'toggle');
     if (r && b.isConnected) b.replaceWith(haTile({ ...t, ...r, control: t.control })); else b.classList.remove('busy');
     // a device that reports back late (Zigbee, Z-Wave, a cloud bulb): the card asks again in a few seconds
-    if (card) setTimeout(() => { if (card.isConnected && !document.hidden) drawHomeCard(card, document.querySelector('.alerts'), true); }, 4000);
+    if (card) setTimeout(() => { if (card.isConnected && !document.hidden) drawHomeCard(card, true); }, 4000);
   };
   return b;
 };
@@ -1006,35 +1004,32 @@ function haStreamStop() {
   haListeners.clear();
   if (S.haStream) { S.haStream.close(); S.haStream = null; }
 }
-async function drawHomeCard(el, alertsEl, again = false) {
+async function drawHomeCard(el, again = false) {
   if (!el.haLive) {  // the first draw: from here on the stream redraws the card as Home Assistant changes
     el.haLive = true;
-    const off = haSubscribe((d) => { if (!el.isConnected) { off(); return; } renderHomeCard(el, alertsEl, d); });
+    const off = haSubscribe((d) => { if (!el.isConnected) { off(); return; } renderHomeCard(el, d); });
   }
   let d;
   try { d = await api('api/ha'); } catch (e) { if (!again) { el.hidden = false; el.replaceChildren(h('div', { class: 'muted small' }, e.message)); } return; }
   if (!el.isConnected) return;
-  renderHomeCard(el, alertsEl, d);
+  renderHomeCard(el, d);
 }
-function renderHomeCard(el, alertsEl, d) {
+function renderHomeCard(el, d) {
   S.ha = d.enabled ? d : false;
   if (!d.enabled) { el.hidden = S.user.role !== 'admin'; if (!el.hidden) el.replaceChildren(wgHead('Home'), h('a', { class: 'lnk small', href: '#/settings/ha' }, 'Add Home Assistant')); return; }
   el.hidden = false;
   const title = wgHead(d.name || 'Home', null);
   title.append(h('a', { class: 'muted', href: d.url, title: d.url, target: '_blank', rel: 'noreferrer' }, 'Home Assistant'));
   if (d.error) { el.replaceChildren(title, h('div', { class: 'muted small' }, d.error)); return; }
-  el.replaceChildren(title,
+  // what needs attention (a leak, a problem, a low battery, a chosen entity's "alert when"), inside the card above its tiles
+  const al = d.alerts || [];
+  el.replaceChildren(...[title,
+    al.length ? h('div', { class: 'alerts' }, al.map((a) => h('a', { class: 'alert', href: haLink(a), target: '_blank', rel: 'noreferrer', title: a.id }, icon('warn', 's'), h('b', null, a.name), h('span', null, a.text)))) : null,
     d.items.length ? h('div', { class: 'hatiles' }, d.items.map(haTile))
-      : h('div', { class: 'muted small' }, S.user.role === 'admin' ? ['No entities picked yet: ', h('a', { class: 'lnk', href: '#/settings/ha' }, 'choose some')] : 'No entities picked yet.'));
-  // what needs attention, above the tiles
-  if (alertsEl) {
-    const al = d.alerts || [];
-    alertsEl.hidden = !al.length;
-    alertsEl.replaceChildren(...al.map((a) => h('a', { class: 'alert', href: haLink(a), target: '_blank', rel: 'noreferrer', title: a.id }, icon('warn', 's'), h('b', null, a.name), ' ', a.text)));
-  }
+      : h('div', { class: 'muted small' }, S.user.role === 'admin' ? ['No entities picked yet: ', h('a', { class: 'lnk', href: '#/settings/ha' }, 'choose some')] : 'No entities picked yet.')].filter(Boolean));
   // without the stream (an old browser), its own minute: a light switched elsewhere shows here soon
   clearTimeout(el.haTimer);
-  if (!S.haStream) el.haTimer = setTimeout(() => { if (el.isConnected && !document.hidden) drawHomeCard(el, alertsEl, true); }, 60 * 1000);
+  if (!S.haStream) el.haTimer = setTimeout(() => { if (el.isConnected && !document.hidden) drawHomeCard(el, true); }, 60 * 1000);
 }
 
 async function drawWeather(el, again = false) {

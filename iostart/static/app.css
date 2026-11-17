@@ -455,11 +455,13 @@ table.t td .dot { display: inline-block; width: 10px; height: 10px; border-radiu
   .wxday { min-width: 44px; padding: 2px 3px; }
 }
 
-/* ---- Home Assistant: what needs attention (above the tiles), the Home card, the wall's sensors, Settings */
-.alerts { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 14px; }
-.alert { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px 6px 10px; border-radius: var(--r-pill); font-size: var(--fs-s); color: var(--warn);
+/* ---- Home Assistant: what needs attention (in the Home card, above its tiles), the Home card, the wall's sensors, Settings */
+.homecard .alerts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+.alert { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 6px 12px 6px 10px; border-radius: var(--r-pill); font-size: var(--fs-s); color: var(--warn);
   background: color-mix(in srgb, var(--warn) 14%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
-.alert .ic { width: 16px; height: 16px; }
+.alert .ic { width: 16px; height: 16px; flex: none; }
+.homecard .alert b, .homecard .alert span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.homecard .alert span { flex: none; opacity: .85; }
 .homecard { margin-top: 16px; }
 .homecard .wghead > a { margin-left: auto; }
 .hatiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }

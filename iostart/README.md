@@ -63,7 +63,7 @@ what the app will show on the start page later (today's events, the newest photo
 - **Home Assistant**: a Home card with the entities an admin picks (lights, switches, locks, covers, scenes, sensors,
   people), each with its state; a tap toggles the ones the admin ticked "control", for editors and admins (a viewer sees the
   states and switches nothing, so a wall tablet that should switch lights signs in as an editor). Sensors ticked "wall" show on the
-  wall display; the search box finds any entity by name and toggles the controllable ones; a line above the tiles
+  wall display; the search box finds any entity by name and toggles the controllable ones; a line at the top of the Home card
   points out what needs attention (an entity in the state the admin named, and built in: a leak, smoke, gas or CO
   sensor that is on, a problem or safety sensor, a battery at 15% or under). Settings › Home Assistant (admins) takes
   the address and a long-lived access token; the server makes every call with it, and browsers never see the token
