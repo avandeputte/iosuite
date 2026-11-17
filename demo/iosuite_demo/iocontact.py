@@ -1,8 +1,8 @@
-"""Demo data (iosuite_shared.demo): the Calloways' address book. The four of them (each account's "This is me" card),
+"""Demo data for iocontact (the iosuite_demo package): the Calloways' address book. The four of them (each account's "This is me" card),
 grandparents, an uncle, friends, the children's friends, and the people and places a family calls: the school, the
 dentist, the vet, a plumber. The relations are set (Riley's mother, Ava's brother, ...), so the family tree and the
 birthdays (ioCalendar's Birthdays calendar) have something to show."""
-from iosuite_shared import demo
+import iosuite_demo as demo
 
 from app import model, users
 

@@ -15,8 +15,8 @@ service; any app's image can run it, since every image holds this library):
      a Caddy container, the proxy on the host). They are written when they differ from what this command wrote the
      last time, so a later `up` of the same file leaves alone what a suite admin has changed under Settings since; a
      stack file that says something new is applied.
-  4. with `--demo`: the demo data (iosuite_shared.demo): the made-up Calloway family's accounts, and the switch that
-     has every app of the stack add its demo data at its first start. Only on a suite with no accounts but the admin's
+  4. with `--demo`: the demo switch (iosuite_shared.demo), which has every app of the stack fetch the demo data (the
+     made-up Calloway family) and add its share at its first start. Only on a suite with no accounts but the admin's
      yet, so a later `up` of a stack that has been used for real never adds it.
 
 The database is waited for (a container that was only just started), a minute at most.
@@ -111,14 +111,13 @@ def declare(one_address=None, proxies=None, log=print):
 def demo_once(log=print) -> bool:
     """Step 4: the demo on a new suite (no account but the first admin) or one that has it already."""
     from iosuite_shared import demo, users
-    people = [u for u in users.list_users() if u["name"] not in {p["key"] for p in demo.FAMILY}]
+    people = [u for u in users.list_users() if u["name"] not in demo.FAMILY_KEYS]
     if not demo.wanted() and len(people) > 1:
         log("  demo data: not added, this suite has accounts of its own")
         return False
-    demo.ensure()
     if not demo.wanted():
         demo.switch(True)
-        log(f"  demo data: the Calloway family (morgan, riley, ava, theo; password {demo.DEMO_PASSWORD}); every app adds its own at its first start")
+        log(f"  demo data: the Calloway family ({', '.join(demo.FAMILY_KEYS)}; password {demo.DEMO_PASSWORD}); every app fetches the demo data and adds its own at its first start")
     return True
 
 

@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from iosuite_shared import chores, demo as suite_demo, pages, users as shared
 from iosuite_shared.updates import setup_log
 
-from app import __version__, config, db, demo, notify, upload, webapi
+from app import __version__, config, db, notify, upload, webapi
 from app.auth import APP, auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -30,7 +30,7 @@ async def lifespan(_app):
     db.wait_for_server()
     shared.init()
     db.migrate()
-    suite_demo.at_start(APP, demo.seed)  # the demo data while the suite's demo switch is on (iosuite_shared.demo); before the hourly backfill
+    suite_demo.at_start(APP)  # the demo data while the suite's demo switch is on (iosuite_shared.demo fetches the iosuite_demo package); before the hourly backfill
     webapi.start_backfill()
     updater.start_daily()
     week = chores.start(notify.weekly, every_s=60, first_s=20, name="weekly summary")  # Monday morning: last week next to the one before

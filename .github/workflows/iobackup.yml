@@ -7,9 +7,9 @@ name: ioBackup
 on:
   push:
     branches: [main]
-    paths: ["iobackup/**", "shared/**", ".github/workflows/iobackup.yml"]
+    paths: ["iobackup/**", "shared/**", "demo/**", ".github/workflows/iobackup.yml"]
   pull_request:
-    paths: ["iobackup/**", "shared/**", ".github/workflows/iobackup.yml"]
+    paths: ["iobackup/**", "shared/**", "demo/**", ".github/workflows/iobackup.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/

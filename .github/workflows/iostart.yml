@@ -7,9 +7,9 @@ name: ioStart
 on:
   push:
     branches: [main]
-    paths: ["iostart/**", "shared/**", ".github/workflows/iostart.yml"]
+    paths: ["iostart/**", "shared/**", "demo/**", ".github/workflows/iostart.yml"]
   pull_request:
-    paths: ["iostart/**", "shared/**", ".github/workflows/iostart.yml"]
+    paths: ["iostart/**", "shared/**", "demo/**", ".github/workflows/iostart.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/

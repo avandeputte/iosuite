@@ -708,13 +708,14 @@ iosuite-shared --config /opt/iostart/app demo [--off] [--no-restart]
 ```
 
 A made-up family of four, the Calloways (`morgan`, `riley`, `ava`, `theo`, password `calloway`), with something in
-every app (`iosuite_shared.demo`). This makes the four accounts in the Shared ioSuite database (in the family list,
-with their colours), turns on the suite-wide `demo` setting and restarts the apps installed beside the given one. Each
-app keeps its own demo data in `app/demo.py` (`seed(people)`, written with the app's own code, so it follows the app's
-tables) and calls `demo.at_start(APP, seed)` at start, after its tables: while the setting is on and the app has not
-been seeded (`demo_seeded` in its settings), it is seeded once. `--off` stops further seeding and removes nothing. The
-dates are relative to the day the seed runs. Everything is invented: example.com addresses, 555-01xx numbers, drawn
-pictures (`demo.picture`).
+every app. This library only carries the switch (`iosuite_shared.demo`): the command turns on the suite-wide `demo`
+setting and restarts the apps installed beside the given one; `--off` stops further seeding and removes nothing. The
+demo data itself is the `iosuite_demo` package, the repository's `demo/` folder, which no install carries: each app
+calls `demo.at_start(APP)` at start, after its tables, and while the setting is on and the app has not been seeded
+(`demo_seeded` in its settings) it fetches the package (`DEMO_PACKAGE` when set, else `demo/` of a git checkout, else
+`iosuite-demo.zip` of the release of this version, which the release workflow builds), runs the app's seed from it
+once (the family's accounts are made when missing) and deletes the download. A package that cannot be fetched leaves
+the app to try again at its next start.
 
 ## Tests
 

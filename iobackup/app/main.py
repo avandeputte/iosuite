@@ -15,7 +15,7 @@ from iosuite_shared import pages, users as shared_users
 from iosuite_shared import demo as suite_demo
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, config, db, demo, engine, gdrive, model, tasks
+from app import __version__, api, config, db, engine, gdrive, model, tasks
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -29,7 +29,7 @@ OPEN_PREFIXES = ("/static/",)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
-    await run_in_threadpool(suite_demo.at_start, config.APP, demo.seed)  # the demo data while the suite's demo switch is on (iosuite_shared.demo)
+    await run_in_threadpool(suite_demo.at_start, config.APP)  # the demo data while the suite's demo switch is on (iosuite_shared.demo fetches the iosuite_demo package)
     await run_in_threadpool(shared_users.init)
     updater.start_daily()             # the daily "is there a newer version" check, while the setting allows it
     if config.env_flag("BACKGROUND", True):

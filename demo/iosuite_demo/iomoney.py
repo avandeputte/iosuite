@@ -1,4 +1,4 @@
-"""Demo data (iosuite_shared.demo): the Calloways' finances, entered by hand (no Monarch Money). A checking and a savings
+"""Demo data for iomoney (the iosuite_demo package): the Calloways' finances, entered by hand (no Monarch Money). A checking and a savings
 account, a credit card, a retirement account and a college fund with holdings, the house and its mortgage, the car
 and its loan. Six months of transactions (two salaries, the mortgage, the bills, groceries, the children's lessons,
 streaming subscriptions, the card paid off from checking), so the spending, cash flow, recurring and net worth pages
@@ -7,7 +7,7 @@ import datetime as dt
 import random
 from decimal import Decimal
 
-from iosuite_shared import demo
+import iosuite_demo as demo
 
 from app import categories, model, recurring, users
 

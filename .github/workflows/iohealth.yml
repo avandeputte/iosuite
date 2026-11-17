@@ -7,9 +7,9 @@ name: ioHealth
 on:
   push:
     branches: [main]
-    paths: ["iohealth/**", "shared/**", ".github/workflows/iohealth.yml"]
+    paths: ["iohealth/**", "shared/**", "demo/**", ".github/workflows/iohealth.yml"]
   pull_request:
-    paths: ["iohealth/**", "shared/**", ".github/workflows/iohealth.yml"]
+    paths: ["iohealth/**", "shared/**", "demo/**", ".github/workflows/iohealth.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/

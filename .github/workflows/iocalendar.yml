@@ -7,9 +7,9 @@ name: ioCalendar
 on:
   push:
     branches: [main]
-    paths: ["iocalendar/**", "shared/**", ".github/workflows/iocalendar.yml"]
+    paths: ["iocalendar/**", "shared/**", "demo/**", ".github/workflows/iocalendar.yml"]
   pull_request:
-    paths: ["iocalendar/**", "shared/**", ".github/workflows/iocalendar.yml"]
+    paths: ["iocalendar/**", "shared/**", "demo/**", ".github/workflows/iocalendar.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/

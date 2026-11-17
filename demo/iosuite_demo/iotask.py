@@ -1,6 +1,6 @@
-"""Demo data (iosuite_shared.demo): the Calloways' lists. The shared Family list and a Groceries list, everyone's
+"""Demo data for iotask (the iosuite_demo package): the Calloways' lists. The shared Family list and a Groceries list, everyone's
 Personal list, chores for the children, a few done, some repeating, one with subtasks."""
-from iosuite_shared import demo
+import iosuite_demo as demo
 
 from app import ical, model
 

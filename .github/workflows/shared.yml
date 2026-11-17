@@ -8,9 +8,9 @@ name: Shared library
 on:
   push:
     branches: [main]
-    paths: ["shared/**", "*/update.sh", "*/setup.sh", "*/run.sh", ".github/workflows/shared.yml"]
+    paths: ["shared/**", "demo/**", "*/update.sh", "*/setup.sh", "*/run.sh", ".github/workflows/shared.yml"]
   pull_request:
-    paths: ["shared/**", "*/update.sh", "*/setup.sh", "*/run.sh", ".github/workflows/shared.yml"]
+    paths: ["shared/**", "demo/**", "*/update.sh", "*/setup.sh", "*/run.sh", ".github/workflows/shared.yml"]
   workflow_dispatch:
 
 defaults:
@@ -79,4 +79,6 @@ jobs:
           t="$(printf '%s' "$t" | sed -E 's/^(ioSuite )?v?[0-9]+\.[0-9]+\.[0-9]+: //; s/ \(#[0-9]+\)$//')"
           git log -1 --format=%B > notes.md
           printf '\n\nImages: `ghcr.io/avandeputte/iosuite/<app>:%s` (also `latest`).\n' "$v" >> notes.md
-          gh release create "$v" ../iopix/dist/iopix-install.sh --target "$GITHUB_SHA" --title "ioSuite ${v#v}: $t" --notes-file notes.md
+          # the demo data (demo/, never part of an install): what an app fetches when the suite's demo switch is on (iosuite_shared.demo)
+          (cd ../demo && zip -qr ../shared/iosuite-demo.zip iosuite_demo -x '*__pycache__*')
+          gh release create "$v" ../iopix/dist/iopix-install.sh iosuite-demo.zip --target "$GITHUB_SHA" --title "ioSuite ${v#v}: $t" --notes-file notes.md

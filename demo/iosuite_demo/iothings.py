@@ -1,7 +1,7 @@
-"""Demo data (iosuite_shared.demo): the Calloways' things. The house's rooms and the garage, labels, appliances,
+"""Demo data for iothings (the iosuite_demo package): the Calloways' things. The house's rooms and the garage, labels, appliances,
 electronics, the bikes and the car with what they cost, warranties (one ending soon), receipts as PDFs, drawn photos,
 upkeep that falls due (the furnace filter, the car's service) and a maintenance log, one thing sold."""
-from iosuite_shared import demo
+import iosuite_demo as demo
 
 from app import files, model, upkeep, users
 

@@ -7,9 +7,9 @@ name: ioMoney
 on:
   push:
     branches: [main]
-    paths: ["iomoney/**", "shared/**", ".github/workflows/iomoney.yml"]
+    paths: ["iomoney/**", "shared/**", "demo/**", ".github/workflows/iomoney.yml"]
   pull_request:
-    paths: ["iomoney/**", "shared/**", ".github/workflows/iomoney.yml"]
+    paths: ["iomoney/**", "shared/**", "demo/**", ".github/workflows/iomoney.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/

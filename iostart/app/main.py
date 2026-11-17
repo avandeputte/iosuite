@@ -16,7 +16,7 @@ from iosuite_shared import mcp as shared_mcp, users
 from iosuite_shared import demo as suite_demo
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, bookmarkdav, bookmarkext, bookmarks, config, db, demo, frontdoor, keys, mcp, ncbookmarks
+from app import __version__, api, bookmarkdav, bookmarkext, bookmarks, config, db, frontdoor, keys, mcp, ncbookmarks
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -33,7 +33,7 @@ OPEN_PREFIXES = ("/static/", "/mcp", "/dav/")
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
     await run_in_threadpool(users.init)
-    await run_in_threadpool(suite_demo.at_start, config.APP, demo.seed)  # the demo data while the suite's demo switch is on (iosuite_shared.demo)
+    await run_in_threadpool(suite_demo.at_start, config.APP)  # the demo data while the suite's demo switch is on (iosuite_shared.demo fetches the iosuite_demo package)
     await run_in_threadpool(bookmarks.claim_unowned)  # bookmarks nobody owns become the first admin's
     await run_in_threadpool(keys.declare)  # the Home Assistant token and AccuWeather key live with the suite's keys and tokens
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it

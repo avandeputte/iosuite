@@ -14,7 +14,7 @@ from iosuite_shared import chores, mcp as shared_mcp, pages
 from iosuite_shared import demo as suite_demo
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, bills, caldav, config, contacts, db, demo, holiday, ical, mcp, model, notify, subscribe, tasks, users
+from app import __version__, api, bills, caldav, config, contacts, db, holiday, ical, mcp, model, notify, subscribe, tasks, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -31,7 +31,7 @@ OPEN_PREFIXES = ("/static/", "/ics/", "/dav", "/.well-known/", "/mcp", "/profile
 async def lifespan(app: FastAPI):
     await run_in_threadpool(db.migrate)
     await run_in_threadpool(users.init)
-    await run_in_threadpool(suite_demo.at_start, config.APP, demo.seed)  # the demo data while the suite's demo switch is on (iosuite_shared.demo)
+    await run_in_threadpool(suite_demo.at_start, config.APP)  # the demo data while the suite's demo switch is on (iosuite_shared.demo fetches the iosuite_demo package)
     updater.start_daily()   # the daily "is there a newer version" check, while the setting allows it
     contacts.start_sync()   # the Birthdays calendar from ioContact, every few hours
     holiday.start_sync()    # the Holidays calendar, every day

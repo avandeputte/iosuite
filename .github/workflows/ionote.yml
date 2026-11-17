@@ -6,9 +6,9 @@ name: ioNote
 on:
   push:
     branches: [main]
-    paths: ["ionote/**", "shared/**", ".github/workflows/ionote.yml"]
+    paths: ["ionote/**", "shared/**", "demo/**", ".github/workflows/ionote.yml"]
   pull_request:
-    paths: ["ionote/**", "shared/**", ".github/workflows/ionote.yml"]
+    paths: ["ionote/**", "shared/**", "demo/**", ".github/workflows/ionote.yml"]
   workflow_dispatch:
 
 # every step runs in the app's folder; the shared library sits beside it in shared/
