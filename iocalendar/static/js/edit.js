@@ -155,7 +155,40 @@ export async function showEdit(page, r) {
   repSel.onchange = () => { rs.kind = repSel.value; drawRepeat(); };
   drawRepeat();
   // place, people
-  const place = h('input', { class: 't', value: j.location || '', placeholder: 'Address or place' });
+  const place = h('input', { class: 't', value: j.location || '', placeholder: 'Address or place', autocomplete: S.status.places ? 'off' : null });
+  // suggestions from Google Places while typing, when the suite has a Google key (app/places.py); else a plain field
+  const pdrop = h('div', { class: 'drop', hidden: true });
+  if (S.status.places) {
+    const session = globalThis.crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let lt, lseq = 0, hits = [], at = -1;
+    const mark = () => [...pdrop.querySelectorAll('.row')].forEach((el, i) => el.classList.toggle('on', i === at));
+    const pick = (it) => { place.value = it.text; pdrop.hidden = true; hits = []; at = -1; };
+    place.addEventListener('input', () => {
+      clearTimeout(lt);
+      const v = place.value.trim();
+      if (v.length < 3) { ++lseq; pdrop.hidden = true; hits = []; return; }
+      lt = setTimeout(async () => {
+        const n = ++lseq;
+        let res = { items: [] };
+        try { res = await api(`api/places?q=${encodeURIComponent(v)}&session=${encodeURIComponent(session)}`); } catch { /* typed only */ }
+        if (n !== lseq) return;
+        hits = res.items || []; at = -1;
+        if (!hits.length && !res.error) { pdrop.hidden = true; return; }
+        fill(pdrop, ...hits.map((it) => h('div', { class: 'row', onmousedown: (e) => { e.preventDefault(); pick(it); } },
+          icon('place', 's'), h('div', { class: 'who' }, h('div', { class: 'nm' }, it.main), it.secondary ? h('div', { class: 'sub' }, it.secondary) : null))),
+        res.error ? h('div', { class: 'muted small', style: { padding: '6px 10px' } }, res.error)
+          : h('div', { class: 'muted small', style: { padding: '4px 10px', textAlign: 'right' } }, 'Suggestions by Google'));
+        pdrop.hidden = false;
+      }, 250);
+    });
+    place.addEventListener('keydown', (e) => {
+      if (pdrop.hidden || !hits.length) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); at = (at + (e.key === 'ArrowDown' ? 1 : hits.length - 1 + (at < 0 ? 1 : 0))) % hits.length; mark(); }
+      else if (e.key === 'Enter' && at >= 0) { e.preventDefault(); pick(hits[at]); }
+      else if (e.key === 'Escape') { e.stopPropagation(); pdrop.hidden = true; }
+    });
+    place.addEventListener('blur', () => setTimeout(() => { pdrop.hidden = true; }, 150));
+  }
   const people = (j.people || []).filter((p) => p.role !== 'organizer').map((p) => ({ name: p.name, email: p.email, contactId: p.contactId }));
   const pchips = h('div', { class: 'chiprow' });
   const pin = h('input', { class: 't', placeholder: S.status.iocontact ? 'Add someone (from ioContact, or type a name or email)' : 'Add someone (a name or email)', autocomplete: 'off' });
@@ -255,7 +288,7 @@ export async function showEdit(page, r) {
   h('div', { class: 'fsec' }, icon('repeat'), 'Repeat'), h('div', null, repSel, repMore),
   h('div', { class: 'fsec' }, icon('today'), 'Calendar'), h('div', { class: 'grid' }, fld('Calendar', calSel), fld('Show me as', busy), fld('Status', status)),
   forSec,
-  h('div', { class: 'fsec' }, icon('place'), 'Where'), place,
+  h('div', { class: 'fsec' }, icon('place'), 'Where'), h('div', { class: 'picker' }, place, pdrop),
   h('div', { class: 'fsec' }, icon('people'), 'Who'), pchips, h('div', { class: 'picker', style: { marginTop: '6px' } }, pin, drop),
   h('div', { class: 'fsec' }, icon('bell'), 'Reminders'), rchips,
   h('p', { class: 'muted small', style: { margin: '4px 0 0' } }, 'Reminders go to the calendar apps on your phone and computer (through CalDAV).'),
