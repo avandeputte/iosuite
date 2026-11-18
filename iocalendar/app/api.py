@@ -16,7 +16,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import access, bills, config, contacts, holiday, ical, members, model, subscribe, tasks, users, weather
+from app import access, bills, config, contacts, holiday, ical, members, model, places, subscribe, tasks, users, weather
 from iosuite_shared import appleprofile, prefix, users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
@@ -771,6 +771,19 @@ async def event_weather(eid: int, request: Request, start: str):
         return await run_in_threadpool(weather.at_event, r["location"], start, bool(r.get("all_day")))
     except weather.WeatherError as e:
         return {"found": False, "error": str(e)}
+
+
+# ------------------------------------------------------------------ place suggestions
+
+@router.get("/api/places", dependencies=[access.signed_in])
+async def place_suggestions(request: Request, q: str = "", session: str | None = None):
+    """Places that match what was typed in an event's place (app/places.py, Google Places with the suite's Google
+    key): {enabled, items: [{text, main, secondary}], error?}. enabled false when the suite has no Google key."""
+    lang = (request.headers.get("accept-language") or "").split(",")[0].split(";")[0].strip() or None
+    try:
+        return await run_in_threadpool(places.suggest, q, session, lang)
+    except places.PlacesError as e:
+        return {"enabled": True, "items": [], "error": str(e)}
 
 
 # ------------------------------------------------------------------ bills from ioMoney
