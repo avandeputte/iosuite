@@ -12,7 +12,10 @@ SECTIONS = ("home", "birthdays", "week", "strip", "bookmarks")  # the cards unde
 ENGINES = ("duckduckgo", "google", "bing", "startpage", "ecosia", "kagi")  # the search box's web search (null: DuckDuckGo)
 STRIP_MOVES = ("shuffle", "page", "off")  # how the photo strip changes by itself (null: shuffle)
 STRIP_EVERY = (30, 60, 120, 300, 600, 1800)  # how often, in seconds (null: 60)
-EMPTY = {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None}
+WALL_BGS = ("photos", "sky", "black")  # behind the wall display (null: photos, or the sky without ioPix)
+WALL_EVERY = (20, 60, 300, 900)  # how often its photo changes, in seconds (null: 60)
+EMPTY = {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None,
+         "wallBg": None, "wallEvery": None}
 
 
 def _key(user_id: int) -> str:
@@ -22,7 +25,8 @@ def _key(user_id: int) -> str:
 def get(user_id: int) -> dict:
     """{hidden: [tile or section keys], order: [tile keys, the first ones first], cards: [section keys, top first],
     strip: rediscover|onthisday|off|null, search: a web search engine (ENGINES) | null,
-    stripMove: shuffle|page|off|null, stripEvery: seconds (STRIP_EVERY) | null}."""
+    stripMove: shuffle|page|off|null, stripEvery: seconds (STRIP_EVERY) | null,
+    wallBg: photos|sky|black|null, wallEvery: seconds (WALL_EVERY) | null}."""
     raw = db.get_setting(_key(user_id))
     if not raw:
         return dict(EMPTY)
@@ -36,7 +40,9 @@ def get(user_id: int) -> dict:
             "strip": v.get("strip") if v.get("strip") in apps.STRIPS else None,
             "search": v.get("search") if v.get("search") in ENGINES else None,
             "stripMove": v.get("stripMove") if v.get("stripMove") in STRIP_MOVES else None,
-            "stripEvery": v.get("stripEvery") if v.get("stripEvery") in STRIP_EVERY else None}
+            "stripEvery": v.get("stripEvery") if v.get("stripEvery") in STRIP_EVERY else None,
+            "wallBg": v.get("wallBg") if v.get("wallBg") in WALL_BGS else None,
+            "wallEvery": v.get("wallEvery") if v.get("wallEvery") in WALL_EVERY else None}
 
 
 def save(user_id: int, body: dict) -> dict:
@@ -50,6 +56,8 @@ def save(user_id: int, body: dict) -> dict:
     search = body.get("search") or None
     move = body.get("stripMove") or None
     every = body.get("stripEvery") or None
+    wall_bg = body.get("wallBg") or None
+    wall_every = body.get("wallEvery") or None
     if not isinstance(hidden, list) or not all(apps.is_key(k) or k in SECTIONS for k in hidden):
         raise Invalid(f"hidden: a list of app keys and {', '.join(SECTIONS)}")
     if not isinstance(order, list) or not all(apps.is_key(k) for k in order) or len(set(order)) != len(order):
@@ -64,6 +72,11 @@ def save(user_id: int, body: dict) -> dict:
         raise Invalid(f"stripMove: {', '.join(STRIP_MOVES)}, or nothing (shuffle)")
     if every is not None and (isinstance(every, bool) or every not in STRIP_EVERY):
         raise Invalid(f"stripEvery: {', '.join(map(str, STRIP_EVERY))} seconds, or nothing (60)")
-    v = {"hidden": list(dict.fromkeys(hidden)), "order": order, "cards": cards, "strip": strip, "search": search, "stripMove": move, "stripEvery": every}
+    if wall_bg is not None and wall_bg not in WALL_BGS:
+        raise Invalid(f"wallBg: {', '.join(WALL_BGS)}, or nothing (photos)")
+    if wall_every is not None and (isinstance(wall_every, bool) or wall_every not in WALL_EVERY):
+        raise Invalid(f"wallEvery: {', '.join(map(str, WALL_EVERY))} seconds, or nothing (60)")
+    v = {"hidden": list(dict.fromkeys(hidden)), "order": order, "cards": cards, "strip": strip, "search": search, "stripMove": move, "stripEvery": every,
+         "wallBg": wall_bg, "wallEvery": wall_every}
     db.set_setting(_key(user_id), None if v == EMPTY else json.dumps(v))
     return get(user_id)

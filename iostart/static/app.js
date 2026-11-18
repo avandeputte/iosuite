@@ -33,6 +33,7 @@ const ICONS = {
   edit: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
   delete: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
   wall: 'M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z',
+  image: 'M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z',
   fullscreen: 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z',
   task: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z',
   recipe: 'M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z',
@@ -709,16 +710,21 @@ async function customize() {
   const strip = h('select', { class: 't', onchange: async () => { try { await api('api/home/settings', { method: 'POST', json: { photoStrip: strip.value } }); toast('Saved'); } catch (e) { fail(e); } } }, [[null, `Default (${adminStrip})`], ['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day'], ['off', 'Off']].map(([v, t]) => h('option', { value: v || '', selected: (v || '') === (L.strip || '') ? true : null }, t)));
   const moves = h('select', { class: 't' }, Object.entries(STRIP_MOVES).map(([k, t]) => h('option', { value: k, selected: k === (L.stripMove || STRIP_DEFAULT.move) ? true : null }, t)));
   const everies = h('select', { class: 't' }, STRIP_EVERY.map((s) => h('option', { value: s, selected: s === (L.stripEvery || STRIP_DEFAULT.every) ? true : null }, `Every ${everyText(s)}`)));
+  const pix = apps.some((a) => a.key === 'iopix');
+  const wallBg = h('select', { class: 't' }, Object.keys(WALL_BGS).filter((k) => pix || k !== 'photos').map((k) => h('option', { value: k, selected: k === (L.wallBg || (pix ? 'photos' : 'sky')) ? true : null }, WALL_BG_NAMES[k])));
+  const wallEvery = h('select', { class: 't' }, WALL_EVERY.map((s) => h('option', { value: s, selected: s === (L.wallEvery || WALL_DEFAULT_EVERY) ? true : null }, `Every ${everyText(s)}`)));
   const engines = h('select', { class: 't' }, Object.entries(ENGINES).map(([k, e]) => h('option', { value: k === 'duckduckgo' ? '' : k, selected: (k === 'duckduckgo' ? '' : k) === (L.search || '') ? true : null }, e.name)));
   const body = h('div', null, h('p', { class: 'muted small' }, 'Your own start page, on this account only: untick what you do not need, and put the tiles and the cards in your order. Birthdays and This week share a row when they follow each other.'),
     h('h3', null, 'Tiles'), sortable(tiles), h('h3', null, 'Cards under the tiles'), sortable(cards),
     h('div', { class: 'grid' }, fld('Photo strip', strip), fld('Web search', engines)),
     h('div', { class: 'grid' }, fld('The photo strip changes to', moves), fld('How often', everies)),
+    h('div', { class: 'grid' }, fld('Wall display background', wallBg), pix ? fld('Its photo changes', wallEvery) : h('div')),
     h('p', { class: 'muted small' }, `In the search box, a prefix picks a site: ${BANG_HELP}. “t …” adds a task to ioTask and “n …” a note to ioNote; a line that says when (“dinner fri 19:00”) adds an event.`));
   const v = await dialog('Customize the page', body, [{ label: 'Back to the default', value: 'reset' }, { label: 'Cancel', value: null }, { label: 'Save', value: 'save', primary: true }]);
   if (!v) return;
   const json = v === 'reset' ? {} : { hidden: [...tiles, ...cards].filter((t) => !t.on).map((t) => t.key), order: tiles.map((t) => t.key), cards: cards.map((c) => c.key), strip: strip.value || null, search: engines.value || null,
-    stripMove: moves.value === STRIP_DEFAULT.move ? null : moves.value, stripEvery: +everies.value === STRIP_DEFAULT.every ? null : +everies.value };
+    stripMove: moves.value === STRIP_DEFAULT.move ? null : moves.value, stripEvery: +everies.value === STRIP_DEFAULT.every ? null : +everies.value,
+    wallBg: wallBg.value === (pix ? 'photos' : 'sky') ? null : wallBg.value, wallEvery: +wallEvery.value === WALL_DEFAULT_EVERY ? null : +wallEvery.value };
   try { await api('api/me/layout', { method: 'PUT', json }); toast(v === 'reset' ? 'Back to the default' : 'Saved'); if (route().view === 'home') onRoute(); } catch (e) { fail(e); }
 }
 
@@ -1291,7 +1297,8 @@ function packBookmarks(el, groups) {
 
 // ------------------------------------------------------------------ the wall display (#/wall)
 /* For a tablet on the wall or a TV: the full screen, ioPix photos one after another behind a big clock, the date, the
-   weather and its next hours, and what is planned today and in the coming days (and birthdays). It keeps the screen
+   weather and its next hours, and what is planned today and in the coming days (and birthdays). Behind the photos (and
+   instead of them without ioPix, or as the person picks: layout wallBg) a sky in the colours of the hour and the weather. It keeps the screen
    on where the browser allows it, refreshes itself (liveRefresh), and goes back to the start page with Escape or the
    button that shows on a touch. #/wall can be the tablet's home address. */
 function enterWall() {
@@ -1305,14 +1312,18 @@ async function showWall(page) {
   S.apps = got.items.filter((a) => !a.adminTool);
   const has = (k) => S.apps.some((a) => a.key === k);
   page.className = 'wallpage';
-  const photos = h('div', { class: 'wallphotos' });
+  const L = got.layout || {};
+  const bg = L.wallBg || (has('iopix') ? 'photos' : 'sky');
+  const sky = h('div', { class: 'wallsky' }), photos = h('div', { class: 'wallphotos' });
   const clock = h('div', { class: 'wallclock' }), date = h('div', { class: 'walldate' });
   const wx = h('div', { class: 'wallwx' }), hours = h('div', { class: 'wallhours' }), sensors = h('div', { class: 'wallsensors' });
   const agenda = h('div', { class: 'wallagenda' }), caption = h('div', { class: 'wallcap' });
   const bar = h('div', { class: 'wallbar' },
+    h('button', { class: 'iconbtn', title: `Background: ${WALL_BGS[bg]} (a tap: the next one)`, onclick: () => wallNextBg(bg, has('iopix')) }, icon('image')),
     h('button', { class: 'iconbtn', title: 'Full screen', onclick: () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {}); } }, icon('fullscreen')),
     h('a', { class: 'iconbtn', title: 'Back to the start page (Esc)', href: '#/' }, icon('close')));
-  page.append(photos, h('div', { class: 'wallshade' }),
+  page.classList.toggle('black', bg === 'black');
+  page.append(sky, photos, h('div', { class: 'wallshade' }),
     h('div', { class: 'walltop' }, h('div', null, clock, date), wx),
     h('div', { class: 'wallbottom' }, agenda, h('div', { class: 'wallright' }, sensors, hours, caption)), bar);
   // the controls show on a touch or a move of the mouse, and fade after a few seconds
@@ -1329,13 +1340,18 @@ async function showWall(page) {
   // keep the screen on (Screen Wake Lock: Chrome, Safari 16.4+), asked again when the tab comes back
   let lock = null;
   const keepOn = async () => { try { if (navigator.wakeLock && !document.hidden) lock = await navigator.wakeLock.request('screen'); } catch { lock = null; } };
-  const onVis = () => { if (!document.hidden) keepOn(); };
+  let show = null;  // the slideshow's next(), to catch up when the tab comes back
+  const onVis = () => { if (!document.hidden) { keepOn(); if (show && !photos.children.length) show(); } };
   document.addEventListener('visibilitychange', onVis); keepOn();
   const onKey = (e) => { if (e.key === 'Escape' && !document.fullscreenElement) location.hash = '#/'; };
   document.addEventListener('keydown', onKey);
   S.wallStop = () => { timers.forEach(clearInterval); clearTimeout(hideT); document.removeEventListener('visibilitychange', onVis); document.removeEventListener('keydown', onKey); if (lock) lock.release().catch(() => {}); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); };
-  if (has('iopix')) timers.push(wallSlideshow(photos, caption, got.layout && got.layout.strip ? got.layout.strip : got.photoStrip));
-  const draw = () => { wallWeather(wx, hours); wallAgenda(agenda, has); wallSensors(sensors); };
+  if (bg === 'photos' && has('iopix')) {
+    const every = (WALL_EVERY.includes(L.wallEvery) ? L.wallEvery : WALL_DEFAULT_EVERY) * 1000;
+    const ss = wallSlideshow(photos, caption, L.strip || got.photoStrip, every);
+    show = ss.next; timers.push(ss.timer);
+  }
+  const draw = () => { wallWeather(wx, hours, bg === 'black' ? null : sky); wallAgenda(agenda, has); wallSensors(sensors); };
   draw();
   haSubscribe((d) => renderWallSensors(sensors, d));  // the house changes faster than the weather: as it happens
   timers.push(setInterval(() => { if (!document.hidden && !S.haStream) wallSensors(sensors); }, 60 * 1000));
@@ -1355,10 +1371,12 @@ function renderWallSensors(el, d) {
   el.replaceChildren(...(d.alerts || []).slice(0, 3).map((a) => h('div', { class: 'wallsensor alert' }, icon('warn', 's'), h('span', { class: 'hname' }, a.name), h('span', { class: 'hstate' }, a.text))),
     ...items.map((t) => h('div', { class: `wallsensor${t.on ? ' on' : ''}` }, icon(haIcon(t), 's'), h('span', { class: 'hname' }, t.name), h('span', { class: 'hstate' }, t.text || t.state))));
 }
-/** A photo every 20 seconds, fading into the next; landscape ones first on a landscape screen. A fresh batch when the
-    row is used up. Returns the interval, for showWall to stop. */
-function wallSlideshow(el, caption, kind) {
-  let queue = [], busy = false;
+/** A photo every so often (the person's wallEvery), fading into the next and drifting slowly; landscape ones first on
+    a landscape screen. A fresh batch when the row is used up; one that does not load is skipped at once, so the sky
+    behind shows only while there is nothing to show. Returns {timer, next}: the interval, for showWall to stop, and
+    next, for a tab that comes back. */
+function wallSlideshow(el, caption, kind, every) {
+  let queue = [], busy = false, empty = 0;
   const fill = async () => {
     const d = await widget('iopix', { kind: kind === 'onthisday' ? 'onthisday' : 'rediscover', n: 24 });
     let items = (d && d.items) || [];
@@ -1368,29 +1386,62 @@ function wallSlideshow(el, caption, kind) {
   };
   const next = async () => {
     if (busy || !el.isConnected || document.hidden) return;
+    if (empty && Date.now() - empty < 5 * 60 * 1000) return;  // ioPix had nothing: ask again in a while, not every tick
     busy = true;
     try {
-      if (!queue.length) await fill();
-      const it = queue.shift();
-      if (!it) return;
-      const img = new Image();
-      img.alt = ''; img.className = 'wallimg';
-      img.src = itemImage('iopix', 'photo', it.id, 'preview');
-      await img.decode().catch(() => null);
-      if (!img.naturalWidth || !el.isConnected) return;
-      const old = [...el.children];
-      el.append(img);
-      requestAnimationFrame(() => img.classList.add('on'));
-      setTimeout(() => old.forEach((o) => o.remove()), 2000);
-      caption.textContent = it.otd ? (it.yearsAgo === 1 ? '1 year ago today' : `${it.yearsAgo} years ago today`) : (it.year ? String(it.year) : '');
+      for (let tries = 0; tries < 4; tries++) {  // a photo that does not load: the next one, right away
+        if (!queue.length) await fill();
+        const it = queue.shift();
+        if (!it) { empty = Date.now(); return; }
+        empty = 0;
+        const img = new Image();
+        img.alt = ''; img.className = 'wallimg';
+        img.style.setProperty('--drift', `${Math.round(every / 1000) + 4}s`);
+        img.style.transformOrigin = `${[20, 50, 80][Math.floor(Math.random() * 3)]}% ${[30, 50, 70][Math.floor(Math.random() * 3)]}%`;
+        img.src = itemImage('iopix', 'photo', it.id, 'preview');
+        await img.decode().catch(() => null);
+        if (!el.isConnected) return;
+        if (!img.naturalWidth) continue;
+        const old = [...el.children];
+        el.append(img);
+        requestAnimationFrame(() => img.classList.add('on'));
+        setTimeout(() => old.forEach((o) => o.remove()), 2000);
+        caption.textContent = it.otd ? (it.yearsAgo === 1 ? '1 year ago today' : `${it.yearsAgo} years ago today`) : (it.year ? String(it.year) : '');
+        return;
+      }
     } finally { busy = false; }
   };
   next();
-  return setInterval(next, 20000);
+  return { timer: setInterval(next, every), next };
 }
-async function wallWeather(el, hoursEl) {
+const WALL_BGS = { photos: 'ioPix photos', sky: 'the sky', black: 'black' };
+const WALL_BG_NAMES = { photos: 'Photos from ioPix', sky: 'The sky: colours of the hour and the weather', black: 'Black' };
+const WALL_EVERY = [20, 60, 300, 900];  // seconds
+const WALL_DEFAULT_EVERY = 60;
+/** The wall bar's background button: the next of photos, sky and black, kept in the person's layout. */
+async function wallNextBg(bg, pix) {
+  const order = pix ? ['photos', 'sky', 'black'] : ['sky', 'black'];
+  const to = order[(order.indexOf(bg) + 1) % order.length];
+  try {
+    S.layout = await api('api/me/layout', { method: 'PUT', json: { ...S.layout, wallBg: to === (pix ? 'photos' : 'sky') ? null : to } });
+    toast(`Background: ${WALL_BGS[to]}`); onRoute();
+  } catch (e) { fail(e); }
+}
+/** The sky behind the wall: the hour's colours (night, dawn, day, dusk) and the weather's (clear, cloudy, rain, snow),
+    from AccuWeather's icon number when there is weather; the CSS (.wallsky.<time>.<weather>) does the painting. */
+function paintSky(el, w) {
+  const hr = new Date().getHours(), c = w && w.current;
+  let time = hr >= 6 && hr < 8 ? 'dawn' : hr >= 8 && hr < 17 ? 'day' : hr >= 17 && hr < 20 ? 'dusk' : 'night';
+  if (c && c.isDay === false && time !== 'dusk' && time !== 'dawn') time = 'night';
+  const i = c ? +c.icon : 0;
+  const sky = [6, 7, 8, 11, 35, 36, 37, 38].includes(i) ? 'cloudy' : (i >= 12 && i <= 18) || (i >= 39 && i <= 42) ? 'rain'
+    : (i >= 19 && i <= 29) || i === 43 || i === 44 ? 'snow' : 'clear';
+  el.className = `wallsky ${time} ${sky}`;
+}
+async function wallWeather(el, hoursEl, sky) {
   let w;
-  try { w = await api('api/weather'); } catch { return; }
+  try { w = await api('api/weather'); } catch { if (sky) paintSky(sky, null); return; }
+  if (sky) paintSky(sky, w);
   if (!el.isConnected || !w.enabled || !w.current) { if (w && !w.enabled) { el.replaceChildren(); hoursEl.replaceChildren(); } return; }
   const c = w.current, imp = w.units === 'imperial', u = imp ? 'imperial' : 'metric', t = (v) => fmtTemp(imp ? degF(v) : v);
   const rain = rainNote(w);
@@ -1399,6 +1450,18 @@ async function wallWeather(el, hoursEl) {
       h('span', null, new Date(`${d.date}T12:00:00`).toLocaleDateString([], { weekday: 'short' })), wxIcon(d.icon), h('span', null, `${t(d.max)} ${t(d.min)}`)))) : null);
   const hs = nextHours(w).slice(0, 8);
   hoursEl.replaceChildren(hs.length ? hourRow(w, hs) : '');
+}
+/** A short name for an event's place: what comes before the first comma ("Nan Xiang Dumpling, 38-12 Prince St, …"),
+    on one line. */
+function shortPlace(loc) {
+  const t = String(loc || '').replace(/\s+/g, ' ').trim();
+  return (t.split(',')[0] || '').trim() || t;
+}
+/** One line of the wall's agenda: its calendar's dot, the time, the title and "@ place" (cut short before the title). */
+function wallEvent(o) {
+  const at = shortPlace(o.location);
+  return h('div', { class: 'wallev' }, h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }), h('span', { class: 'when' }, evTime(o)),
+    h('span', { class: 'evtitle' }, o.title), at ? h('span', { class: 'evwhere', title: o.location }, `@ ${at}`) : null);
 }
 /** Today (what is left of it) and the coming days, a line per event, with today's and tomorrow's birthdays on top. */
 async function wallAgenda(el, has) {
@@ -1412,7 +1475,7 @@ async function wallAgenda(el, has) {
   if (today) {
     const items = withoutBirthdays(today.today || []);
     kids.push(h('div', { class: 'wallsec' }, h('div', { class: 'wallhead' }, 'Today'),
-      items.length ? items.map((o) => h('div', { class: 'wallev' }, h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }), h('span', { class: 'when' }, evTime(o)), h('span', null, o.title)))
+      items.length ? items.map((o) => wallEvent(o))
         : h('div', { class: 'wallev muted' }, today.next ? `Nothing more today · next: ${today.next.title}, ${evDay(today.next)}` : 'Nothing more today'),
       today.more ? h('div', { class: 'wallev muted' }, `+${today.more} more`) : null));
   }
@@ -1421,7 +1484,7 @@ async function wallAgenda(el, has) {
     for (const d of days) {
       const s = new Date(`${d.date}T12:00:00`), n = Math.round((s - new Date().setHours(12, 0, 0, 0)) / 86400000);
       kids.push(h('div', { class: 'wallsec' }, h('div', { class: 'wallhead' }, n === 1 ? 'Tomorrow' : s.toLocaleDateString([], { weekday: 'long' })),
-        d.items.slice(0, 4).map((o) => h('div', { class: 'wallev' }, h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }), h('span', { class: 'when' }, evTime(o)), h('span', null, o.title)))));
+        d.items.slice(0, 4).map((o) => wallEvent(o))));
     }
   }
   el.replaceChildren(...kids);
