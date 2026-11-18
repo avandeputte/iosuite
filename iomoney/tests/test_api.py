@@ -207,6 +207,7 @@ def test_recurring_found_added_and_shown_as_bills(client, as_user):
     b = client.get(f"/api/bills?start={months_ago(1)}&end={months_ago(-1)}").json()["items"]
     power = [x for x in b if x["merchant"] == "Power co"]
     assert [x["paid"] for x in power][:2] == [True, False] and power[0]["amount"] == -80.4 and power[0]["account"] == "Checking"
+    assert isinstance(power[0]["transactionId"], int) and power[1]["transactionId"] is None  # the payment: its links show in ioCalendar
     assert any(x["merchant"] == "Spotify" and x["subscription"] and not x["paid"] for x in b)
     assert client.delete(f"/api/recurring/{s['id']}").json()["ok"]
     # from the transaction list: which ones are recurring, and one made recurring from a transaction

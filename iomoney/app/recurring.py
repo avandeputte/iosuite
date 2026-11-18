@@ -630,7 +630,8 @@ def dismiss(u: dict, key: str) -> None:
 
 def bills(u: dict, start, end, today: dt.date = None) -> list[dict]:
     """Every date a recurring transaction falls on from start to end, paid or not: [{id, day, merchant, amount (money
-    out negative), currency, approximate, frequency, category, accountId, account, subscription, paid}], by day."""
+    out negative), currency, approximate, frequency, category, accountId, account, subscription, paid, transactionId: the
+    transaction that paid it, or None}], by day."""
     today = today or dt.date.today()
     s, e = model.day(start), model.day(end)
     out = []
@@ -653,6 +654,7 @@ def bills(u: dict, start, end, today: dt.date = None) -> list[dict]:
                         "amount": model.n2(Decimal(hit["amount"]) if hit else sign * Decimal(r["amount"])),
                         "currency": (a or {}).get("currency") or model.home_currency(), "approximate": bool(r["approximate"]) and not hit,
                         "frequency": FREQ_LABEL[r["frequency"]], "category": r["category"], "accountId": r["account_id"],
-                        "account": a["name"] if a else None, "subscription": bool(r["subscription"]), "paid": bool(hit)})
+                        "account": a["name"] if a else None, "subscription": bool(r["subscription"]), "paid": bool(hit),
+                        "transactionId": int(hit["id"]) if hit else None})
     out.sort(key=lambda b: (b["day"], b["merchant"].lower()))
     return out

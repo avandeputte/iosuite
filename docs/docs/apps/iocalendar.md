@@ -36,7 +36,7 @@ should sync away from home.
   to date every six hours; the people on an event come from your contacts.
 - **ioTask**: the tasks that are due show on their day, beside the events, in the month, week, day and agenda views.
   Tick one off right on the calendar; a repeating task moves on to its next day.
-- **ioMoney**: the household's coming bills show on the day they are due, to the people with a role in ioMoney.
+- **ioMoney**: the household's coming bills show on the day they are due, to the people with a role in ioMoney. Open one for its card: the amount, the account and how often it comes; once paid, the links of the transaction that paid it (the event it was for, a thing, a note), which you can open, add and remove right there.
 - **ioDocs**: the day a passport, a license or a policy expires, for the people who see that document in ioDocs.
 - **ioStart**: today's events on the tile, a This week card, and "Quick add" from the search box ("dentist tomorrow 9am").
   The other way round, the calendar shows the weather at the start page's place (Settings › Weather there) on each of

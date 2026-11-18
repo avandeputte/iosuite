@@ -13,7 +13,8 @@ BILLS = {"currency": "USD", "items": [
     {"id": 3, "day": "2026-11-20", "merchant": "Power Co", "amount": -118.5, "currency": "USD", "approximate": True,
      "frequency": "monthly", "category": "Utilities", "accountId": 1, "account": "Checking", "paid": False},
     {"id": 2, "day": "2026-11-10", "merchant": "Mortgage", "amount": -2100, "currency": "USD", "approximate": False,
-     "frequency": "monthly", "category": "Mortgage", "accountId": 1, "account": "Checking", "paid": True},
+     "frequency": "monthly", "category": "Mortgage", "accountId": 1, "account": "Checking", "paid": True,
+     "transactionId": 77},
     {"id": 4, "day": "2026-12-01", "merchant": "Later", "amount": -5, "approximate": False, "paid": False}]}
 
 
@@ -52,7 +53,9 @@ def test_bills_are_asked_for_as_the_viewer(client, iomoney):
     assert r["available"] is True and r["url"] == "https://money.example.org"
     assert [b["merchant"] for b in r["items"]] == ["Mortgage", "Power Co"]  # by day; one after the days asked is left out
     assert r["items"][1] == {"id": 3, "day": "2026-11-20", "merchant": "Power Co", "amount": -118.5, "currency": "USD",
-                             "approximate": True, "frequency": "monthly", "category": "Utilities", "account": "Checking", "paid": False}
+                             "approximate": True, "frequency": "monthly", "category": "Utilities", "account": "Checking", "paid": False,
+                             "transactionId": None}
+    assert r["items"][0]["transactionId"] == 77  # the payment: its links show on the bill's card
     assert "start=2026-11-09" in seen[0]["path"] and "end=2026-11-29" in seen[0]["path"]  # ioMoney's end is the last day
     assert seen[0]["headers"]["cookie"].startswith(sessions.COOKIE + "=") and "authorization" not in seen[0]["headers"]
     assert client.get("/api/bills?start=2026-11-30&end=2026-11-09").status_code == 400

@@ -16,7 +16,9 @@ Every app with items mounts the router (Auth.related_router(): /api/related/*) a
 
 The picker searches every app that has items (the same way the start page's search box does), the coming events
 and the open tasks first. Adding or removing a link needs a role of member or more in the app the item is in, so it
-is done there (an app answers 403 for another app's kind), and both items must be ones the viewer sees. An app that
+is done there: an app asked about another app's kind (ioCalendar showing the ioMoney transaction that paid a bill)
+passes the change on to that app as the viewer, where their role there counts (canEdit says whether it is one of
+member or more), and both items must be ones the viewer sees. An app that
 deletes an item for good calls forget(kind, id); one that gives an item a new id calls move(kind, old, new).
 
 What an item looks like (its title, its line, its picture) is asked of its app at the suite's standard endpoints
@@ -28,6 +30,7 @@ machine, then at its address inside the network, then at its public one, with th
 token when one is set, and with the viewer's own credentials (the shared session cookie, or the Authorization header
 the request came with), so each app answers with what that person may see there.
 """
+import json
 import logging
 import re
 import time
@@ -278,9 +281,27 @@ def router(auth) -> APIRouter:
         lets someone change it is the one they have (the member of one app is not one of every other)."""
         return KINDS[kind]["app"] == auth.app
 
-    def changed_here(kind: str):
-        if not own(kind):
-            raise HTTPException(403, f"The links of a {KINDS[kind]['label'].lower()} are changed in its own app")
+    def may_change(u: dict, kind: str) -> bool:
+        """Another app's item: its links change there (theirs()), for a member or more of that app."""
+        if own(kind) or not users.any_users():
+            return True
+        return users.RANK.get(users.role_of(u, KINDS[kind]["app"]), 0) >= users.RANK["member"]
+
+    def theirs(request: Request, kind: str, item_id: str, tail: str = "", body: dict = None, method: str = None):
+        """The item is another app's: the same request, made there as the viewer (that app checks the role it gives)."""
+        path = f"/api/related/{kind}/{urllib.parse.quote(item_id)}{tail}"
+        try:
+            return links.as_viewer(request, KINDS[kind]["app"], path, body=body, method=method, timeout=TIMEOUT,
+                                   user_agent=UA, public=True)
+        except urllib.error.HTTPError as e:
+            why = f"{catalog.name_of(KINDS[kind]['app'])} answered {e.code}"
+            try:
+                why = str(json.loads(e.read() or b"{}").get("detail") or why)
+            except Exception:  # noqa: BLE001 - not JSON: its status says it
+                pass
+            raise HTTPException(403 if e.code == 401 else e.code if e.code >= 400 else 502, why) from None
+        except (urllib.error.URLError, OSError) as e:
+            raise HTTPException(502, str(getattr(e, "reason", "")) or f"{catalog.name_of(KINDS[kind]['app'])} does not answer") from None
 
     def seen(request: Request, kind: str, item_id: str) -> dict:
         try:
@@ -327,7 +348,7 @@ def router(auth) -> APIRouter:
         u = me(request)
         kind, item_id = item(kind, item_id)
         seen(request, kind, item_id)
-        return {"items": resolved(request, kind, item_id), "canEdit": own(kind) and users.at_least(u, "member")}
+        return {"items": resolved(request, kind, item_id), "canEdit": users.at_least(u, "member") and may_change(u, kind)}
 
     @r.post("/api/related/{kind}/{item_id}", dependencies=[access.member_write])
     async def api_add(kind: str, item_id: str, request: Request):
@@ -335,12 +356,13 @@ def router(auth) -> APIRouter:
         from starlette.concurrency import run_in_threadpool
         u = writer(request)
         kind, item_id = item(kind, item_id)
-        changed_here(kind)
         b = await json_body(request)
         try:
             other = check(b.get("kind"), b.get("id"))
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
+        if not own(kind):
+            return await run_in_threadpool(theirs, request, kind, item_id, "", {"kind": other[0], "id": other[1]})
 
         def go():
             seen(request, kind, item_id)
@@ -357,7 +379,8 @@ def router(auth) -> APIRouter:
         """Remove one of this item's links."""
         writer(request)
         kind, item_id = item(kind, item_id)
-        changed_here(kind)
+        if not own(kind):
+            return theirs(request, kind, item_id, f"/{int(link_id)}", method="DELETE")
         seen(request, kind, item_id)
         if not remove(kind, item_id, link_id):
             raise HTTPException(404, "No such link")

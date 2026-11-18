@@ -338,6 +338,8 @@ button.chip.toggle.on .mem { opacity: 1; }
 .bm { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--c); color: #fff; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 .chip-ev.bill .amt { margin-left: auto; padding-left: 4px; color: var(--fg2); flex: none; font-variant-numeric: tabular-nums; }
 .chip-ev.bill.done .nm, .arow.bill.done .nm { color: var(--fg2); }
+.evd .bill-note { margin-top: 14px; }
+.evd .bill-in { color: #1e8e3e; }
 .arow.bill .bm, .arow.paper .bm { margin: 2px -3px 0; align-self: flex-start; }
 .tev.task { display: flex; align-items: center; gap: 5px; padding: 0 5px; background: var(--bg); border: 1px solid color-mix(in srgb, var(--c) 55%, var(--line)); white-space: nowrap; }
 .tev.task:hover { background: var(--bg2); }
