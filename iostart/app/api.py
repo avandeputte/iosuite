@@ -13,7 +13,7 @@ import zipfile
 
 from iosuite_shared.access import json_body
 
-from app import access, apps, config, siteicons, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, weather, widgets
+from app import access, apps, config, siteicons, bookmarkcheck, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, weather, widgets
 
 router = APIRouter()
 
@@ -240,6 +240,30 @@ def _me(request: Request) -> None:
     bookmarks.as_user(request.state.user)
 
 
+@router.get("/api/bookmarks/duplicates", dependencies=[access.signed_in])
+def bookmarks_duplicates(request: Request):
+    """Tidy up: the addresses your tree holds more than once: {groups: [{href, links: [{id, name, href, path, shared,
+    onStart, canChange}]}], extra}; in each group the copy to keep comes first."""
+    _me(request)
+    return bookmarkcheck.duplicates()
+
+
+@router.get("/api/bookmarks/check", dependencies=[access.signed_in])
+def bookmarks_check(request: Request):
+    """Tidy up: how far the check of your bookmarks' addresses is, and what it found: {running, done, total,
+    checkedAt, items: [{id, name, href, path, shared, canChange, state: dead | gone | moved, status, to}]}."""
+    _me(request)
+    return bookmarkcheck.state()
+
+
+@router.post("/api/bookmarks/check", dependencies=[access.signed_in])
+def bookmarks_check_start(request: Request):
+    """Tidy up: ask every web address of your bookmarks (yours and the shared ones) whether it still answers, in the
+    background; GET says how far it is. One check at a time per person."""
+    _me(request)
+    return bookmarkcheck.start()
+
+
 def _bm(request: Request, fn, *a, **kw):
     _me(request)
     try:
@@ -421,7 +445,9 @@ def widget(key: str, request: Request, tz: str = "", kind: str = "", n: int = 0,
     (IANA, e.g. Europe/Brussels), for what "today" is. For iopix, kind (onthisday | rediscover; empty: on this day
     when there are photos, else rediscover) and n (how many, up to 24) pick what the photo strip shows; for iocalendar,
     kind=week gives the coming week instead of today; for iocontact, q searches the contacts (the search box) instead
-    of listing the birthdays ahead, and so does it for iocalendar (events), iotask (tasks), iorecipe (recipes), ionote (notes) and iothings (the things you own). 404 for an app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
+    of listing the birthdays ahead, and so does it for iocalendar (events), iotask (tasks), iorecipe (recipes), ionote
+    (notes), iothings (the things you own), iomoney (payees and transactions) and iopix (people, albums, folders and
+    places). iomoney without q: the bills due this week, the cash accounts about to run low and the bank links that are behind. 404 for an app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
     tile as it is on any of these."""
     try:
         return widgets.get(request, key, tz, kind, n, q)
@@ -445,6 +471,36 @@ async def widget_add_event(request: Request):
     b = await json_body(request)
     try:
         return await run_in_threadpool(widgets.iocalendar_add, request, b)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.get("/api/widgets/iotask/lists", dependencies=[access.signed_in])
+def widget_task_lists(request: Request):
+    """The ioTask lists this viewer may add tasks to (quick add in the search box)."""
+    try:
+        return widgets.iotask_lists(request)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.post("/api/widgets/iotask/tasks", dependencies=[access.signed_in])
+async def widget_add_task(request: Request):
+    """Quick add: a new task in ioTask, made with the viewer's own sign-in. {title, due? (a date, or a date and
+    time), listId?, timezone?} → {id, url}."""
+    b = await json_body(request)
+    try:
+        return await run_in_threadpool(widgets.iotask_add, request, b)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.post("/api/widgets/ionote/notes", dependencies=[access.signed_in])
+async def widget_add_note(request: Request):
+    """Quick add: a new note in ioNote, the viewer's own. {title?, text?} → {id, url}."""
+    b = await json_body(request)
+    try:
+        return await run_in_threadpool(widgets.ionote_add, request, b)
     except widgets.Unavailable as e:
         raise HTTPException(e.status, str(e))
 

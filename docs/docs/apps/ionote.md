@@ -32,7 +32,7 @@ about 60 MB); the Mac and iPhone read the text on the device.
 
 ## With the other apps
 
-- **ioStart**: the start page's search box searches your notes.
+- **ioStart**: the start page's search box searches your notes, and "n the gate code is 4411" there adds one.
 - The same accounts and sign-in as every other app.
 
 ## Install

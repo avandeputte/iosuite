@@ -63,6 +63,8 @@ These are extras, switched on by having both apps; neither app needs the other:
 | ioPix + ioContact | link a contact to a person named in ioPix: that face becomes the contact's photo, on phones (CardDAV) and in the LDAP directory too |
 | ioStart + any app | a tile per app on the start page with what matters today: the next events, the tasks due, photos from this day, today's steps and last night's sleep |
 | ioStart + ioCalendar | "Quick add": type "dinner fri 19:00" in the start page's search box to make the event |
+| ioStart + ioTask or ioNote | "t buy milk sat" in the search box adds a task, "n the gate code is 4411" a note |
+| ioStart + ioMoney | the bills due this week on the tile, and payees and transactions in the search box |
 | any two | the same accounts and roles, one admin panel, the same Settings, one sign-in |
 
 ## All of them at once

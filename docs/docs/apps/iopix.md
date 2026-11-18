@@ -37,7 +37,7 @@ database for what it builds, and the Shared ioSuite database for its accounts. d
 - **ioContact** can link a contact to a person named in ioPix; the face becomes the contact's photo.
 - **ioStart** shows photos taken on this day in earlier years on the ioPix tile, and a strip of photos under the
   tiles.
-- The start page's search box searches ioPix too.
+- The start page's search box finds the people, albums, folders and places of your photos, and searches ioPix too.
 
 ## Install
 
