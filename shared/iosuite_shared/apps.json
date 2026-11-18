@@ -1,0 +1,317 @@
+{
+ "_": "Made by shared/templates/render.py from every app's app.json: change those, not this.",
+ "apps": [
+  {
+   "key": "iostart",
+   "name": "ioStart",
+   "description": "Start page",
+   "tag": "The start page",
+   "color": "#2f3a5a",
+   "port": 8630,
+   "folder": null,
+   "order": 10,
+   "aside": "the start page",
+   "compose": {
+    "name": "home",
+    "what": "start page"
+   }
+  },
+  {
+   "key": "iopix",
+   "name": "ioPix",
+   "description": "Photos",
+   "tag": "Photos",
+   "color": "#3b4a8c",
+   "port": 8600,
+   "folder": "pix",
+   "order": 20,
+   "heavy": true,
+   "keepsOwn": [
+    "setup",
+    "workflow"
+   ],
+   "compose": {
+    "name": "photos",
+    "what": "photos"
+   },
+   "install": {
+    "data": true,
+    "extra": [
+     "--no-digikam",
+     "--features",
+     "none"
+    ],
+    "photos": true,
+    "launchd": "com.iopix"
+   },
+   "items": [
+    {
+     "kind": "photo",
+     "label": "Photo",
+     "plural": "Photos",
+     "href": "#/photos?p={id}"
+    }
+   ]
+  },
+  {
+   "key": "ionote",
+   "name": "ioNote",
+   "description": "Notes",
+   "tag": "Notes, clipboard snippets and screenshots",
+   "color": "#1c5a5e",
+   "port": 8610,
+   "folder": "notes",
+   "order": 30,
+   "keepsOwn": [
+    "workflow"
+   ],
+   "compose": {
+    "name": "notes",
+    "what": "notes"
+   },
+   "install": {
+    "data": true
+   },
+   "items": [
+    {
+     "kind": "note",
+     "label": "Note",
+     "plural": "Notes",
+     "href": "#/note/{id}",
+     "id": "uuid"
+    }
+   ]
+  },
+  {
+   "key": "iocalendar",
+   "name": "ioCalendar",
+   "description": "Calendar",
+   "tag": "The family calendar",
+   "color": "#963522",
+   "port": 8620,
+   "folder": "calendar",
+   "order": 40,
+   "compose": {
+    "name": "calendar",
+    "what": "calendar"
+   },
+   "items": [
+    {
+     "kind": "event",
+     "label": "Event",
+     "plural": "Events",
+     "href": "#/event/{id}"
+    }
+   ],
+   "notifications": [
+    {
+     "kind": "events",
+     "label": "Event reminders",
+     "hint": "The reminders set on events"
+    }
+   ]
+  },
+  {
+   "key": "iotask",
+   "name": "ioTask",
+   "description": "Tasks",
+   "tag": "The family's task lists",
+   "color": "#146b5e",
+   "port": 8670,
+   "folder": "tasks",
+   "order": 50,
+   "compose": {
+    "name": "tasks",
+    "what": "tasks"
+   },
+   "items": [
+    {
+     "kind": "task",
+     "label": "Task",
+     "plural": "Tasks",
+     "href": "#/task/{id}"
+    }
+   ],
+   "notifications": [
+    {
+     "kind": "tasks",
+     "label": "Tasks",
+     "hint": "A task’s alert when it goes off, and in the morning what is due today"
+    }
+   ]
+  },
+  {
+   "key": "iorecipe",
+   "name": "ioRecipe",
+   "description": "Recipes",
+   "tag": "The family's recipes",
+   "color": "#4a7c23",
+   "port": 8690,
+   "folder": "recipes",
+   "order": 60,
+   "compose": {
+    "name": "recipes",
+    "what": "recipes"
+   },
+   "items": [
+    {
+     "kind": "recipe",
+     "label": "Recipe",
+     "plural": "Recipes",
+     "href": "#/recipe/{id}"
+    }
+   ]
+  },
+  {
+   "key": "iothings",
+   "name": "ioThings",
+   "description": "Everything you own",
+   "tag": "Everything you own",
+   "color": "#2a6f97",
+   "port": 8700,
+   "folder": "things",
+   "order": 70,
+   "compose": {
+    "name": "things",
+    "what": "inventory"
+   },
+   "items": [
+    {
+     "kind": "item",
+     "label": "Thing",
+     "plural": "Things",
+     "href": "#/item/{id}"
+    }
+   ],
+   "notifications": [
+    {
+     "kind": "things",
+     "label": "Upkeep and warranties",
+     "hint": "In the morning, the upkeep that is due and the warranties about to end"
+    }
+   ]
+  },
+  {
+   "key": "iomoney",
+   "name": "ioMoney",
+   "description": "Household finances",
+   "tag": "Household finances",
+   "color": "#94650a",
+   "port": 8710,
+   "folder": "money",
+   "order": 80,
+   "compose": {
+    "name": "money",
+    "what": "finances"
+   },
+   "items": [
+    {
+     "kind": "asset",
+     "label": "House or car",
+     "plural": "Houses and cars",
+     "href": "#/account/{id}"
+    },
+    {
+     "kind": "transaction",
+     "label": "Transaction",
+     "plural": "Transactions",
+     "href": "#/transaction/{id}"
+    }
+   ]
+  },
+  {
+   "key": "iocontact",
+   "name": "ioContact",
+   "description": "Contacts",
+   "tag": "Contacts for the family",
+   "color": "#4f2f7d",
+   "port": 8640,
+   "folder": "contacts",
+   "order": 90,
+   "otherPorts": "LDAP 3890",
+   "compose": {
+    "name": "contacts",
+    "what": "contacts"
+   },
+   "items": [
+    {
+     "kind": "contact",
+     "label": "Contact",
+     "plural": "Contacts",
+     "href": "#/c/{id}"
+    }
+   ],
+   "notifications": [
+    {
+     "kind": "birthdays",
+     "label": "Birthdays",
+     "hint": "In the morning, whose birthday or anniversary it is"
+    }
+   ]
+  },
+  {
+   "key": "iohealth",
+   "name": "ioHealth",
+   "description": "Health and fitness",
+   "tag": "Apple Health, on your own server",
+   "color": "#e8445a",
+   "port": 8650,
+   "folder": "health",
+   "order": 100,
+   "compose": {
+    "name": "health",
+    "what": "health"
+   },
+   "notifications": [
+    {
+     "kind": "health",
+     "label": "Health goals",
+     "hint": "When you reach one of your daily goals"
+    },
+    {
+     "kind": "health_week",
+     "label": "Weekly health summary",
+     "hint": "On Monday morning, last week’s steps, sleep and workouts next to the week before"
+    }
+   ]
+  },
+  {
+   "key": "iodns",
+   "name": "ioDNS",
+   "description": "Local DNS",
+   "tag": "Local DNS",
+   "color": "#0e7c86",
+   "port": 8660,
+   "folder": "dns",
+   "order": 110,
+   "adminTool": true,
+   "compose": {
+    "name": "dns",
+    "what": "DNS records"
+   }
+  },
+  {
+   "key": "iobackup",
+   "name": "ioBackup",
+   "description": "Database backups",
+   "tag": "Database backups",
+   "color": "#8a4b0f",
+   "port": 8680,
+   "folder": "backup",
+   "order": 120,
+   "adminTool": true,
+   "compose": {
+    "name": "backup",
+    "what": "backups"
+   },
+   "notifications": [
+    {
+     "kind": "backups",
+     "label": "Failed backups",
+     "hint": "When a backup does not finish",
+     "admin": true
+    }
+   ]
+  }
+ ]
+}

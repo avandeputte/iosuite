@@ -12,9 +12,8 @@ from app import __version__, config
 APP = config.APP
 
 
-# app_label, version, public_url, description and color: ionote' row in the suite's list of apps (ioStart, the start page)
-auth = Auth(APP, app_label="ioNote",
-            version=__version__, public_url=config.PUBLIC_URL or None, description="Notes", color="#1c5a5e")
+# its row in the suite's list of apps (ioStart, the start page): the version and address here, the rest from app.json
+auth = Auth(APP, version=__version__, public_url=config.PUBLIC_URL or None)
 auth.write_role = "member"  # every note is its owner's own: a member writes theirs (canWrite in /api/auth/me), a viewer only reads
 auth.deny_exempt = ("/mcp",)  # MCP clients sign in with an app password, whatever Cloudflare service token got them through
 

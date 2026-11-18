@@ -12,9 +12,8 @@ from app import __version__, config
 
 APP = config.APP
 
-# version, address, description and color go into the suite's list of apps (iosuite_shared.suite, read by ioStart)
-auth = Auth(APP, app_label="ioCalendar", basic_realm="ioCalendar", version=__version__, public_url=config.PUBLIC_URL or None,
-            description="Calendar", color="#963522")
+# the version and address (the name, description and colour: app.json) go into the suite's list of apps (read by ioStart)
+auth = Auth(APP, version=__version__, public_url=config.PUBLIC_URL or None)
 auth.deny_exempt = ("/mcp", "/dav", "/.well-known/")  # apps sign in with app passwords, whatever got them through a proxy
 # a CalDAV-only app password (the Apple profile's, or "Calendar apps only" in Settings › Account) opens these and
 # nothing else: 403 on the REST API, MCP and the web app (iosuite-shared enforces it)

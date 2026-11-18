@@ -1,0 +1,30 @@
+{
+  "key": "iocontact",
+  "name": "ioContact",
+  "description": "Contacts",
+  "tag": "Contacts for the family",
+  "color": "#4f2f7d",
+  "port": 8640,
+  "folder": "contacts",
+  "order": 90,
+  "otherPorts": "LDAP 3890",
+  "compose": {
+    "name": "contacts",
+    "what": "contacts"
+  },
+  "items": [
+    {
+      "kind": "contact",
+      "label": "Contact",
+      "plural": "Contacts",
+      "href": "#/c/{id}"
+    }
+  ],
+  "notifications": [
+    {
+      "kind": "birthdays",
+      "label": "Birthdays",
+      "hint": "In the morning, whose birthday or anniversary it is"
+    }
+  ]
+}

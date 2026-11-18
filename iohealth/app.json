@@ -1,0 +1,26 @@
+{
+  "key": "iohealth",
+  "name": "ioHealth",
+  "description": "Health and fitness",
+  "tag": "Apple Health, on your own server",
+  "color": "#e8445a",
+  "port": 8650,
+  "folder": "health",
+  "order": 100,
+  "compose": {
+    "name": "health",
+    "what": "health"
+  },
+  "notifications": [
+    {
+      "kind": "health",
+      "label": "Health goals",
+      "hint": "When you reach one of your daily goals"
+    },
+    {
+      "kind": "health_week",
+      "label": "Weekly health summary",
+      "hint": "On Monday morning, last week’s steps, sleep and workouts next to the week before"
+    }
+  ]
+}

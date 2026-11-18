@@ -1,0 +1,15 @@
+{
+  "key": "iostart",
+  "name": "ioStart",
+  "description": "Start page",
+  "tag": "The start page",
+  "color": "#2f3a5a",
+  "port": 8630,
+  "folder": null,
+  "order": 10,
+  "aside": "the start page",
+  "compose": {
+    "name": "home",
+    "what": "start page"
+  }
+}

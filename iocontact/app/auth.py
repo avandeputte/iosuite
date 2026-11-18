@@ -16,8 +16,7 @@ APP = config.APP
 
 # the version, address, description and colour also go into the suite's list of apps (ios_apps), which the
 # start page and the other apps read: written on the first request
-auth = Auth(APP, app_label="ioContact", basic_realm="ioContact", version=__version__, public_url=config.PUBLIC_URL or None,
-            description="Contacts", color="#4f2f7d")
+auth = Auth(APP, version=__version__, public_url=config.PUBLIC_URL or None)
 # a proxy identity with no account here is refused, except where clients sign in themselves (CardDAV and MCP with an
 # app password, their discovery, and the calendar feed's secret link)
 auth.deny_exempt = ("/mcp", "/dav", "/.well-known/", "/cal/")

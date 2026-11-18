@@ -1,0 +1,29 @@
+{
+  "key": "iocalendar",
+  "name": "ioCalendar",
+  "description": "Calendar",
+  "tag": "The family calendar",
+  "color": "#963522",
+  "port": 8620,
+  "folder": "calendar",
+  "order": 40,
+  "compose": {
+    "name": "calendar",
+    "what": "calendar"
+  },
+  "items": [
+    {
+      "kind": "event",
+      "label": "Event",
+      "plural": "Events",
+      "href": "#/event/{id}"
+    }
+  ],
+  "notifications": [
+    {
+      "kind": "events",
+      "label": "Event reminders",
+      "hint": "The reminders set on events"
+    }
+  ]
+}

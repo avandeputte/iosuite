@@ -1,0 +1,29 @@
+{
+  "key": "ionote",
+  "name": "ioNote",
+  "description": "Notes",
+  "tag": "Notes, clipboard snippets and screenshots",
+  "color": "#1c5a5e",
+  "port": 8610,
+  "folder": "notes",
+  "order": 30,
+  "keepsOwn": [
+    "workflow"
+  ],
+  "compose": {
+    "name": "notes",
+    "what": "notes"
+  },
+  "install": {
+    "data": true
+  },
+  "items": [
+    {
+      "kind": "note",
+      "label": "Note",
+      "plural": "Notes",
+      "href": "#/note/{id}",
+      "id": "uuid"
+    }
+  ]
+}
