@@ -109,7 +109,8 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   them, whoever may change it changes them. They are kept apart from the account (mny_account_info), so no list,
   summary or MCP tool carries them; the MCP tool `bank_contact` gives the phone, website, email and address only.
 - **Transactions by hand** in any account that follows its transactions, one from Monarch too (a cash payment, one
-  the bank has not sent yet): kept through the syncs, and in an account kept by hand each one moves the balance.
+  the bank has not sent yet): kept through the syncs, and in an account kept by hand each one moves the balance (on a card or a
+  loan, money out makes what is owed go up).
 - **Tidy up**: one page for what keeps the transactions right, each with how much there is to do: the ones that need
   a look, likely duplicates, transfers to check, the balance check, the payees, the categories and tags, the rules,
   the recent changes, reconciling against a statement and importing a bank file. The sidebar shows how many need a look.
@@ -133,6 +134,18 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   and its end; tick the transactions it shows (the hidden ones too; the earlier ones the statement before left open
   come first). When the ticked ones add up to what the balance moved by, **Finish** marks them reconciled and keeps
   the statement, so the next one starts where it ended. It can be finished with a difference, which is then kept with it.
+  **Compare with the bank's file** does the ticking: give it the statement's PDF, or the CSV, OFX or QFX file from the
+  bank's website. Its days and its two balances are filled in (a file without a balance: the account's balance on the
+  day before plus the file's lines), each of its lines is looked for in the account (the same amount on the nearest
+  day within five; which way the money went counts where the file says it, and a file that writes money out as a
+  positive number is turned around), and what was found is ticked. What differs is listed: the lines the account
+  does not have (**Add** one, or all of them; with the transaction of another amount that looks like it, when
+  there is one), the lines it has under a day outside the statement or still pending, and the transactions of those
+  days the bank does not show (marked in the list, left unticked). Nothing is finished until **Finish**; the file is
+  read on the server and not kept. A PDF is read as text, in whatever form the bank laid it out: the days from "…
+  through …", the balances after "beginning balance", "new balance" and their like, every line that starts with a
+  date and holds an amount. A scanned statement (pictures of its pages) cannot be read, and a layout it does not
+  make sense of reads short: when the lines read add up to the statement's two balances, the page says so.
 - **Balance check**: for each cash account and card from Monarch Money with a bank behind it, whether its balance
   moved over the past 90 days by what its transactions add up to. Where it did not: by how much, whether money out or
   money in is missing (or kept twice), and between which days the gap appeared, with the way to that month's
@@ -335,6 +348,7 @@ Updates, releases, the reverse proxy and Cloudflare Access work as in every app 
 | Tags: list, filter, set on a transaction, rename or merge, delete | `GET /api/tags`, `GET /api/transactions?tag=`, `PATCH /api/transactions/{id}` (`tags`), `PUT /api/tags` (`{name, newName}`), `POST /api/tags/delete` (`{name}`) |
 | Likely duplicates: list, not duplicates | `GET /api/duplicates`, `POST /api/duplicates/not` (`{ids}`) |
 | Statements: list and where the next starts, the lines to tick, finish, forget | `GET /api/accounts/{id}/statements`, `GET /api/accounts/{id}/statement?start=&end=`, `POST /api/accounts/{id}/statements` (`{start, end, opening, closing, ids, anyway?}`), `DELETE /api/statements/{id}` |
+| The bank's file held against the account (the PDF, CSV, OFX or QFX file as the request body, up to 20 MB; nothing changed or kept) | `POST /api/accounts/{id}/statement/read?name=&order=&flip=` → `{kind, start, end, opening, closing, worked, adds, total, sum, matched, missing, elsewhere, extra, dateOrder, guessed, flipped}` |
 | The balance check; accept a gap (`{gap: null}`: flag it again) | `GET /api/balance-check?days=90`, `POST /api/balance-check/{id}/ok` (`{gap}`) |
 | What each rule does, suggested rules; not this one | `GET /api/rules/upkeep`, `POST /api/rules/suggestions/not` (`{key}`) |
 | History: of a transaction, recent, undo, back to Monarch's own | `GET /api/transactions/{id}/changes`, `GET /api/changes`, `POST /api/changes/undo` (`{id}` or `{batch}`), `POST /api/transactions/{id}/reset` |
@@ -385,7 +399,9 @@ hand, an account made again in Monarch matched with its transactions none twice,
 and putting the data in order: many transactions changed at once and taken back, needing a look, the payees (renamed,
 merged, their category), own tags, likely duplicates, a statement reconciled, the balance check, what each rule does
 and the rules suggested, a transaction's history and back to Monarch's own, saved searches, and a bank file imported
-(CSV and OFX, what is there already left out).
+(CSV and OFX, what is there already left out); and the bank's file held against an account (`test_statementfile.py`):
+a statement's text read in three made-up layouts, a PDF built in the test, a CSV with and without a balance, a card's
+file turned around, an OFX file, and what comes back (found, missing, of another amount, outside the days, not shown).
 
 ## Layout
 
@@ -405,6 +421,8 @@ app/payees.py      the payees: counted, renamed, merged, their usual category
 app/tags.py        the household's own tags on transactions, beside Monarch's
 app/duplicates.py  likely duplicates: the same transaction kept twice
 app/statements.py  an account reconciled against the bank's statement
+app/statementfile.py  the bank's file (PDF, CSV, OFX, QFX) held against the account: what to tick, what differs
+app/statementpdf.py   a statement's PDF read: its days, its two balances, its lines
 app/balancecheck.py  whether an account's balance agrees with its transactions
 app/rulecheck.py   what each rule does, the ones that do nothing, the rules missing
 app/history.py     what was changed by hand on a transaction, and the way back

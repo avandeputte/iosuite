@@ -18,6 +18,7 @@ dependencies = [
   "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
   "mcp<3",                        # the MCP server at /mcp
   "monarchmoneycommunity>=1.7,<2",  # Monarch Money's API (app/monarch.py): the maintained fork of `monarchmoney`
+  "pypdf>=4,<8",  # the text of a bank statement's PDF (app/statementpdf.py)
 ]
 
 [project.optional-dependencies]

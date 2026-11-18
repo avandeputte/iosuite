@@ -75,7 +75,7 @@ app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN
 
 
 def _limit_for(path: str, ctype: str) -> int:
-    if path.endswith("/import"):
+    if path.endswith(("/import", "/statement/read")):
         return config.MAX_IMPORT_BYTES
     return config.MAX_RECEIPT_BYTES if path.endswith("/receipts") else config.MAX_JSON_BYTES
 

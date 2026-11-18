@@ -477,6 +477,23 @@ button.tag.tg.add { border: 0; cursor: pointer; gap: 2px; font-family: inherit; 
   border-radius: var(--r-l); background: var(--bg); border: 1px solid var(--line); box-shadow: var(--shadow); }
 .bulkbar[hidden] { display: none; }
 .bulkbar.recbar { gap: 6px 18px; padding: 10px 12px 10px 16px; }
+.cmppick { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-top: 14px; }
+.cmppick .pillbtn { flex: none; }
+.cmppick > span { flex: 1 1 260px; }
+.cmpbox.busy { opacity: .6; pointer-events: none; }
+.cmphead { display: flex; align-items: center; gap: 8px; }
+.cmphead .ic { color: var(--brand); flex: none; }
+.cmphead b { overflow-wrap: anywhere; }
+.cmpbox p { margin: 6px 0 0; }
+.cmpbox .cmpok { color: var(--ok); }
+.cmpbox h3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--fs-m); margin: 16px 0 4px; }
+.cmpbox .box { min-width: 0; }
+.rows.cmprows .r { gap: 6px 14px; flex-wrap: wrap; }
+.rows.cmprows .main { flex: 1 1 150px; }
+.rows.cmprows .main b, .rows.cmprows .main small, .rows.recon .main b { white-space: normal; overflow-wrap: anywhere; }
+.rows.cmprows .pt { min-width: 0; margin-left: auto; }
+.rows.cmprows .pillbtn { flex: none; }
+.cmpbox .cmpextra { margin-top: 14px; }
 .bulkbar .ok b { color: var(--ok); }
 .bulkbar .off b { color: var(--warn); }
 .saved { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin: -4px 0 12px; }

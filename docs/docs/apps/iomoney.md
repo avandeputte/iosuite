@@ -85,7 +85,11 @@ quotes, and what the house and the cars are worth after their loans.
 - **Likely duplicates**: the same transaction kept twice (typed in and from the bank, or pending and posted) is
   pointed out: keep one and hide the other, or say they are different.
 - **Reconcile with a statement**: give the statement's days and its two balances, tick what it shows, and finish when
-  the difference is zero. The next statement starts where this one ended.
+  the difference is zero. The next statement starts where this one ended. Or let the bank's file do the ticking:
+  upload the statement's PDF, or the CSV, OFX or QFX file from the bank's website. Its days and balances are filled
+  in, what it shows is ticked, and what differs is listed: what the bank has and the account does not (add it in one
+  click), what has another amount, and what the account has that the bank does not show. The file is read on your
+  server and not kept; a scanned statement (pictures of its pages) cannot be read.
 - **Balance check**: does each account's balance at the bank agree with its transactions here? Where it does not,
   ioMoney says by how much, which way, and in which days the gap appeared.
 - **Rules kept in order**: each rule shows how many transactions it is for; one that matches nothing or never decides

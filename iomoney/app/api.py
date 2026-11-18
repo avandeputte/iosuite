@@ -16,7 +16,7 @@ from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
 
 from app import (access, balancecheck, categories, db, duplicates, forecast, history, importer, model, monarch, payees, payoff,
-                 quotes, receipts, recurring, review, rulecheck, searches, splits, statements, tags, transfers)
+                 quotes, receipts, recurring, review, rulecheck, searches, splits, statementfile, statements, tags, transfers)
 
 router = APIRouter()
 
@@ -768,6 +768,20 @@ def statement_lines(aid: int, request: Request, start: str, end: str):
     money out makes the balance go up)."""
     u = _u(request)
     return statements.lines(u, model.account(u, aid), start, end)
+
+
+@router.post("/api/accounts/{aid}/statement/read", dependencies=[access.signed_in])
+async def read_statement(aid: int, request: Request, name: str | None = None, order: str | None = None, flip: str | None = None):
+    """The bank's own file as the request body (up to 20 MB), held against the account: a statement's PDF, or the CSV,
+    OFX or QFX file from the bank's website. Nothing is changed and the file is not kept. name: its file name;
+    order: how day and month stand in its dates (mdy, dmy, ymd), when the guess is wrong; flip: 1 or 0, whether it
+    writes money out as a positive number (as left out: whichever fits). {kind, start, end, opening, closing, worked,
+    adds, total, sum, matched: the transactions found (to tick), missing: the lines the account does not have (with
+    differs: the transaction of another amount that looks like it), elsewhere: the lines it has outside these days
+    or still pending, extra: the transactions of these days the file does not show, dateOrder, guessed, flipped}."""
+    u = _u(request)
+    raw = await request.body()
+    return await run_in_threadpool(lambda: statementfile.read(u, model.account(u, aid), raw, name, order, flip))
 
 
 @router.post("/api/accounts/{aid}/statements", dependencies=[access.signed_in])
