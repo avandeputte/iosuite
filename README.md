@@ -113,6 +113,10 @@ In a checkout an app uses `../shared` as it is (`pip install -e ../shared`), so 
 with every app in the same pull request. `update.sh` is the same in every app, made from
 `shared/templates/update.sh` by `shared/templates/render-update.py`.
 
+An app makes its tables from the `SCHEMA` list in its `app/db.py` at every start (`iosuite_shared.schema.create`). A
+column or a named index added to a table there is also added to databases made before it, so a new column needs
+nothing else; a column that is renamed, retyped or dropped is not followed.
+
 The suite has one version, `__version__` in `shared/iosuite_shared/__init__.py`; every app reports it. A pull request
 leaves that line alone: main raises it by itself after every merge that changes something an install has
 (`.github/workflows/version.yml`), by the last number, or by the middle one when the pull request carries the label

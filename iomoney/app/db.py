@@ -7,7 +7,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 1  # recorded in mny_schema_version; the tables are made as SCHEMA says (pre-release: no upgrade steps)
+SCHEMA_VERSION = 1  # recorded in mny_schema_version; the tables are made as SCHEMA says, and get the columns and indexes added to it later (schema.create)
 PREFIX = "mny"
 
 # Every table is mny_<name> (the suite's naming convention: the apps can share one database) and InnoDB/utf8mb4.
@@ -82,6 +82,7 @@ SCHEMA = [
         category_group VARCHAR(128) NULL,
         notes TEXT NULL,
         tags TEXT NULL,
+        pending TINYINT(1) NOT NULL DEFAULT 0,
         hidden TINYINT(1) NOT NULL DEFAULT 0,
         recurring TINYINT(1) NOT NULL DEFAULT 0,
         edited TINYINT(1) NOT NULL DEFAULT 0,
@@ -471,8 +472,7 @@ def ensure_database() -> None:
 def migrate() -> None:
     ensure_database()
     with tx() as con, con.cursor() as cur:
-        for stmt in SCHEMA:
-            cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
+        schema.create(cur, SCHEMA, " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
         schema.ensure_version_table(cur, PREFIX)
         schema.record_version(cur, PREFIX, SCHEMA_VERSION)
 
