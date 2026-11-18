@@ -458,21 +458,68 @@ def better_names(mrz: dict, text: str) -> dict:
     return out
 
 
-def issued_from_expiry(text: str, expires: dt.date) -> dt.date | None:
-    """A passport's issue date, when its label was not read: the date in the text that is ten (or five, for a child's)
-    years less a day or so before the expiry, as passports are issued."""
-    for m in DATE.finditer(text or ""):
-        d = parse_date(m.group(0))
-        if not d or d >= expires:
-            continue
-        for years in (10, 5):
-            try:
-                later = d.replace(year=d.year + years)
-            except ValueError:
-                later = d.replace(year=d.year + years, day=28)
-            if abs((later - expires).days) <= 3:
-                return d
-    return None
+_INNER = ("names", "dates")
+_MON3 = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
+_WRITTEN = re.compile(r"(?<!\d)(\d\d)[ ./-]?(\d\d|[A-Za-z]{3})(?:/[A-Za-z]{3,4})?[ ./-]?(\d{4})(?!\d)")
+
+
+def _years_before(expires: dt.date, years: int) -> dt.date:
+    try:
+        return expires.replace(year=expires.year - years)
+    except ValueError:  # 29 February
+        return expires.replace(year=expires.year - years, day=28)
+
+
+def issued_from_expiry(text: str, expires: dt.date, times: int = 1) -> dt.date | None:
+    """A passport's issue date, read against its checked expiry: passports run 10, 7 or 5 years (and some 6 or 3), and
+    are issued the day after (or the day of) the same date that many years earlier. The day that fits is taken only when
+    it is printed, and written out at least `times` times (each reading of the page adds its own copy: a figure
+    misread once can make another day that fits, "10 04 2026" for a seven-year passport issued 10 04 2024)."""
+    written = {}
+    for m in _WRITTEN.finditer((text or "").upper()):
+        w = m.group(1) + m.group(2) + m.group(3)
+        written[w] = written.get(w, 0) + 1
+    fits = []
+    for years in (10, 7, 5, 6, 3):
+        for later in (1, 0):
+            d = _years_before(expires, years) + dt.timedelta(days=later)
+            forms = {f"{d.day:02d}{d.month:02d}{d.year}", f"{d.month:02d}{d.day:02d}{d.year}", f"{d.day:02d}{_MON3[d.month - 1]}{d.year}"}
+            if sum(written.get(f, 0) for f in forms) >= times and d not in fits:
+                fits.append(d)
+    return fits[0] if len(fits) == 1 else None
+
+
+def _distance(a: str, b: str) -> int:
+    """How many letters to change, add or take away to make one into the other (Levenshtein)."""
+    row = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        prev, row[0] = row[0], i
+        for j, cb in enumerate(b, 1):
+            prev, row[j] = row[j], min(row[j] + 1, row[j - 1] + 1, prev + (ca != cb))
+    return row[-1]
+
+
+def _names_part(field: str) -> str:
+    """A zone's name field without its filler: the names end at the first <<< (two < at most part them), and what
+    comes after it is filler misread as letters ("JOHN<<<<<<<CCESS<")."""
+    return field.split("<<<")[0].strip("<")
+
+
+def vote_names(found: list[dict]) -> dict | None:
+    """The zone read best from several readings: those whose number and dates hold (check digits), and among them the
+    names that agree most with the others' (Tesseract misreads a letter or a < differently each time)."""
+    ok = [m for m in found if m and m.get("checked")]
+    if not ok:
+        return next((m for m in found if m), None)
+    first = ok[0]
+    same = [m for m in ok if (m["number"], m["expiresOn"]) == (first["number"], first["expiresOn"]) and m.get("names")]
+    if len(same) < 2:
+        return first
+    parts = [_names_part(m["names"]) for m in same]
+    best = min(range(len(parts)), key=lambda i: (sum(_distance(parts[i], p) for p in parts), "<<" not in parts[i]))
+    given, sur = _name(parts[best])
+    holder = " ".join(x for x in (given, sur) if x)
+    return {**first, "given": given or None, "surname": sur or None, "holder": holder or None, "names": same[best]["names"]}
 
 
 # ------------------------------------------------------------------ pictures and PDFs
@@ -541,6 +588,64 @@ def _ink(im: Image.Image, level: float) -> Image.Image:
     return out.resize((int(out.width * f), int(out.height * f)), Image.LANCZOS) if f > 1 else out
 
 
+def _words(im: Image.Image) -> list[tuple[int, int, int, int, str]]:
+    """The words Tesseract finds in a picture, with their boxes: (left, top, width, height, text)."""
+    exe = tesseract()
+    if not exe:
+        return []
+    buf = io.BytesIO()
+    im.save(buf, "PNG")
+    try:
+        r = subprocess.run([exe, "stdin", "stdout", "-l", "eng", "--psm", "3", "tsv"], input=buf.getvalue(),
+                           capture_output=True, timeout=TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    out = []
+    for line in r.stdout.decode("utf-8", "replace").splitlines()[1:]:
+        c = line.split("\t")
+        if len(c) >= 12 and c[11].strip():
+            try:
+                out.append((int(c[6]), int(c[7]), int(c[8]), int(c[9]), c[11].strip()))
+            except ValueError:
+                continue
+    return out
+
+
+def reread_dates(im: Image.Image, most: int = 8) -> str:
+    """The dates on a picture read again one by one, each alone and large: small figures over a security pattern are
+    misread in a reading of the whole page ("2026" for 2024) and seldom when read alone."""
+    rgb = im.convert("RGB")
+    ink = _ink(rgb, 0.75)
+    f = ink.width / rgb.width
+    words = _words(ink)
+    blue = ImageOps.autocontrast(rgb.split()[2], cutoff=1)
+    out = []
+    for i, (left, top, w, h, word) in enumerate(words):
+        if len(out) >= most:
+            break
+        if not re.fullmatch(r"[0-9OSIlZB]{4}[.,]?", word):
+            continue
+        row = [x for x in words[max(0, i - 2):i + 1] if abs(x[1] + x[3] / 2 - (top + h / 2)) < h]
+        box = (int(min(x[0] for x in row) / f) - 6, int(min(x[1] for x in row) / f) - 6,
+               int(max(x[0] + x[2] for x in row) / f) + 6, int(max(x[1] + x[3] for x in row) / f) + 6)
+        c = blue.crop(box)
+        if c.width < 8 or c.height < 4:
+            continue
+        c = c.resize((c.width * 3, c.height * 3), Image.LANCZOS)
+        buf = io.BytesIO()
+        c.save(buf, "PNG")
+        try:
+            r = subprocess.run([tesseract(), "stdin", "stdout", "-l", "eng", "--psm", "7", "-c",
+                                "tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPRSTUVYabcdeghilnoprstuvy /."],
+                               input=buf.getvalue(), capture_output=True, timeout=TIMEOUT)
+        except (OSError, subprocess.TimeoutExpired):
+            break
+        t = r.stdout.decode("utf-8", "replace").strip()
+        if t:
+            out.append(t)
+    return "\n".join(out)
+
+
 def _score(text: str) -> int:
     return len(re.findall(r"[A-Za-z]{3,}", text))
 
@@ -563,27 +668,37 @@ def read_picture(im: Image.Image) -> tuple[str, dict | None, dict | None]:
             if _score(t) > _score(best[0]):
                 best = (t, r, angle)
         text, g, turn = best
-    mrz = parse_mrz(text)
-    if (not mrz or not mrz.get("checked")) and (_mrz_lines(text) or re.search(r"\bpass\s?port\b", text, re.I)):
-        # the zone again, alone and with only its own characters
+    zones = [parse_mrz(text)]
+    if not zones[0] or not zones[0].get("checked"):
+        # the zone again, alone and with only its own characters (also when the first reading saw no sign of one: on a
+        # scan of the open booklet Tesseract can read the page above and skip the photo page altogether)
         bottom = g.crop((0, int(g.height * 0.55), g.width, g.height))
-        again = parse_mrz(_tess(bottom, psm=6, mrz=True))
-        if again and (not mrz or again.get("checked")):
-            mrz = again
+        zones.append(parse_mrz(_tess(bottom, psm=6, mrz=True)))
+    mrz = vote_names(zones)
     if (mrz or re.search(_PAPERS, text, re.I)) and not lic:
-        # a passport or an ID card: its dates again, from the ink alone, when the first reading lost them
+        # a passport or an ID card: its dates again, from the ink alone, when the first reading lost them; the whole
+        # picture, then its lower half (a scan of the open booklet: the photo page, whose zone is at the very bottom,
+        # under the page facing it)
         rgb = im.convert("RGB").rotate(turn, expand=True) if turn else im.convert("RGB")
-        for level in (0.75, 0.88):
+        w, h = rgb.size
+        tries = [(rgb, 0.75), (rgb, 0.88), (rgb.crop((0, h // 2, w, h)), 0.75)]
+        def settled():
+            if mrz and mrz.get("checked"):
+                return bool(issued_from_expiry(text, mrz["expiresOn"], 2))
             f = from_text(text)
-            expires = f.get("expiresOn") or (mrz or {}).get("expiresOn")
-            if expires and (f.get("issuedOn") or issued_from_expiry(text, expires)):
+            return bool(f.get("expiresOn") and f.get("issuedOn"))
+        for part, level in tries:
+            if settled():
                 break
-            more = _tess(_ink(rgb, level))
+            more = _tess(_ink(part, level))
             text = text + "\n\n" + more
-            if not mrz or not mrz.get("checked"):
-                again = parse_mrz(more)
-                if again and (not mrz or again.get("checked")):
-                    mrz = again
+            zones.append(parse_mrz(more))
+            mrz = vote_names(zones)
+        if mrz and mrz.get("checked") and not settled():
+            # the dates read again one by one: a reading of the whole page can misread a figure into another day
+            # that also fits ("10 04 2026" for a seven-year passport issued 10 04 2024 fits a five-year one)
+            mrz = {**mrz, "dates": reread_dates(rgb.crop((0, h // 2, w, h)))}
+            text = text + "\n\n" + mrz["dates"]
     if not lic:  # a barcode on a turned picture
         for angle in (90, 270):
             for code in barcodes(im.rotate(angle, expand=True)):
@@ -658,12 +773,14 @@ def read(raw: bytes, mime: str) -> dict:
     if mrz:
         mrz = better_names(mrz, text)
     found = from_text(text)
-    if mrz and mrz.get("expiresOn") and not found.get("issuedOn"):
-        found["issuedOn"] = issued_from_expiry(text, mrz["expiresOn"])
-        if not found["issuedOn"]:
-            found.pop("issuedOn")
+    if mrz and mrz.get("expiresOn") and mrz.get("checked"):
+        # the issue date in step with the checked expiry: read alone and large, or else in two readings of the page;
+        # surer than the date under its label, which may have a figure misread
+        fits = issued_from_expiry(mrz.get("dates") or "", mrz["expiresOn"]) or issued_from_expiry(text, mrz["expiresOn"], 2)
+        if fits:
+            found["issuedOn"] = fits
     if mrz:
-        mrz = {k: v for k, v in mrz.items() if k != "names"}
+        mrz = {k: v for k, v in mrz.items() if k not in _INNER}
     source = "text" if found else None
     for facts, src in ((mrz, "mrz"), (lic, "barcode")):
         if facts:
