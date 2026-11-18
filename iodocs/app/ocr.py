@@ -31,6 +31,7 @@ TIMEOUT = 90          # seconds for one run of tesseract or pdftoppm
 MAX_PAGES = 4         # pages of a scanned PDF that are read
 MAX_SIDE = 3600       # a picture is made no larger than this before it is read
 MIN_SIDE = 1600       # nor smaller (small photos read better made larger)
+INK_SIDE = 4200       # the size the ink alone is read at (the small print under a passport's labels)
 TEXT_PDF = 80         # characters a PDF's own text needs to be taken as it is
 
 
@@ -146,6 +147,11 @@ def _mrz_date(s: str, future: bool) -> dt.date | None:
     return _day(y, mm, dd)
 
 
+# the second line of a passport's zone: birth date, its check digit, sex, expiry date (a US passport's often has a single
+# < in it, since its number and personal number fill their fields)
+_LINE2 = re.compile(r"[0-9OQDILZSGBT]{6}[0-9OQDILZSGBT<][MFX<][0-9OQDILZSGBT]{6}")
+
+
 def _mrz_lines(text: str) -> list[str]:
     """The lines of the text that look like a machine-readable zone, cleaned up."""
     out = []
@@ -153,7 +159,7 @@ def _mrz_lines(text: str) -> list[str]:
         s = raw.upper().replace("«", "<").replace("‹", "<").replace("(", "<").replace("[", "<").replace("{", "<")
         s = re.sub(r"\s+", "", s)
         s = re.sub(r"[^A-Z0-9<]", "", s)
-        if len(s) >= 28 and (s.count("<") >= 2 or re.match(r"[PIACV][A-Z<][A-Z<]{3}", s)):
+        if len(s) >= 28 and (s.count("<") >= 2 or re.match(r"[PIACV][A-Z<][A-Z<]{3}", s) or _LINE2.search(s)):
             out.append(s)
     return out
 
@@ -202,7 +208,7 @@ def parse_mrz(text: str) -> dict | None:
             a, b, c = _fit(a, 30), _fit(b, 30), _fit(c, 30)
             number, ok_n = _number(a[5:14], a[14])
             given, sur = _name(c)
-            r = {"code": a[:2], "country": a[2:5], "number": number, "birth": b[0:6], "birth_ok": _ok(b[0:6], b[6]),
+            r = {"names": c, "code": a[:2], "country": a[2:5], "number": number, "birth": b[0:6], "birth_ok": _ok(b[0:6], b[6]),
                  "sex": b[7], "expiry": b[8:14], "expiry_ok": _ok(b[8:14], b[14]), "nationality": b[15:18],
                  "given": given, "surname": sur, "number_ok": ok_n}
             return _mrz_out(r)
@@ -212,11 +218,13 @@ def parse_mrz(text: str) -> dict | None:
         for n in (44, 36):
             if n - 3 <= len(a) <= n + 2 and n - 3 <= len(b) <= n + 2 and a[0] in "PIACV":
                 a2, b2 = _fit(a, n), _fit(b, n)
+                if not (re.fullmatch(r"\d{6}", _digits(b2[13:19])) or re.fullmatch(r"\d{6}", _digits(b2[21:27]))):
+                    continue  # a line of capitals above the zone, not its second line
                 number, ok_n = _number(b2[0:9], b2[9])
                 given, sur = _name(a2[5:])
                 r = {"code": a2[:2], "country": a2[2:5], "number": number, "number_ok": ok_n, "nationality": b2[10:13],
                      "birth": b2[13:19], "birth_ok": _ok(b2[13:19], b2[19]), "sex": b2[20], "expiry": b2[21:27],
-                     "expiry_ok": _ok(b2[21:27], b2[27]), "given": given, "surname": sur}
+                     "expiry_ok": _ok(b2[21:27], b2[27]), "given": given, "surname": sur, "names": a2[5:]}
                 return _mrz_out(r)
     return None
 
@@ -232,7 +240,7 @@ def _mrz_out(r: dict) -> dict | None:
            "given": r["given"] or None, "surname": r["surname"] or None,
            "nationality": _country(r["nationality"]) or None, "sex": {"M": "M", "F": "F"}.get(r["sex"]),
            "birthDate": _mrz_date(r["birth"], False), "expiresOn": _mrz_date(r["expiry"], True),
-           "checked": bool(r["number_ok"] and r["birth_ok"] and r["expiry_ok"])}
+           "checked": bool(r["number_ok"] and r["birth_ok"] and r["expiry_ok"]), "names": r.get("names")}
     if not (out["number"] or out["expiresOn"]):
         return None
     if not r["expiry_ok"] and out["expiresOn"] is None:
@@ -340,8 +348,9 @@ KIND_WORDS = [  # (kind, pattern): the first that matches the text says what it 
     ("tax", r"\bform\s*w-?2\b|\b1099\b|tax\s*return|\birs\b"),
     ("education", r"\bdiploma\b|\btranscript\b|bachelor|master\s*of"),
 ]
-_LBL_EXP = r"(?:exp(?:ires|iry|iration|\.)?(?:\s*date)?|date\s*of\s*expiry|valid\s*(?:until|thru|through|to)|good\s*thru|renewal\s*date|expiration|4b)"
-_LBL_ISS = r"(?:iss(?:ued|ue)?(?:\s*(?:on|date))?|date\s*of\s*issue|issue\s*date|effective(?:\s*date)?|4a)"
+# (\b and (?!ed): not "naissance", the French for birth, nor "expedición", the Spanish for issue, both on a US passport)
+_LBL_EXP = r"(?:\bexp(?!ed)(?:ires|iry|iration|\.)?(?:\s*date)?|date\s*of\s*expiry|valid\s*(?:until|thru|through|to)|good\s*thru|renewal\s*date|expiration|\b4b\b)"
+_LBL_ISS = r"(?:\biss(?:ued|ue)?(?:\s*(?:on|date))?|date\s*of\s*issue|issue\s*date|effective(?:\s*date)?|\b4a\b)"
 _LBL_DOB = r"(?:dob|date\s*of\s*birth|birth\s*date|born)"
 _LBL_NUM = (r"(?:policy\s*(?:no|number|#)|certificate\s*(?:no|number|#)|member\s*(?:id|no|number)|"
             r"licen[cs]e\s*(?:no|number|#)|lic\s*(?:no|#)|\bdln?\b|4d|document\s*(?:no|number)|passport\s*(?:no|number)|"
@@ -350,11 +359,15 @@ _PERIOD = re.compile(r"(?:policy|coverage|term)\s*(?:period|term|dates?)|effecti
 
 
 def _after(text: str, label: str, want_date: bool = True, us: bool = True):
-    """The first date (or number) written after the label, on its line or the next."""
+    """The first date (or number) written after the label, on its line or the next (OCR often puts an empty line
+    between a label and what is written under it, as on a passport: "Date of issue/Date de délivrance/Fecha de
+    expedición", then "24 JUL 2026")."""
     for m in re.finditer(label, text, re.I):
-        rest = text[m.end():m.end() + 60]
+        rest = text[m.end():m.end() + 90]
         if want_date:
-            d = parse_date(rest.split("\n\n")[0], us)
+            para, _, more = rest.partition("\n\n")
+            nxt = next((x for x in more.split("\n") if x.strip()), "")
+            d = parse_date(para, us) or parse_date(nxt, us)
             if d:
                 return d
         else:
@@ -392,6 +405,74 @@ def from_text(text: str) -> dict:
     out["birthDate"] = _after(t, _LBL_DOB, True, us)
     out["number"] = _after(t, _LBL_NUM, False)
     return {k: v for k, v in out.items() if v}
+
+
+_PAPERS = dict(KIND_WORDS)["passport"] + "|" + dict(KIND_WORDS)["id_card"]
+_LBL_SUR = re.compile(r"\b(?:surname|last\s*name)\b", re.I)
+_LBL_GIVEN = re.compile(r"\b(?:given\s*names?|first\s*names?)\b", re.I)
+_CAPS = re.compile(r"[A-Z][A-Z'\-]*(?: [A-Z][A-Z'\-]*)*")
+
+
+def _printed(text: str, label: re.Pattern) -> list[str]:
+    """The words in capitals on the line under each such label ("Surname/Nom/Apellidos", then "DOE")."""
+    out = []
+    for m in label.finditer(text or ""):
+        nxt = next((x for x in text[m.end():].split("\n")[1:4] if x.strip()), "")
+        w = _CAPS.search(nxt)
+        if w and w.group(0) not in out:
+            out.append(w.group(0))
+    return out
+
+
+def _extras(field: str, sur: str, given: str) -> str | None:
+    """The letters of the zone's name field that the printed names do not account for, or None when the printed names
+    are not in it (the surname first, then the given names, in order)."""
+    letters = re.sub(r"[^A-Z]", "", field or "")
+    sur, given = re.sub(r"[^A-Z]", "", sur), re.sub(r"[^A-Z]", "", given)
+    if not sur or not letters.startswith(sur):
+        return None
+    rest, extra, i = letters[len(sur):], [], 0
+    for ch in rest:
+        if i < len(given) and ch == given[i]:
+            i += 1
+        else:
+            extra.append(ch)
+    return "".join(extra) if i == len(given) else None
+
+
+def better_names(mrz: dict, text: str) -> dict:
+    """The zone's names put right from the printed ones when Tesseract read some of its <<< filler as letters (K, E, X,
+    S, C, L): "DOE<K<JANE" for DOE<<JANE. Only when the printed names are the zone's own, letter for letter, in order."""
+    if not mrz.get("names"):
+        return mrz
+    pairs = [(sur, given) for sur in _printed(text, _LBL_SUR) for given in _printed(text, _LBL_GIVEN) or [""]]
+    for sur, given in pairs:
+        extra = _extras(mrz["names"], sur, given)
+        if extra is not None and all(ch in "KEXSCL" for ch in extra):
+            break
+    else:
+        return mrz
+    tc = lambda x: " ".join("-".join(p.capitalize() for p in w.split("-")) for w in x.split())  # noqa: E731
+    out = {**mrz, "surname": tc(sur), "given": tc(given) if given else None}
+    out["holder"] = " ".join(x for x in (out["given"], out["surname"]) if x)
+    return out
+
+
+def issued_from_expiry(text: str, expires: dt.date) -> dt.date | None:
+    """A passport's issue date, when its label was not read: the date in the text that is ten (or five, for a child's)
+    years less a day or so before the expiry, as passports are issued."""
+    for m in DATE.finditer(text or ""):
+        d = parse_date(m.group(0))
+        if not d or d >= expires:
+            continue
+        for years in (10, 5):
+            try:
+                later = d.replace(year=d.year + years)
+            except ValueError:
+                later = d.replace(year=d.year + years, day=28)
+            if abs((later - expires).days) <= 3:
+                return d
+    return None
 
 
 # ------------------------------------------------------------------ pictures and PDFs
@@ -435,6 +516,31 @@ def _tess(im: Image.Image, psm: int = 3, mrz: bool = False) -> str:
     return r.stdout.decode("utf-8", "replace")
 
 
+def _ink(im: Image.Image, level: float) -> Image.Image:
+    """Only the printed ink of a picture, black on white: a passport's or an ID card's data is printed in black over a
+    pale blue or green security pattern, which Tesseract otherwise reads as noise (and loses the dates in). The blue
+    channel makes that pattern palest; level is a share of the Otsu threshold between ink and paper."""
+    ch = im.split()[2] if im.mode == "RGB" else im.convert("L")
+    ch = ImageOps.autocontrast(ch, cutoff=1)
+    h = ch.histogram()
+    total, s_all = sum(h), sum(i * n for i, n in enumerate(h))
+    w = s = 0
+    best, cut = -1.0, 128
+    for t, n in enumerate(h):
+        w += n
+        if not w or w == total:
+            continue
+        s += t * n
+        v = w * (total - w) * (s / w - (s_all - s) / (total - w)) ** 2
+        if v > best:
+            best, cut = v, t
+    cut = int(cut * level)
+    out = ch.point(lambda v: 255 if v > cut else 0)
+    side = max(out.size)
+    f = INK_SIDE / side
+    return out.resize((int(out.width * f), int(out.height * f)), Image.LANCZOS) if f > 1 else out
+
+
 def _score(text: str) -> int:
     return len(re.findall(r"[A-Za-z]{3,}", text))
 
@@ -448,14 +554,15 @@ def read_picture(im: Image.Image) -> tuple[str, dict | None, dict | None]:
             break
     g = _prepared(im)
     text = _tess(g)
+    turn = 0
     if _score(text) < 6 and not lic:  # sideways or upside down: the turn that reads best
-        best = (text, g)
+        best = (text, g, 0)
         for angle in (90, 270, 180):
             r = g.rotate(angle, expand=True)
             t = _tess(r)
             if _score(t) > _score(best[0]):
-                best = (t, r)
-        text, g = best
+                best = (t, r, angle)
+        text, g, turn = best
     mrz = parse_mrz(text)
     if (not mrz or not mrz.get("checked")) and (_mrz_lines(text) or re.search(r"\bpass\s?port\b", text, re.I)):
         # the zone again, alone and with only its own characters
@@ -463,6 +570,20 @@ def read_picture(im: Image.Image) -> tuple[str, dict | None, dict | None]:
         again = parse_mrz(_tess(bottom, psm=6, mrz=True))
         if again and (not mrz or again.get("checked")):
             mrz = again
+    if (mrz or re.search(_PAPERS, text, re.I)) and not lic:
+        # a passport or an ID card: its dates again, from the ink alone, when the first reading lost them
+        rgb = im.convert("RGB").rotate(turn, expand=True) if turn else im.convert("RGB")
+        for level in (0.75, 0.88):
+            f = from_text(text)
+            expires = f.get("expiresOn") or (mrz or {}).get("expiresOn")
+            if expires and (f.get("issuedOn") or issued_from_expiry(text, expires)):
+                break
+            more = _tess(_ink(rgb, level))
+            text = text + "\n\n" + more
+            if not mrz or not mrz.get("checked"):
+                again = parse_mrz(more)
+                if again and (not mrz or again.get("checked")):
+                    mrz = again
     if not lic:  # a barcode on a turned picture
         for angle in (90, 270):
             for code in barcodes(im.rotate(angle, expand=True)):
@@ -534,7 +655,15 @@ def read(raw: bytes, mime: str) -> dict:
         if im is not None:
             text, mrz, lic = read_picture(im)
             ocr_ran = True
+    if mrz:
+        mrz = better_names(mrz, text)
     found = from_text(text)
+    if mrz and mrz.get("expiresOn") and not found.get("issuedOn"):
+        found["issuedOn"] = issued_from_expiry(text, mrz["expiresOn"])
+        if not found["issuedOn"]:
+            found.pop("issuedOn")
+    if mrz:
+        mrz = {k: v for k, v in mrz.items() if k != "names"}
     source = "text" if found else None
     for facts, src in ((mrz, "mrz"), (lic, "barcode")):
         if facts:

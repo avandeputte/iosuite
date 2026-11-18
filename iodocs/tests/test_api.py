@@ -173,6 +173,87 @@ def test_the_machine_readable_zone_and_dates():
     assert t["birthDate"] == dt.date(1981, 7, 21) and t["issuedOn"] == dt.date(2021, 3, 14)
 
 
+def _us_passport_zone(number: str, dob: str, exp: str, personal: str) -> str:
+    """Line two of a made-up passport's zone, check digits and all; a full personal number leaves a single <."""
+    l2 = number + ocr.check_digit(number) + "USA" + dob + ocr.check_digit(dob) + "F" + exp + ocr.check_digit(exp)
+    l2 += (personal + "<" * 14)[:14] + ocr.check_digit((personal + "<" * 14)[:14])
+    return l2 + ocr.check_digit(l2[0:10] + l2[13:20] + l2[21:43])
+
+
+def test_a_us_passport_page_as_tesseract_reads_it():
+    # made-up data, laid out as Tesseract gives back a scanned US passport: labels in three languages with an empty
+    # line before each value, "naissance" and "expedición" in the labels, the zone's second line with one < only and
+    # some of its first line's <<< filler read as K
+    l2 = _us_passport_zone("A12345678", "800101", "350313", "9876543210123")
+    assert l2.count("<") == 1
+    text = ("PASSPORT\nPASSEPORT/PASAPORTE\n\nPassport No./No. du Passeport/No. de Pasaporte\n\nA12345678\n\n"
+            "Surname/Nom/Apellidos\n\nDOE\n\nGiven names/Prénoms/Nombres\nJANE-ANN MARIE ”\n\n"
+            "Date of birth/Date de naissance/Fecha de nacimiento\n\n01 JAN 1980\n\nSex/Sexe/Sexo\n\nF\n\n"
+            "Date of issue/Date de délivrance/Fecha de expedición\n\n14 MAR 2025\n\n"
+            "Date of expiration/Date d'expiration/Fecha de caducidad\n\n13 MAR 2035\n\n"
+            "P<USADOE<K<JANE<KANN<MARIE<<<<<<<<<K<<<KK<<\n" + l2 + "\n\n"
+            "IF YOUR PASSPORT EXPIRES WITHIN SIX MONTHS OF YOUR DATE OF DEPARTURE,\n")
+    t = ocr.from_text(text)
+    assert t["issuedOn"] == dt.date(2025, 3, 14) and t["expiresOn"] == dt.date(2035, 3, 13), t
+    assert t["birthDate"] == dt.date(1980, 1, 1)
+    m = ocr.parse_mrz(text)
+    assert m and m["checked"] and m["number"] == "A12345678" and m["expiresOn"] == dt.date(2035, 3, 13), m
+    m = ocr.better_names(m, text)
+    assert m["holder"] == "Jane-Ann Marie Doe" and m["surname"] == "Doe"
+    # printed names that are not the zone's own leave the zone's alone
+    assert ocr.better_names({**m, "holder": "x"}, text.replace("\nDOE\n", "\nROE\n"))["holder"] == "x"
+    # the issue date with its label lost: ten years less a day before the expiry
+    assert ocr.issued_from_expiry("01 JAN 1980\n14 MAR 2025 -\n13 MAR 2035", dt.date(2035, 3, 13)) == dt.date(2025, 3, 14)
+    assert ocr.issued_from_expiry("01 JAN 1980", dt.date(2035, 3, 13)) is None
+
+
+def _patterned_passport_scan() -> bytes:
+    """A made-up US passport page printed over a pale blue security pattern, the whole open booklet as a flatbed scan
+    gives it (an endorsements page above)."""
+    sans = ImageFont.truetype("DejaVuSans.ttf", 24)
+    big = ImageFont.truetype("DejaVuSans.ttf", 34)
+    mono = ImageFont.truetype("DejaVuSansMono.ttf", 40)
+    im = Image.new("RGB", (1500, 2060), (214, 226, 242))
+    dr = ImageDraw.Draw(im)
+    for i in range(-2060, 1500, 24):  # the guilloche: fine pale blue lines every way
+        dr.line([(i, 0), (i + 2060, 2060)], fill=(184, 200, 232), width=1)
+        dr.line([(i + 2060, 0), (i, 2060)], fill=(188, 204, 234), width=1)
+    for y in range(1100, 1800, 16):  # and the microprint behind the data
+        dr.text((520, y), "UNITEDSTATESOFAMERICA" * 3, font=ImageFont.truetype("DejaVuSans.ttf", 10), fill=(172, 188, 226))
+    dr.text((200, 60), "IF YOUR PASSPORT EXPIRES WITHIN SIX MONTHS OF YOUR DATE OF DEPARTURE,", font=sans, fill=(40, 60, 120))
+    dr.text((420, 120), "Endorsements / Mentions Spéciales / Anotaciones", font=sans, fill=(40, 60, 120))
+    dr.text((100, 1040), "PASSPORT", font=sans, fill=(60, 70, 110))
+    dr.text((440, 1040), "THE UNITED STATES OF AMERICA", font=big, fill=(60, 70, 110))
+    rows = [("Passport No./No. du Passeport/No. de Pasaporte", "A12345678"), ("Surname/Nom/Apellidos", "DOE"),
+            ("Given names/Prénoms/Nombres", "JANE-ANN MARIE"), ("Nationality/Nationalité/Nacionalidad", "UNITED STATES OF AMERICA"),
+            ("Date of birth/Date de naissance/Fecha de nacimiento", "01 JAN 1980"), ("Sex/Sexe/Sexo", "F"),
+            ("Place of birth/Lieu de naissance/Lugar de nacimiento", "OREGON, U.S.A."),
+            ("Date of issue/Date de délivrance/Fecha de expedición", "14 MAR 2025"),
+            ("Date of expiration/Date d'expiration/Fecha de caducidad", "13 MAR 2035"),
+            ("Authority/Autorité/Autoridad", "UNITED STATES DEPARTMENT OF STATE")]
+    y = 1110
+    for label, value in rows:
+        dr.text((480, y), label, font=ImageFont.truetype("DejaVuSans.ttf", 18), fill=(70, 80, 120))
+        dr.text((480, y + 24), value, font=big, fill=(20, 20, 25))
+        y += 72
+    l2 = _us_passport_zone("A12345678", "800101", "350313", "9876543210123")
+    dr.text((60, 1880), ("P<USADOE<<JANE<ANN<MARIE" + "<" * 44)[:44], font=mono, fill=(15, 15, 20))
+    dr.text((60, 1950), l2, font=mono, fill=(15, 15, 20))
+    out = io.BytesIO()
+    im.save(out, "JPEG", quality=88)
+    return out.getvalue()
+
+
+@pytest.mark.skipif(not ocr.tesseract() or not _font("DejaVuSans.ttf"), reason="needs tesseract and DejaVu fonts")
+def test_a_scanned_us_passport_booklet():
+    got = ocr.read(_patterned_passport_scan(), "image/jpeg")
+    f = got["found"]
+    assert got["source"] == "mrz" and f["kind"] == "passport" and f["number"] == "A12345678", f
+    assert f["expiresOn"] == dt.date(2035, 3, 13) and f["issuedOn"] == dt.date(2025, 3, 14), f
+    assert f["holder"] == "Jane-Ann Marie Doe" and f["birthDate"] == dt.date(1980, 1, 1), f
+    assert "names" not in f
+
+
 AAMVA = ("@\n\x1e\rANSI 636029090002DL00410278ZO03190008DLDAQK1234567\nDCSCALLOWAY\nDACRILEY\nDADJANE\nDBD03142022\n"
          "DBB07211981\nDBA07212030\nDBC2\nDAG42 JUNIPER LANE\nDAIEUGENE\nDAJOR\nDAK974010000\nDCAC\nDCBNONE\nDCDNONE\nDCGUSA\n\r")
 
