@@ -11,6 +11,15 @@
     "name": "calendar",
     "what": "calendar"
   },
+  "start": {
+    "rank": 30,
+    "tile": true,
+    "find": {
+      "head": "Calendar",
+      "rank": 20
+    },
+    "searchUrl": "#/search/{q}"
+  },
   "items": [
     {
       "kind": "event",

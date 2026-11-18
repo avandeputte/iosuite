@@ -345,6 +345,12 @@ class Auth:
         from iosuite_shared import related
         return related.router(self)
 
+    def suite_router(self, provider) -> APIRouter:
+        """/api/suite/*: the suite's standard endpoints (search, one item, its picture, the start page's tile), from
+        the app's provider (iosuite_shared.suiteitems)."""
+        from iosuite_shared import suiteitems
+        return suiteitems.router(self, provider)
+
     def profile_router(self, base_url) -> APIRouter:
         """The Apple profile downloads (iosuite_shared.appleprofile): /profile/<token>/<file> and the profile for all
         the apps that sync (/api/apple-profile/suite). base_url(request): the address this app is reached at."""

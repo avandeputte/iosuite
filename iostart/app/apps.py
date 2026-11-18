@@ -6,13 +6,13 @@ Every io app registers itself, with its address, in the suite's list of apps in 
 
 Each tile shows what the app registered: its name, line, colour and icon (served by the app itself, at
 /static/icons/mark.svg). A person sees only the apps they may use (iosuite_shared.suite.visible: a role there that is not
-"none"), and an admin tool (ioDNS) only where they are its admin (listed in the gear menu, not as a tile). ORDER is only where the apps the page has widgets for come; any other app follows by name.
+"none"), and an admin tool (ioDNS) only where they are its admin (listed in the gear menu, not as a tile). ORDER (the apps' manifests) is only where the apps with a tile come; any other app follows by name.
 """
 import logging
 import re
 import time
 
-from iosuite_shared import suite, users
+from iosuite_shared import catalog, suite, users
 
 from app import db
 from iosuite_shared.errors import Invalid
@@ -22,8 +22,8 @@ SELF = "iostart"
 REGISTRY_TTL = 30  # seconds the suite's list is kept here (asked on every tile, widget and status call)
 _registry = {"at": 0.0, "items": {}}
 
-# the apps the page has widgets for, in the order their tiles come; any other registered app follows by name
-ORDER = ["iopix", "iohealth", "iocalendar", "iotask", "iomoney", "iocontact", "ionote"]
+# the apps whose manifest gives their tile a place (app.json "start": rank), in that order; any other follows by name
+ORDER = sorted((k for k, m in catalog.APPS.items() if (m.get("start") or {}).get("rank")), key=lambda k: catalog.APPS[k]["start"]["rank"])
 _KEY_RE = re.compile(r"[a-z0-9_-]{1,32}")
 
 
@@ -69,12 +69,13 @@ def may_see(user, entry: dict) -> bool:
 def tiles(user=None) -> list[dict]:
     """What the page draws: the registered apps with an address (the ones `user` may see, when given), those in ORDER
     first, then the others by name. {key, name, tagline, color, icon, url, version, adminTool}, all as the app
-    registered them."""
+    registered them, and what its manifest says the page may ask it (start: tile, find {head, rank}, searchUrl)."""
     reg = {k: e for k, e in registered().items() if k != SELF and e.get("url") and (user is None or may_see(user, e))}
     keys = [k for k in ORDER if k in reg] + sorted((k for k in reg if k not in ORDER), key=lambda k: (reg[k].get("name") or k).lower())
     return [{"key": k, "name": reg[k].get("name") or k, "tagline": reg[k].get("description") or "",
              "color": reg[k].get("color") or "#2f3a5a", "icon": reg[k].get("icon") or "static/icons/mark.svg",
-             "url": url_for(k), "version": reg[k].get("version"), "adminTool": bool(reg[k].get("adminTool"))} for k in keys]
+             "url": url_for(k), "version": reg[k].get("version"), "adminTool": bool(reg[k].get("adminTool")),
+             "start": (catalog.APPS.get(k) or {}).get("start") or {}} for k in keys]
 
 
 STRIPS = ("rediscover", "onthisday", "off")

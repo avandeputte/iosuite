@@ -1,6 +1,7 @@
 """The status dots (app/status.py) and each person's own layout (app/layout.py)."""
 import pytest
 
+from conftest import via_providers
 from app import status, widgets
 from iosuite_shared import testing
 
@@ -125,13 +126,11 @@ def test_my_layout(client):
 
 def test_contacts_search_for_the_search_box(client, monkeypatch):
     asked = []
-
-    def fake(request, key, path, params=None, raw=False):
-        asked.append((key, path, params))
-        return {"total": 1, "items": [{"id": 3, "fn": "Ada Lovelace", "hasPhoto": True, "org": "Analytical Engines"}]}
-    monkeypatch.setattr(widgets, "fetch", fake)
+    table = {("iocontact", "/api/contacts"): {"total": 1, "items": [{"id": 3, "fn": "Ada Lovelace", "hasPhoto": True, "org": "Analytical Engines"}]}}
+    monkeypatch.setattr(widgets, "fetch", via_providers(table, asked, cookie=False))
     d = client.get("/api/widgets/iocontact?q=ada").json()
-    assert d == {"items": [{"id": 3, "name": "Ada Lovelace", "hasPhoto": True, "iopixPersonId": None, "org": "Analytical Engines"}], "total": 1}
+    assert d == {"items": [{"kind": "contact", "id": "3", "title": "Ada Lovelace", "text": "Analytical Engines", "when": None, "allDay": False,
+                            "done": False, "image": "", "href": "#/c/3", "round": True, "icon": "person"}], "more": False}
     assert asked == [("iocontact", "/api/contacts", {"q": "ada", "limit": 5})]
 
 
@@ -159,8 +158,7 @@ def test_events_tasks_recipes_and_notes_for_the_search_box(client, monkeypatch):
     tasks only, a recipe with its small picture."""
     asked = []
 
-    def fake(request, key, path, params=None, raw=False):
-        asked.append((key, path, dict(params or {})))
+    def answer(key, path, params, raw):
         if path == "/api/calendars":
             return {"items": [{"id": 1, "color": "#c00"}]}
         if path == "/api/events":
@@ -175,7 +173,8 @@ def test_events_tasks_recipes_and_notes_for_the_search_box(client, monkeypatch):
         if path == "/api/lists":
             return {"items": [{"id": 4, "color": "#146b5e"}]}
         if path == "/api/tasks":
-            assert params["status"] == "open"
+            if params["status"] == "done":
+                return {"items": [{"id": 2, "title": "Dentist 2019", "done": True, "listId": 4}]}
             return {"items": [{"id": 1, "title": "Call the dentist", "due": "2026-11-20", "dueAllDay": True, "done": False, "listId": 4}]}
         if path == "/api/recipes":
             return {"items": [{"id": 3, "title": "Tarte Tatin", "photo": "/api/recipes/3/photos/12", "totalMinutes": 75, "tags": ["dessert", "apple", "french", "oven"], "favourite": True},
@@ -193,28 +192,32 @@ def test_events_tasks_recipes_and_notes_for_the_search_box(client, monkeypatch):
             assert raw and params == {"size": "small"}
             return b"jpeg", "image/jpeg"
         raise AssertionError(path)
-    monkeypatch.setattr(widgets, "fetch", fake)
+    paths = ["/api/calendars", "/api/events", "/api/lists", "/api/tasks", "/api/recipes", "/api/notes", "/api/items", "/api/items/2/files/9",
+             "/api/recipes/3/photos/12"]
+    table = {(k, p): (lambda p_, k=k, p=p: answer(k, p, p_, p.count("/") > 3)) for k in ("iocalendar", "iotask", "iorecipe", "ionote", "iothings") for p in paths}
+    monkeypatch.setattr(widgets, "fetch", via_providers(table, asked, cookie=False))
     d = client.get("/api/widgets/iocalendar?q=dentist&tz=Europe/Brussels").json()
-    assert [x["id"] for x in d["items"]] == [8, 9] and d["more"] is False  # the two that are over are left out
-    assert d["items"][0] == {"id": 8, "title": "Dentist soon", "start": "2999-01-01T09:00:00+00:00", "end": "2999-01-01T10:00:00+00:00", "allDay": False,
-                             "recurring": True, "recurrenceId": "29990101T090000Z", "location": None, "color": "#c00"}
+    # the coming ones soonest first, then the ones that are over (done: the box leaves them out), the latest first
+    assert [(x["id"], x["done"]) for x in d["items"]] == [("8", False), ("9", False), ("6", True), ("7", True)] and d["more"] is False
+    assert d["items"][0] == {"kind": "event", "id": "8", "title": "Dentist soon", "text": "", "when": "2999-01-01T09:00:00+00:00", "allDay": False,
+                             "done": False, "image": None, "href": "#/event/8?rid=29990101T090000Z", "color": "#c00", "icon": "event", "recurring": True}
     assert ("iocalendar", "/api/events", {"q": "dentist", "limit": 200}) in asked
     d = client.get("/api/widgets/iotask?q=dentist").json()
-    assert d == {"items": [{"id": 1, "title": "Call the dentist", "due": "2026-11-20", "allDay": True, "color": "#146b5e"}], "more": False}
+    assert [(x["title"], x["when"], x["allDay"], x["done"], x.get("color")) for x in d["items"]] == [
+        ("Call the dentist", "2026-11-20", True, False, "#146b5e"), ("Dentist 2019", None, False, True, "#146b5e")] and d["more"] is False
     d = client.get("/api/widgets/iorecipe?q=tart").json()
-    assert d == {"items": [{"id": 3, "title": "Tarte Tatin", "photo": 12, "minutes": 75, "tags": ["dessert", "apple", "french"], "favourite": True},
-                           {"id": 5, "title": "Tartiflette", "photo": None, "minutes": None, "tags": [], "favourite": False}], "more": False}
+    assert [(x["title"], x["text"], x["image"], x.get("favourite")) for x in d["items"]] == [("Tarte Tatin", "75 min", "12", True), ("Tartiflette", "", None, None)]
     assert ("iorecipe", "/api/recipes", {"q": "tart", "limit": 6}) in asked
-    r = client.get("/api/widgets/iorecipe/photo/3/12")
+    r = client.get("/api/widgets/iorecipe/image/recipe/3?p=12")
     assert r.status_code == 200 and r.content == b"jpeg" and r.headers["content-type"] == "image/jpeg"
     assert client.get("/api/widgets/iorecipe").status_code == 404  # no tile of its own
     d = client.get("/api/widgets/ionote?q=dentist").json()
-    assert d == {"items": [{"id": "ab-1", "title": "Dentist", "text": "Dr. Molar, 02 555 01 23", "pinned": True, "updated": 1.5},
-                           {"id": "ab-2", "title": "Insurance", "text": "dentist: 80 %", "pinned": False, "updated": 1.0},
-                           {"id": "ab-3", "title": "Image", "text": "", "pinned": False, "updated": 0.5}], "more": True}
+    assert [(x["id"], x["title"], x["text"], x.get("pinned"), x["image"]) for x in d["items"]] == [
+        ("ab-1", "Dentist", "Dr. Molar, 02 555 01 23", True, None), ("ab-2", "Insurance", "dentist: 80 %", None, None), ("ab-3", "Picture", "", None, "")]
+    assert d["more"] is True
     assert ("ionote", "/api/notes", {"q": "dentist", "limit": 5}) in asked
     assert client.get("/api/widgets/ionote").status_code == 404
     d = client.get("/api/widgets/iothings?q=dentist").json()
-    assert d == {"items": [{"id": 2, "name": "Dentist chair", "photo": 9, "where": "House / Attic"}], "more": False}
-    assert client.get("/api/widgets/iothings/photo/2/9").content == b"jpg"
+    assert [(x["title"], x["text"], x["image"], x["href"]) for x in d["items"]] == [("Dentist chair", "House / Attic", "9", "#/item/2")]
+    assert client.get("/api/widgets/iothings/image/item/2?p=9").content == b"jpg"
     assert client.get("/api/widgets/iothings").status_code == 404

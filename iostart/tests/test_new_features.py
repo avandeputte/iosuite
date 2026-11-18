@@ -2,6 +2,7 @@
 Bookmarks page's Tidy up (dead links, moved ones, the same address twice). The apps' answers are mocked; the link
 check asks a server made here."""
 import datetime as dt
+from zoneinfo import ZoneInfo
 import http.server
 import threading
 import time
@@ -10,6 +11,7 @@ import unittest.mock as um
 import pytest
 
 from app import bookmarkcheck, widgets
+from conftest import via_providers
 
 
 @pytest.fixture()
@@ -18,15 +20,7 @@ def answers(monkeypatch):
     bodies sent, are kept."""
     table, asked, sent = {}, [], []
 
-    def fake(request, key, path, params=None, raw=False, body=None, timeout=None):
-        asked.append((key, path, dict(params or {})))
-        if body is not None:
-            sent.append((key, path, body))
-        r = table.get((key, path))
-        if r is None:
-            raise widgets.Unavailable(502, f"{key} is not reachable")
-        return r(params or {}) if callable(r) else r
-    monkeypatch.setattr(widgets, "fetch", fake)
+    monkeypatch.setattr(widgets, "fetch", via_providers(table, asked, sent, cookie=False))
     widgets.forget()
     return table, asked, sent
 
@@ -40,7 +34,7 @@ def _bill(day, name, amount, **more):
 
 def test_money_tile_bills_low_and_behind(client, answers):
     table, asked, _ = answers
-    today = dt.datetime.now(widgets._zone("Europe/Brussels")).date()
+    today = dt.datetime.now(ZoneInfo("Europe/Brussels")).date()
     d = [(today + dt.timedelta(days=i)).isoformat() for i in range(8)]
     table[("iomoney", "/api/bills")] = {"currency": "USD", "items": [
         _bill(d[0], "Rent", -1800.0), _bill(d[0], "Salary", 4200.0), _bill(d[1], "Netflix", -15.99, subscription=True, paid=True),
@@ -77,8 +71,11 @@ def test_money_search_payees_then_transactions(client, answers):
         {"id": 5, "day": "2026-06-11", "amount": -80.0, "currency": "USD", "merchant": None, "description": "PLUMB & CO 1123", "category": None, "account": "Visa"}]}
     r = client.get("/api/widgets/iomoney?q=plumb").json()
     assert [x["kind"] for x in r["items"]] == ["payee", "transaction", "transaction"]  # a payee met once is its one transaction
-    assert r["items"][0] == {"kind": "payee", "name": "Rivera Plumbing", "count": 4, "total": -1310.0, "last": "2026-10-02", "category": "Home", "currency": "USD"}
-    assert r["items"][1]["id"] == 7 and r["items"][1]["amount"] == -420.0 and r["items"][2]["name"] == "PLUMB & CO 1123"
+    p = r["items"][0]  # the suite's shape (iosuite_shared.suiteitems)
+    assert (p["title"], p["text"], p["amount"], p["currency"], p["when"], p["category"]) == ("Rivera Plumbing", "all 4", -1310.0, "USD", "2026-10-02", "Home")
+    assert p["href"] == "#/transactions?q=Rivera+Plumbing"
+    assert r["items"][1]["id"] == "7" and r["items"][1]["amount"] == -420.0 and r["items"][2]["title"] == "PLUMB & CO 1123"
+    assert r["items"][1]["href"] == "#/transaction/7" and r["items"][1]["when"] == "2026-10-02"
     assert r["more"] is True
     assert ("iomoney", "/api/transactions", {"q": "plumb", "limit": 5}) in asked
 
@@ -98,12 +95,12 @@ def test_pix_search_people_albums_folders_places(client, answers):
     table, asked, _ = answers
     _pix(table)
     r = client.get("/api/widgets/iopix?q=av").json()["items"]
-    assert [(x["kind"], x["name"]) for x in r] == [("person", "Ava Calloway"), ("album", "Ava's birthday"), ("folder", "2024 Avignon"), ("place", "Avignon")]
-    assert r[0] == {"kind": "person", "id": 1, "name": "Ava Calloway", "n": 120, "cover": 11}  # a tag that is not a person is not found
-    assert r[3]["region"] == "Provence" and r[3]["cover"] == 31
-    assert [x["name"] for x in client.get("/api/widgets/iopix?q=elodie").json()["items"]] == ["Élodie"]  # accents folded
-    assert [x["name"] for x in client.get("/api/widgets/iopix?q=france").json()["items"]] == ["Avignon"]  # a place by its country
-    assert client.get("/api/widgets/iopix?q=zzz").json() == {"items": []}
+    assert [(x["kind"], x["title"]) for x in r] == [("person", "Ava Calloway"), ("album", "Ava's birthday"), ("folder", "2024 Avignon"), ("place", "Avignon, Provence")]
+    assert r[0]["id"] == "1" and r[0]["text"] == "Person · 120 photos" and r[0]["image"] == "11" and r[0]["round"]  # a tag that is not a person is not found
+    assert r[0]["href"] == "#/photos?tag=1" and r[3]["href"] == "#/photos?place=Avignon&region=Provence" and r[3]["image"] == "31"
+    assert [x["title"] for x in client.get("/api/widgets/iopix?q=elodie").json()["items"]] == ["Élodie"]  # accents folded
+    assert [x["title"] for x in client.get("/api/widgets/iopix?q=france").json()["items"]] == ["Avignon, Provence"]  # a place by its country
+    assert client.get("/api/widgets/iopix?q=zzz").json()["items"] == []
     assert len([1 for k, path, _ in asked if path == "/api/meta"]) == 1  # the names are read once for the words typed after
 
 

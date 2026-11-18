@@ -12,6 +12,14 @@
     "name": "contacts",
     "what": "contacts"
   },
+  "start": {
+    "rank": 60,
+    "tile": true,
+    "find": {
+      "head": "People",
+      "rank": 10
+    }
+  },
   "items": [
     {
       "kind": "contact",

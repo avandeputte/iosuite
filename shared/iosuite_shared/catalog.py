@@ -32,6 +32,11 @@ A new app: its folder, its app.json (copy one), then render.py. The manifest's f
   items                    [{kind, label, plural, href, id}]: the kinds of items it has; href opens one in the app
                            ("#/event/{id}"); id "uuid" for UUIDs (default: a number)
   notifications            [{kind, label, hint, admin}]: what Account › Notifications offers from it
+  start                    the start page: rank (where its tile comes; none: after those that have one, by name),
+                           tile (it answers /api/suite/tile), find {head, rank} (it answers /api/suite/search: the
+                           search box's section for it), searchUrl (its own search, "#/search/{q}": the "Search in" row)
+                           See iosuite_shared.suiteitems for the endpoints; an app with items answers
+                           /api/suite/items/{kind}/{id} for them.
 """
 import json
 import re
@@ -81,6 +86,11 @@ def validate(apps: list[dict]) -> list[dict]:
             if n["kind"] in seen_note:
                 raise ValueError(f"{k}/{MANIFEST}: notification {n['kind']} is {seen_note[n['kind']]}'s already")
             seen_note[n["kind"]] = k
+        st = m.get("start") or {}
+        if st.get("searchUrl") and "{q}" not in st["searchUrl"]:
+            raise ValueError(f"{k}/{MANIFEST}: start.searchUrl needs {{q}}")
+        if st.get("find") and not (st["find"].get("head") and isinstance(st["find"].get("rank"), int)):
+            raise ValueError(f"{k}/{MANIFEST}: start.find needs head and rank")
         for own in m.get("keepsOwn") or []:
             if own not in ("setup", "workflow"):
                 raise ValueError(f"{k}/{MANIFEST}: keepsOwn {own!r} (setup or workflow)")

@@ -1,11 +1,16 @@
 """Linked items (iosuite_shared.related): the links themselves in ios_related, and the routes every app mounts, with the
 other apps faked (related.ask: what each app would answer the viewer)."""
+from pathlib import Path
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from iosuite_shared import related, suite, users
+from iosuite_shared import related, suite, suiteitems, testing, users
 from iosuite_shared.fastapi import Auth
+
+ROOT = Path(__file__).resolve().parents[2]
+PROVIDERS = {}
 
 NOTE = "0F8FAD5B-D9CB-469F-A165-70867728950E"
 
@@ -67,12 +72,19 @@ def suite_apps(monkeypatch):
     calls = []
 
     def ask(request, app, path, params=None, image=False, timeout=5):
-        calls.append((app, path, params))
-        if (app, path) in SEEN:
-            return SEEN[(app, path)]
+        """The app's /api/suite/* answered by its own provider (app/suiteitems.py), over the answers of its API in SEEN."""
         if app == "ionote":
             raise related.Unavailable(502, "ionote does not answer")
-        raise related.Unavailable(404, f"{app} answered 404")
+
+        def inner(p, prm, raw):
+            calls.append((app, p, prm))
+            if (app, p) in SEEN:
+                return SEEN[(app, p)]
+            raise suiteitems.Unavailable(404, f"{app} answered 404")
+        try:
+            return testing.suite_answer(PROVIDERS.setdefault(app, testing.suite_provider(ROOT, app)), path, params or {}, inner)
+        except suiteitems.Unavailable as e:
+            raise related.Unavailable(e.status, str(e)) from None
     monkeypatch.setattr(related, "ask", ask)
     return calls
 

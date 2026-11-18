@@ -14,7 +14,7 @@ from iosuite_shared import chores, mcp as shared_mcp, pages
 from iosuite_shared import demo as suite_demo
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, carddav, config, db, enrich, iopix, ldapd, mcp, model, notify, quality, users
+from app import __version__, api, carddav, config, db, enrich, iopix, ldapd, mcp, model, notify, quality, suiteitems, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -103,6 +103,7 @@ app.include_router(api.router)      # the contacts; also an account's own fields
 app.include_router(auth.feeds_router(api.feed_links))  # /api/feeds: your birthday calendar links (Shared ioSuite database, shown once)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the panel of Settings › Security and Global settings): the whole suite (suite admins)
 app.include_router(auth.related_router())  # /api/related (+ ui.js, the "Linked" panel): items linked across the apps
+app.include_router(auth.suite_router(suiteitems.PROVIDER))  # /api/suite: search, items, tile, as every app answers them (app.json)
 app.include_router(carddav.router)
 shared_mcp.mount(app, mcp.server)  # MCP over streamable HTTP at /mcp, ahead of everything else
 

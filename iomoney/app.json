@@ -11,6 +11,14 @@
     "name": "money",
     "what": "finances"
   },
+  "start": {
+    "rank": 50,
+    "tile": true,
+    "find": {
+      "head": "Money",
+      "rank": 70
+    }
+  },
   "items": [
     {
       "kind": "asset",

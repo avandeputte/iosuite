@@ -6,7 +6,10 @@ import json
 import time
 import urllib.error
 
+from iosuite_shared import suiteitems
+
 from app import status, widgets
+from conftest import via_providers
 
 
 class Answer(io.BytesIO):
@@ -34,9 +37,9 @@ def test_an_app_that_is_down_is_left_alone_for_a_while(client, monkeypatch):
     assert client.get("/api/widgets/iopix").status_code == 502 and len(tried) == 4  # another app is another matter
     # a picture that fails says nothing about the app: asked again the next time
     widgets.forget()
-    assert client.get("/api/widgets/iopix/thumb/5").status_code == 502
+    assert client.get("/api/widgets/iopix/image/photo/5").status_code == 502
     n = len(tried)
-    assert client.get("/api/widgets/iopix/thumb/5").status_code == 502 and len(tried) == n + 2
+    assert client.get("/api/widgets/iopix/image/photo/5").status_code == 502 and len(tried) == n + 2
     # when the time is up the app is asked again, and an answer clears it
     widgets.links._resting["iocontact"] = time.monotonic() - 1
 
@@ -56,12 +59,16 @@ def test_an_app_that_is_down_is_left_alone_for_a_while(client, monkeypatch):
 
 
 def test_a_tile_asks_for_its_answers_at_the_same_time(client, monkeypatch):
-    def slow(request, key, path, params=None, raw=False, body=None, timeout=4):
-        time.sleep(0.3)
-        if path == "/api/series":
-            return {"points": []}
-        return {"items": []}
-    monkeypatch.setattr(widgets, "fetch", slow)
+    """The app's provider asks its own API for a tile's answers at the same time (local.together)."""
+    def slow(reply):
+        def f(p):
+            time.sleep(0.3)
+            return reply
+        return f
+    table = {("iohealth", "/api/series"): slow({"points": []}), ("iohealth", "/api/sleep"): slow({"items": []}),
+             ("iohealth", "/api/activity"): slow({"items": []}),
+             ("iocalendar", "/api/calendars"): slow({"items": []}), ("iocalendar", "/api/occurrences"): slow({"items": []})}
+    monkeypatch.setattr(widgets, "fetch", via_providers(table, []))
     t = time.time()
     assert client.get("/api/widgets/iohealth").status_code == 200
     assert time.time() - t < 0.75  # three answers of 0.3 s each, together
@@ -71,13 +78,11 @@ def test_a_tile_asks_for_its_answers_at_the_same_time(client, monkeypatch):
 
 
 def test_one_failing_answer_still_shows_the_others(client, monkeypatch):
-    def some(request, key, path, params=None, raw=False, body=None, timeout=4):
-        if path == "/api/activity":
-            raise widgets.Unavailable(502, "ioHealth answered 500")
-        if path == "/api/series":
-            return {"points": []}
-        return [{"date": "2026-11-10", "asleep": 431.6, "inBed": 470, "start": "x", "end": "y"}]
-    monkeypatch.setattr(widgets, "fetch", some)
+    def broken(p):
+        raise suiteitems.Unavailable(502, "ioHealth answered 500")
+    table = {("iohealth", "/api/activity"): broken, ("iohealth", "/api/series"): {"points": []},
+             ("iohealth", "/api/sleep"): [{"date": "2026-11-10", "asleep": 431.6, "inBed": 470, "start": "x", "end": "y"}]}
+    monkeypatch.setattr(widgets, "fetch", via_providers(table, []))
     d = client.get("/api/widgets/iohealth").json()
     assert d["rings"] is None and d["sleep"]["asleep"] == 432 and len(d["week"]) == 7
 

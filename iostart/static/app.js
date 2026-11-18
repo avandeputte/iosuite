@@ -88,9 +88,11 @@ const confirmDialog = (title, text, ok = 'OK', danger = false) => dialog(title, 
 
 const hue = (s) => { let x = 0; for (const c of s || '') x = (x * 31 + c.charCodeAt(0)) % 360; return x; };
 const initials = (fn) => { const p = (fn || '?').trim().split(/\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); };
+/** An item's picture, through this page (the suite's /api/suite/items/{kind}/{id}/image of its app). */
+const itemImage = (app, kind, id, p) => `api/widgets/${app}/image/${kind}/${encodeURIComponent(id)}${p ? `?p=${encodeURIComponent(p)}` : ''}`;
 /** A contact's face as ioContact shows it: its own photo, else its face in ioPix (when linked), else its initials. */
 function contactFace(c, lazy = true) {
-  const src = c.hasPhoto ? `api/widgets/iocontact/photo/${c.id}` : c.iopixPersonId ? `api/widgets/iocontact/face/${c.iopixPersonId}` : null;
+  const src = c.hasPhoto || c.iopixPersonId ? itemImage('iocontact', 'contact', c.id) : null;
   return h('span', { class: 'face' }, src ? h('img', { src, alt: '', loading: lazy ? 'lazy' : undefined, onerror: (e) => e.target.replaceWith(initials(c.name)) }) : initials(c.name));
 }
 /** An app's name as the apps write it: "io" in gold, the rest in the app's colour. */
@@ -314,10 +316,9 @@ const cardOrder = (L) => [...(L.cards || []), ...CARDS.filter((k) => !(L.cards |
 // Lower case without accents, so "celia" finds "Célia" (and "Celia" finds "célia"); a few letters NFD does not split.
 const FOLD = { ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', ł: 'l', đ: 'd', ð: 'd', þ: 'th', ı: 'i' };
 const fold = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[ßæœøłđðþı]/g, (c) => FOLD[c]);
-const APP_SEARCH = { iopix: (q) => `#/photos?q=${encodeURIComponent(q)}`, iocalendar: (q) => `#/search/${encodeURIComponent(q)}`, iotask: (q) => `#/search/${encodeURIComponent(q)}`,
-  iorecipe: (q) => `#/search/${encodeURIComponent(q)}`, ionote: (q) => `#/notes?q=${encodeURIComponent(q)}`, iothings: (q) => `#/search/${encodeURIComponent(q)}` };
-// what the apps find, in the order their sections come under the bookmarks
-const FINDERS = ['iocontact', 'iocalendar', 'iotask', 'iorecipe', 'ionote', 'iothings', 'iomoney', 'iopix'];
+// an app's own search ("Search in"), and the apps whose finds the box lists, in the order their sections come: their manifests (app.json "start")
+const appSearch = (a, q) => (a.start && a.start.searchUrl ? `${a.url}/${a.start.searchUrl.replace('{q}', encodeURIComponent(q))}` : null);
+const finders = () => S.apps.filter((a) => a.start && a.start.find).sort((x, y) => x.start.find.rank - y.start.find.rank);
 /** "Today 19:00", "Tomorrow", "Fri 21 Nov", "12 Mar 2024": when a found event or task is, short. */
 function whenShort(iso, allDay) {
   if (!iso) return '';
@@ -328,35 +329,18 @@ function whenShort(iso, allDay) {
     : d.toLocaleDateString([], { weekday: n > 0 && n < 7 ? 'short' : undefined, day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
   return allDay ? day : `${day} ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 }
-/** A row of the search box for what an app found: events, tasks, recipes and notes (people have contactFace). */
-const FOUND = {
-  iocalendar: { head: 'Calendar', href: (a, x) => `${a.url}/#/event/${x.id}${x.recurrenceId ? `?rid=${encodeURIComponent(x.recurrenceId)}` : ''}`,
-    kids: (x) => [h('span', { class: 'bmic hit', style: { '--c': x.color || 'var(--fg2)' } }, icon('event', 's')), h('span', { class: 'qname' }, x.title),
-      h('span', { class: 'muted small when' }, [whenShort(x.start, x.allDay), x.recurring ? '↻' : ''].filter(Boolean).join(' '))] },
-  iotask: { head: 'Tasks', href: (a, x) => `${a.url}/#/task/${x.id}`,
-    kids: (x) => [h('span', { class: 'bmic hit', style: { '--c': x.color || 'var(--fg2)' } }, icon('task', 's')), h('span', { class: 'qname' }, x.title),
-      h('span', { class: 'muted small when' }, whenShort(x.due, x.allDay))] },
-  iorecipe: { head: 'Recipes', href: (a, x) => `${a.url}/#/recipe/${x.id}`,
-    kids: (x) => [x.photo ? h('span', { class: 'bmic pic' }, h('img', { src: `api/widgets/iorecipe/photo/${x.id}/${x.photo}`, alt: '', onerror: (e) => e.target.replaceWith(icon('recipe', 's')) })) : h('span', { class: 'bmic hit' }, icon('recipe', 's')),
-      h('span', { class: 'qname' }, x.title), h('span', { class: 'muted small' }, x.minutes ? hm(x.minutes) : x.tags.join(', '))] },
-  iothings: { head: 'Things', href: (a, x) => `${a.url}/#/item/${x.id}`,
-    kids: (x) => [x.photo ? h('span', { class: 'bmic pic' }, h('img', { src: `api/widgets/iothings/photo/${x.id}/${x.photo}`, alt: '', onerror: (e) => e.target.replaceWith(icon('box', 's')) })) : h('span', { class: 'bmic hit' }, icon('box', 's')),
-      h('span', { class: 'qname' }, x.name), h('span', { class: 'muted small rest' }, x.where || '')] },
-  ionote: { head: 'Notes', href: (a, x) => `${a.url}/#/note/${x.id}`,
-    kids: (x) => [h('span', { class: 'bmic hit' }, icon('note', 's')), h('span', { class: 'qname' }, x.title), h('span', { class: 'muted small rest' }, x.text || '')] },
-  // ioMoney: a payee (all its transactions, with what they come to), then single transactions
-  iomoney: { head: 'Money', href: (a, x) => (x.kind === 'payee' ? `${a.url}/#/transactions?${new URLSearchParams({ q: x.name })}` : `${a.url}/#/transaction/${x.id}`),
-    kids: (x) => (x.kind === 'payee'
-      ? [h('span', { class: 'bmic hit' }, icon('money', 's')), h('span', { class: 'qname', title: [x.name, x.category].filter(Boolean).join(' · ') }, x.name), h('span', { class: 'muted small when' }, `all ${x.count}`), h('span', { class: 'small qamt' }, money(x.total, x.currency))]
-      : [h('span', { class: 'bmic hit' }, icon('receipt', 's')), h('span', { class: 'qname', title: [x.name, x.category, x.account].filter(Boolean).join(' · ') }, x.name), h('span', { class: 'muted small when' }, whenShort(x.day, true)),
-        h('span', { class: `small qamt${x.amount > 0 ? ' in' : ''}` }, money(x.amount, x.currency))]) },
-  // ioPix: a person, an album, a folder or a place, each opening its photos
-  iopix: { head: 'Photos', href: (a, x) => `${a.url}/#/photos?${new URLSearchParams(x.kind === 'person' ? { tag: x.id } : x.kind === 'album' ? { ualbum: x.id } : x.kind === 'folder' ? { album: x.id } : { place: x.name, ...(x.region ? { region: x.region } : {}) })}`,
-    kids: (x) => [x.cover ? h('span', { class: `bmic pic${x.kind === 'person' ? ' round' : ''}` }, h('img', { src: `api/widgets/iopix/thumb/${x.cover}`, alt: '', onerror: (e) => e.target.replaceWith(icon(PIX_KIND[x.kind].icon, 's')) })) : h('span', { class: 'bmic hit' }, icon(PIX_KIND[x.kind].icon, 's')),
-      h('span', { class: 'qname' }, x.kind === 'place' && x.region ? `${x.name}, ${x.region}` : x.name),
-      h('span', { class: 'muted small rest' }, `${PIX_KIND[x.kind].label} · ${(x.n || 0).toLocaleString()} photo${x.n === 1 ? '' : 's'}`)] },
-};
-const PIX_KIND = { person: { icon: 'person', label: 'Person' }, album: { icon: 'photo', label: 'Album' }, folder: { icon: 'folder', label: 'Folder' }, place: { icon: 'place', label: 'Place' } };
+/** A row of the search box for what an app found, in the suite's shape (iosuite_shared.suiteitems): its picture or
+    icon (with its colour), its name, then when it is, or its line, and what it comes to. */
+function foundRow(a, x) {
+  const ic = x.icon || 'link';
+  const pic = x.image != null
+    ? h('span', { class: `bmic pic${x.round ? ' round' : ''}` }, h('img', { src: itemImage(a.key, x.kind, x.id, x.image), alt: '', onerror: (e) => e.target.replaceWith(x.round ? initials(x.title) : icon(ic, 's')) }))
+    : h('span', { class: 'bmic hit', style: x.color ? { '--c': x.color } : undefined }, icon(ic, 's'));
+  const when = x.when ? [whenShort(x.when, x.allDay), x.recurring ? '↻' : ''].filter(Boolean).join(' ') : '';
+  return [pic, h('span', { class: 'qname', title: [x.title, x.text].filter(Boolean).join(' · ') }, x.title),
+    when && x.amount == null ? h('span', { class: 'muted small when' }, when) : h('span', { class: `muted small ${x.amount != null ? 'when' : 'rest'}` }, x.amount != null ? (x.kind === 'payee' ? x.text : when) : x.text || ''),
+    x.amount != null ? h('span', { class: `small qamt${x.amount > 0 && x.kind !== 'payee' ? ' in' : ''}` }, money(x.amount, x.currency)) : null].filter(Boolean);
+}
 /** An amount as the viewer's language writes money: "€42.50", "-$1,200.00"; without a currency, the number alone. */
 function money(v, cur, opts = {}) {
   if (v == null || isNaN(v)) return '';
@@ -375,13 +359,13 @@ function searchBox() {
     rows = [];
     if (!q) return hide();
     const links = (S.bookmarks || []).filter((l) => fold(`${l.name} ${l.description || ''} ${l.href}`).includes(fold(q))).slice(0, 6);
-    const finders = FINDERS.map((k) => [k, S.apps.find((a) => a.key === k), got[k]]).filter(([, a, g]) => a && g && g.q === ql && g.items.length);
+    const found_ = finders().map((a) => [a, got[a.key]]).filter(([, g]) => g && g.q === ql && g.items.length);
     // "t buy milk fri": a task for ioTask; "n the gate code is 4411": a note for ioNote (the row comes first: Enter adds it)
     const add = quickPrefix(q);
     const bang = add ? null : webBang(q), site = bang || add ? null : looksLikeSite(q), cal = !bang && !add && S.apps.find((a) => a.key === 'iocalendar') && parseEvent(q);
     const eng = bang ? bang.engine : webEngine(), wq = bang ? bang.q : q;
     const webRow = () => row(eng.url(wq), [h('span', { class: 'bmic' }, icon('web', 's')), h('span', { class: 'qname' }, `“${wq}”`), h('span', { class: 'muted small' }, eng.name)], true);
-    const found = links.length || finders.length || (things.q === ql && things.items.length);
+    const found = links.length || found_.length || (things.q === ql && things.items.length);
     const addRow = () => {
       if (add.kind === 'task') {
         const t = parseEvent(add.text) || { title: add.text[0].toUpperCase() + add.text.slice(1), date: null, start: null };
@@ -398,9 +382,7 @@ function searchBox() {
       bang ? [h('div', { class: 'qhead' }, eng.name), webRow()] : null,
       links.length ? h('div', { class: 'qhead' }, 'Bookmarks') : null,
       links.map((l) => { const src = bmIcon(l); return row(l.href, [h('span', { class: 'bmic' }, src ? h('img', { src, alt: '' }) : l.abbr), h('span', { class: 'qname' }, l.name), h('span', { class: 'muted small' }, l.description || l.href)], true); }),
-      finders.flatMap(([k, a, g]) => [h('div', { class: 'qhead' }, k === 'iocontact' ? 'People' : FOUND[k].head),
-        ...(k === 'iocontact' ? g.items.map((c) => row(`${a.url}/#/c/${c.id}`, [contactFace(c, false), h('span', { class: 'qname' }, c.name), h('span', { class: 'muted small' }, c.org || '')]))
-          : g.items.map((x) => row(FOUND[k].href(a, x), FOUND[k].kids(x))))]),
+      found_.flatMap(([a, g]) => [h('div', { class: 'qhead' }, a.start.find.head), ...g.items.map((x) => row(`${a.url}/${x.href || ''}`, foundRow(a, x)))]),
       // Home Assistant: an entity's state, and a tap switches the ones the admin lets the page control
       things.q === ql && things.items.length ? h('div', { class: 'qhead' }, 'Home') : null,
       things.q === ql ? things.items.map((t) => { const a = row(t.control ? '#' : haLink(t), [h('span', { class: `bmic ha${t.on ? ' on' : ''}` }, icon(haIcon(t), 's')), h('span', { class: 'qname' }, t.name), h('span', { class: `muted small${t.control ? ' tap' : ''}` }, t.control ? `${t.text || t.state} · tap` : t.text || t.state)]);
@@ -412,7 +394,7 @@ function searchBox() {
       // nothing here matches: the web first, so Enter searches it
       !bang && !site && !found && !add ? [h('div', { class: 'qhead' }, 'Web'), webRow()] : null,
       add ? null : h('div', { class: 'qhead' }, 'Search in'),
-      add ? [] : S.allApps.filter((a) => APP_SEARCH[a.key]).map((a) => row(`${a.url}/${APP_SEARCH[a.key](q)}`, [h('img', { class: 'qapp', src: a.icon, alt: '' }), h('span', { class: 'qname' }, appName(a.name, a.color)), h('span', { class: 'muted small' }, `“${q}”`)])),
+      add ? [] : S.allApps.filter((a) => appSearch(a, q)).map((a) => row(appSearch(a, q), [h('img', { class: 'qapp', src: a.icon, alt: '' }), h('span', { class: 'qname' }, appName(a.name, a.color)), h('span', { class: 'muted small' }, `“${q}”`)])),
       !bang && !site && found ? webRow() : null,
     ];
     sel = Math.min(sel, rows.length - 1);
@@ -423,11 +405,11 @@ function searchBox() {
   const askApps = () => {
     const q = inp.value.trim(), ql = q.toLowerCase();
     if (q.length < 2 || quickPrefix(q)) return;  // "t buy milk" is something to add, not to look for
-    for (const k of FINDERS) {
-      if (!S.apps.some((a) => a.key === k)) continue;
-      widget(k, { q }).then((d) => {
+    for (const a of finders()) {
+      widget(a.key, { q }).then((d) => {
         if (inp.value.trim().toLowerCase() !== ql) return;
-        got[k] = { q: ql, items: (d && d.items) || [] }; build();
+        // a finished task, an event that is over: the app's own search has them
+        got[a.key] = { q: ql, items: ((d && d.items) || []).filter((x) => !x.done) }; build();
       });
     }
   };
@@ -803,7 +785,7 @@ async function drawStrip(el, kind) {
   const shuffle = otd ? null : h('button', { class: 'lnk shuffle', title: 'Another row of photos', onclick: (e) => { e.preventDefault(); reshuffle(); } }, icon('update', 's'), 'Shuffle');
   el.classList.remove('busy');
   const row = h('div', { class: 'row' }, d.items.map((it) => h('a', { class: 'wgph', href: pixPhotoUrl(pix, it.id), title: String(cap(it)) },
-    h('img', { src: `api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
+    h('img', { src: itemImage('iopix', 'photo', it.id), alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
     cap(it) ? h('span', null, cap(it)) : null)));
   el.replaceChildren(h('div', { class: 'wghead' }, h('span', null, otd ? 'On this day' : 'Rediscover'), shuffle,
     h('a', { class: 'muted', href: pix.url, title: pix.url }, otd && d.count > d.items.length ? `${d.count} photos · ioPix` : 'ioPix')), row);
@@ -879,7 +861,7 @@ function drawPixWidget(d) {
     h('div', { class: 'wgpix' }, d.items.slice(0, 4).map((it) => h('span', { class: 'wgph', title: String(cap(it)), role: 'link', tabindex: '0',
       onclick: (e) => { e.preventDefault(); e.stopPropagation(); location.href = pixPhotoUrl(S.apps.find((a) => a.key === 'iopix'), it.id); },
       onkeydown: (e) => { if (e.key === 'Enter') e.target.click(); } },
-      h('img', { src: `api/widgets/iopix/thumb/${it.id}`, alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
+      h('img', { src: itemImage('iopix', 'photo', it.id), alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
       it.year ? h('span', null, it.year) : null)))];
 }
 
@@ -1339,7 +1321,7 @@ function wallSlideshow(el, caption, kind) {
       if (!it) return;
       const img = new Image();
       img.alt = ''; img.className = 'wallimg';
-      img.src = `api/widgets/iopix/preview/${it.id}`;
+      img.src = itemImage('iopix', 'photo', it.id, 'preview');
       await img.decode().catch(() => null);
       if (!img.naturalWidth || !el.isConnected) return;
       const old = [...el.children];

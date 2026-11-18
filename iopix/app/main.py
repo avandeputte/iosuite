@@ -21,7 +21,7 @@ from iosuite_shared.updates import setup_log
 
 from app.ai import analysis, models as dlmodels
 from app.faces import facedetect, facemgr
-from app import access, config, events, jobs as bgjobs, mcp, thumbs, users
+from app import access, config, events, jobs as bgjobs, mcp, suiteitems, thumbs, users
 from app.auth import auth, updater
 from app.photos import consistency, edits, history, lossless, scanner, tagmanager
 from app.data import index as photo_index, state as appstate, appdb
@@ -237,6 +237,7 @@ def _status_extra(request: Request) -> dict:
     return out
 
 
+app.include_router(auth.suite_router(suiteitems.PROVIDER))  # /api/suite: search, items, tile, as every app answers them (app.json)
 app.include_router(browse.router)
 app.include_router(images.router)
 app.include_router(albums.router)

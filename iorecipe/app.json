@@ -11,6 +11,13 @@
     "name": "recipes",
     "what": "recipes"
   },
+  "start": {
+    "find": {
+      "head": "Recipes",
+      "rank": 40
+    },
+    "searchUrl": "#/search/{q}"
+  },
   "items": [
     {
       "kind": "recipe",

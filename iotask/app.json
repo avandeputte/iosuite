@@ -11,6 +11,15 @@
     "name": "tasks",
     "what": "tasks"
   },
+  "start": {
+    "rank": 40,
+    "tile": true,
+    "find": {
+      "head": "Tasks",
+      "rank": 30
+    },
+    "searchUrl": "#/search/{q}"
+  },
   "items": [
     {
       "kind": "task",

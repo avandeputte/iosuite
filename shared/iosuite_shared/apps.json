@@ -44,6 +44,15 @@
     "photos": true,
     "launchd": "com.iopix"
    },
+   "start": {
+    "rank": 10,
+    "tile": true,
+    "find": {
+     "head": "Photos",
+     "rank": 80
+    },
+    "searchUrl": "#/photos?q={q}"
+   },
    "items": [
     {
      "kind": "photo",
@@ -72,6 +81,14 @@
    "install": {
     "data": true
    },
+   "start": {
+    "rank": 70,
+    "find": {
+     "head": "Notes",
+     "rank": 50
+    },
+    "searchUrl": "#/notes?q={q}"
+   },
    "items": [
     {
      "kind": "note",
@@ -94,6 +111,15 @@
    "compose": {
     "name": "calendar",
     "what": "calendar"
+   },
+   "start": {
+    "rank": 30,
+    "tile": true,
+    "find": {
+     "head": "Calendar",
+     "rank": 20
+    },
+    "searchUrl": "#/search/{q}"
    },
    "items": [
     {
@@ -124,6 +150,15 @@
     "name": "tasks",
     "what": "tasks"
    },
+   "start": {
+    "rank": 40,
+    "tile": true,
+    "find": {
+     "head": "Tasks",
+     "rank": 30
+    },
+    "searchUrl": "#/search/{q}"
+   },
    "items": [
     {
      "kind": "task",
@@ -153,6 +188,13 @@
     "name": "recipes",
     "what": "recipes"
    },
+   "start": {
+    "find": {
+     "head": "Recipes",
+     "rank": 40
+    },
+    "searchUrl": "#/search/{q}"
+   },
    "items": [
     {
      "kind": "recipe",
@@ -174,6 +216,13 @@
    "compose": {
     "name": "things",
     "what": "inventory"
+   },
+   "start": {
+    "find": {
+     "head": "Things",
+     "rank": 60
+    },
+    "searchUrl": "#/search/{q}"
    },
    "items": [
     {
@@ -204,6 +253,14 @@
     "name": "money",
     "what": "finances"
    },
+   "start": {
+    "rank": 50,
+    "tile": true,
+    "find": {
+     "head": "Money",
+     "rank": 70
+    }
+   },
    "items": [
     {
      "kind": "asset",
@@ -233,6 +290,14 @@
     "name": "contacts",
     "what": "contacts"
    },
+   "start": {
+    "rank": 60,
+    "tile": true,
+    "find": {
+     "head": "People",
+     "rank": 10
+    }
+   },
    "items": [
     {
      "kind": "contact",
@@ -261,6 +326,10 @@
    "compose": {
     "name": "health",
     "what": "health"
+   },
+   "start": {
+    "rank": 20,
+    "tile": true
    },
    "notifications": [
     {
