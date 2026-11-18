@@ -251,7 +251,8 @@ def _job_public(r: dict) -> dict:
     return {"id": r["id"], "name": r["name"], "serverId": r["server_id"], "destinationId": r["destination_id"],
             "databases": json.loads(r["databases_json"]), "includeUsers": bool(r["include_users"]), "keep": r["keep_count"],
             "schedule": json.loads(r["schedule_json"]), "cron": r["cron"], "enabled": bool(r["enabled"]),
-            "desync": bool(r["desync"]), "lockAll": bool(r["lock_all"]), "compressLevel": r["compress_level"]}
+            "desync": bool(r["desync"]), "lockAll": bool(r["lock_all"]), "compressLevel": r["compress_level"],
+            "files": bool(r.get("export_files", 1))}
 
 
 def jobs() -> list[dict]:
@@ -296,8 +297,8 @@ def save_job(b: dict, jid: int | None = None) -> dict:
             raise Invalid(f"Another job is already called {r['name']}: the names differ, because retention tells the backups apart by them")
     args = (name, server_id, dest_id, json.dumps(dbs), 1 if include_users else 0, keep,
             json.dumps(b.get("schedule") or {"mode": "manual"}), cron, 1 if b.get("enabled", True) else 0,
-            1 if b.get("desync") else 0, 1 if b.get("lockAll") else 0, max(1, min(9, level)))
-    cols = "name, server_id, destination_id, databases_json, include_users, keep_count, schedule_json, cron, enabled, desync, lock_all, compress_level"
+            1 if b.get("desync") else 0, 1 if b.get("lockAll") else 0, max(1, min(9, level)), 1 if b.get("files", True) else 0)
+    cols = "name, server_id, destination_id, databases_json, include_users, keep_count, schedule_json, cron, enabled, desync, lock_all, compress_level, export_files"
     if jid:
         job(jid)
         db.ex("UPDATE bkp_jobs SET " + ", ".join(f"{c.strip()} = %s" for c in cols.split(",")) + " WHERE id = %s", (*args, jid))

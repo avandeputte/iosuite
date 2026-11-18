@@ -5,6 +5,7 @@ is gone: copy a backup file anywhere with the mariadb client installed and
 
     python3 -m app.offline list   shop-20261103-020000.mdbk.tar
     python3 -m app.offline restore shop-20261103-020000.mdbk.tar --all -H db1 -u root -p
+    python3 -m app.offline files   shop-20261103-020000.mdbk.tar -o shop-files   # the photos, scans, receipts...
 
 It needs nothing beyond the Python standard library.
 """
@@ -35,7 +36,8 @@ def cmd_backup(args):
     dbs = "all" if args.all or not args.database else args.database
     path, _ = engine.run_backup(_server(args), dbs, include_users=not args.no_users,
                                 workdir=args.output, label=args.label or "backup",
-                                lock_all=args.lock_all, desync=args.desync, log=_log)
+                                lock_all=args.lock_all, desync=args.desync, log=_log,
+                                files=not args.no_files)
     print(path)
     return 0
 
@@ -54,10 +56,23 @@ def cmd_list(args):
         extra = [k for k in ("routines", "events") if db[k]]
         if extra:
             print("  also:   " + ", ".join(extra))
+    if c["files"]:
+        print("\nstored files: %d (%s): %s" % (c["files"]["count"], engine.human_size(c["files"]["bytes"]),
+                                              ", ".join("%s %d" % kv for kv in sorted(c["files"]["apps"].items()))))
     if c["has_accounts"]:
         print("\nroles: " + (", ".join(c["accounts"]["roles"]) or "none"))
         print("users: " + ", ".join(u["name"] + (" [system]" if u["system"] else "")
                                     for u in c["accounts"]["users"]))
+    return 0
+
+
+def cmd_files(args):
+    with engine.Archive(args.backup) as a:
+        if not a.files_summary():
+            _log("This backup holds no stored files.")
+            return 1
+        n = a.extract_files(args.out)
+    print("%d files written to %s" % (n, args.out))
     return 0
 
 
@@ -150,6 +165,7 @@ def main(argv=None):
     b.add_argument("--label")
     b.add_argument("--lock-all", action="store_true")
     b.add_argument("--desync", action="store_true", help="Galera: set wsrep_desync during the dump")
+    b.add_argument("--no-files", action="store_true", help="do not write the apps' stored files out beside the dump")
     b.set_defaults(func=cmd_backup)
 
     r = sub.add_parser("restore", parents=[conn])
@@ -166,6 +182,11 @@ def main(argv=None):
     r.add_argument("-y", "--yes", action="store_true")
     r.add_argument("--sql-out", metavar="FILE")
     r.set_defaults(func=cmd_restore)
+
+    f = sub.add_parser("files", help="copy the apps' stored files (photos, scans, receipts...) out of a backup")
+    f.add_argument("backup")
+    f.add_argument("-o", "--out", required=True, help="the folder to write them into")
+    f.set_defaults(func=cmd_files)
 
     for name, fn in (("list", cmd_list), ("verify", cmd_verify)):
         s = sub.add_parser(name)

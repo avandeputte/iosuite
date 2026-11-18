@@ -26,6 +26,8 @@ import tarfile
 import tempfile
 import threading
 
+from app import blobfiles
+
 FORMAT_VERSION = 1
 SYSTEM_DATABASES = {"information_schema", "performance_schema", "sys", "mysql"}
 SYSTEM_ACCOUNTS = {("mariadb.sys", "localhost"), ("mysql", "localhost"),
@@ -422,12 +424,13 @@ def split_dump(stream, outdir, level=6, progress=None, cancel=None):
 
 def run_backup(server, databases, include_users=True, workdir=None, label="backup",
                lock_all=False, desync=False, compress_level=6, log=_noop, cancel=None,
-               source_name=None):
+               source_name=None, files=True):
     """Take a backup and return the path of the finished .tar in ``workdir``.
 
     ``databases`` is a list of names or the string "all" (every non-system
     database). With ``desync`` on a Galera node, the node is taken out of flow
-    control for the duration so a long dump does not slow the cluster down.
+    control for the duration so a long dump does not slow the cluster down. With ``files`` on, the files the suite's
+    apps keep in their databases are written out too, as plain files under files/ (app/blobfiles.py).
     """
     workdir = workdir or tempfile.gettempdir()
     os.makedirs(workdir, exist_ok=True)
@@ -530,6 +533,17 @@ def run_backup(server, databases, include_users=True, workdir=None, label="backu
                         log("Galera: node back in sync (wsrep_desync=OFF)")
                     except EngineError as e:
                         log("warning: could not turn wsrep_desync off again: %s" % e)
+            if files and manifest["databases"]:
+                try:
+                    found = blobfiles.export(conn, [d["name"] for d in manifest["databases"]], stage, log, cancel)
+                except Cancelled:
+                    raise
+                except Exception as e:  # the dump is the backup: it is kept without the files
+                    log("warning: the stored files were not written out: %s" % e)
+                    found = None
+                if found and found["count"]:
+                    manifest["files"] = found
+                    log("Files: %d (%s) written out under files/" % (found["count"], human_size(found["bytes"])))
 
         try:
             with open(os.path.join(stage, "manifest.json"), "w") as f:
@@ -544,6 +558,8 @@ def run_backup(server, databases, include_users=True, workdir=None, label="backu
                 for db in manifest["databases"]:
                     for s in db["sections"]:
                         tar.add(os.path.join(stage, s["file"]), arcname=s["file"])
+                for it in (manifest.get("files") or {}).get("items", []):
+                    tar.add(os.path.join(stage, it["file"]), arcname=it["file"])
             os.chmod(partial, 0o600)
             os.rename(partial, tar_path)
         finally:
@@ -643,14 +659,60 @@ class Archive:
         return {"name": m.get("name"), "label": m.get("label"), "created": m["created"],
                 "source": m.get("source"), "server_version": m["server_version"],
                 "galera": m.get("galera"), "consistency": m.get("consistency"),
-                "databases": dbs, "accounts": accts, "has_accounts": self.accounts is not None}
+                "databases": dbs, "accounts": accts, "has_accounts": self.accounts is not None,
+                "files": self.files_summary()}
+
+    def files_summary(self):
+        """The files written out beside the dump: {count, bytes, apps: {app: count}}, or None (none in this backup)."""
+        f = self.manifest.get("files")
+        return {"count": f["count"], "bytes": f["bytes"], "apps": f.get("apps") or {}} if f else None
+
+    def file_items(self):
+        return list((self.manifest.get("files") or {}).get("items", []))
+
+    def stored_files(self):
+        """(path inside files/, member) of each stored file written out beside the dump. A path that would climb out
+        of files/ (a backup someone tampered with) is left out."""
+        out = []
+        for it in self.file_items():
+            rel = it["file"]
+            parts = rel.split("/")
+            if parts[0] != blobfiles.ROOT or len(parts) < 2 or any(p in ("", ".", "..") for p in parts) \
+                    or "\\" in rel or not self._exists(rel):
+                continue
+            out.append(("/".join(parts[1:]), rel))
+        return out
+
+    def write_files_zip(self, path):
+        """The stored files as one .zip (stored as they are: pictures and PDFs are compressed already)."""
+        import zipfile
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED, allowZip64=True) as z:
+            for name, rel in self.stored_files():
+                with self._open(rel) as src, z.open(name, "w", force_zip64=True) as dst:
+                    shutil.copyfileobj(src, dst, 1 << 20)
+        return path
+
+    def extract_files(self, outdir):
+        """Copy the stored files into outdir (made if need be); returns how many."""
+        n = 0
+        for name, rel in self.stored_files():
+            dst = os.path.join(outdir, *name.split("/"))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            with self._open(rel) as src, open(dst, "wb") as f:
+                shutil.copyfileobj(src, f, 1 << 20)
+            n += 1
+        return n
 
     def checksums(self, sections=None):
         """(file, sha256) of what a restore reads: the header and footer, the accounts and the sections (every one, or
-        those given). Backups made before 3.7.9 carry no checksum for the header and footer; theirs are not checked."""
+        those given; every one also takes the stored files written out beside the dump). Backups made before 3.7.9 carry
+        no checksum for the header and footer; theirs are not checked."""
         m = self.manifest
-        sections = [s for db in m["databases"] for s in db["sections"]] if sections is None else sections
+        whole = sections is None
+        sections = [s for db in m["databases"] for s in db["sections"]] if whole else sections
         files = [(s["file"], s["sha256"]) for s in sections]
+        if whole:
+            files += [(it["file"], it["sha256"]) for it in self.file_items()]
         files += [(rel, m[key]) for rel, key in (("header.sql", "header_sha256"), ("footer.sql", "footer_sha256")) if m.get(key)]
         if m.get("accounts"):
             files.append((m["accounts"]["file"], m["accounts"]["sha256"]))

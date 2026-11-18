@@ -39,7 +39,8 @@ SCHEMA = [
         UNIQUE KEY uq_bkp_destinations_name (name)
     )""",
     # what to back up, where, when and how many to keep. databases: a JSON list, or "all"; schedule: the form's
-    # fields as JSON, cron: the five-field expression it makes ('' for on demand only)
+    # fields as JSON, cron: the five-field expression it makes ('' for on demand only); export_files: also write the
+    # files the apps keep in their databases out as plain files in the backup (app/blobfiles.py)
     """CREATE TABLE IF NOT EXISTS bkp_jobs (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(64) NOT NULL,
@@ -54,6 +55,7 @@ SCHEMA = [
         desync TINYINT NOT NULL DEFAULT 0,
         lock_all TINYINT NOT NULL DEFAULT 0,
         compress_level TINYINT NOT NULL DEFAULT 6,
+        export_files TINYINT NOT NULL DEFAULT 1,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uq_bkp_jobs_name (name),
         KEY idx_bkp_jobs_server (server_id),
