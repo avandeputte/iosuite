@@ -224,8 +224,8 @@ def test_the_banks_csv_against_the_account(client):
 
 
 def test_a_line_is_one_transaction():
-    c = lambda i, day, amount, inside=True, pending=False: {"id": i, "day": dt.date(2026, 10, day), "amount": Decimal(amount), "in": inside,  # noqa: E731
-                                                            "pending": pending, "name": "", "words": set()}
+    c = lambda i, day, amount, inside=True: {"id": i, "day": dt.date(2026, 10, day), "amount": Decimal(amount), "in": inside,  # noqa: E731
+                                             "name": "", "words": set()}
     ln = lambda day, amount, signed=True, others=(): {"day": dt.date(2026, 10, day), "text": "", "amount": Decimal(amount), "signed": signed,  # noqa: E731
                                                       "others": [Decimal(o) for o in others]}
     ids = lambda got: {n: x["id"] for n, x in got.items()}  # noqa: E731
@@ -235,5 +235,5 @@ def test_a_line_is_one_transaction():
     assert ids(statementfile._match([ln(10, 5)], [c(1, 10, -5)], True)) == {} and ids(statementfile._match([ln(10, 5)], [c(1, 10, -5)], True, flip=True)) == {0: 1}
     assert ids(statementfile._match([ln(10, 5, False)], [c(1, 10, -5)], False)) == {0: 1}
     assert ids(statementfile._match([ln(10, "1.08", False, ["45.00"])], [c(1, 11, -45)], False)) == {0: 1}
-    # one the page lists before one it does not, a posted one before a pending one
-    assert ids(statementfile._match([ln(10, -5)], [c(1, 10, -5, False), c(2, 10, -5), c(3, 10, -5, True, True)], True)) == {0: 2}
+    # one the page lists before one it does not
+    assert ids(statementfile._match([ln(10, -5)], [c(1, 10, -5, False), c(2, 10, -5), c(3, 10, -5)], True)) == {0: 2}

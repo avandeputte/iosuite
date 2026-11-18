@@ -82,7 +82,6 @@ SCHEMA = [
         category_group VARCHAR(128) NULL,
         notes TEXT NULL,
         tags TEXT NULL,
-        pending TINYINT(1) NOT NULL DEFAULT 0,
         hidden TINYINT(1) NOT NULL DEFAULT 0,
         recurring TINYINT(1) NOT NULL DEFAULT 0,
         edited TINYINT(1) NOT NULL DEFAULT 0,

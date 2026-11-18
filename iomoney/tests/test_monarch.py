@@ -3,6 +3,7 @@ house and the car among them) with their history, transactions (changes made her
 followed), holdings (not Monarch's recurring transactions: ioMoney finds those itself), and a session Monarch no
 longer takes."""
 import datetime as dt
+from decimal import Decimal
 
 import pytest
 from iosuite_shared import credentials
@@ -204,21 +205,24 @@ def test_rules_run_over_what_monarch_sends(client, mm):
     assert client.get("/api/transactions").json()["total"] == 0
 
 
-def test_a_pending_one_is_followed_until_it_posts(client, mm):
+def test_what_monarch_calls_pending_is_not_kept(client, mm):
+    """Monarch says pending of payments the bank took weeks ago: the word is not kept, and every transaction counts
+    alike. One it sends again under another id, weeks later, is not there twice."""
     put_keys()
     FakeMM.transactions = [tx("p1", 40, -280, "Friend", pending=True), tx("p2", 35, -60, "Garage", pending=True), tx("t1", 3, -54.2, "Grocer")]
     assert client.post("/api/monarch/sync").json()["ok"]
-    assert client.get("/api/transactions?q=friend").json()["items"][0]["pending"] is True
-    # weeks later (far before the last sync's two weeks): one posted under a new id, the other under its own
-    FakeMM.transactions = [tx("p1b", 40, -280, "Friend"), tx("p2", 35, -60, "Garage"), tx("t1", 3, -54.2, "Grocer")]
+    items = client.get("/api/transactions").json()["items"]
+    assert len(items) == 3 and not any("pending" in t for t in items)
+    assert client.get("/api/tidy").json()["review"] == 3  # the ones called pending need a look like the others
+    # weeks later: one came back under a new id, the other stays as it was
+    FakeMM.transactions = [tx("p1b", 40, -280, "Friend"), tx("p2", 35, -60, "Garage", pending=True), tx("t1", 3, -54.2, "Grocer")]
     assert client.post("/api/monarch/sync").json()["ok"]
-    friend = client.get("/api/transactions?q=friend").json()["items"]
-    assert len(friend) == 1 and friend[0]["pending"] is False  # not there twice, nor still pending
-    assert client.get("/api/transactions?q=garage").json()["items"][0]["pending"] is False
+    assert len(client.get("/api/transactions?q=friend").json()["items"]) == 1  # not there twice
+    assert client.get("/api/transactions").json()["total"] == 3
 
 
-def test_receipts_links_and_split_follow_a_pending_one_that_posts(client, mm):
-    """Monarch gives a pending transaction a new id when it posts: what was kept with it here moves to the new one."""
+def test_receipts_links_and_split_follow_one_that_comes_back_under_another_id(client, mm):
+    """Monarch can give a card's hold a new id when it posts: what was kept with it here moves to the new one."""
     from iosuite_shared import related
     put_keys()
     FakeMM.transactions = [tx("p1", 4, -280, "Appliance shop", pending=True), tx("p2", 4, -40, "Bistro", pending=True),
@@ -239,9 +243,10 @@ def test_receipts_links_and_split_follow_a_pending_one_that_posts(client, mm):
                            tx("t1", 3, -54.2, "Grocer")]
     assert client.post("/api/monarch/sync").json()["ok"]
     new, tipped = one("appliance"), one("bistro")
-    assert new["ownTags"] == ["warranty"] and one("newsstand")["ownTags"] == ["trip"] and one("newsstand")["pending"] is False
+    assert new["ownTags"] == ["warranty"] and one("newsstand")["ownTags"] == ["trip"]
+    assert db.one("SELECT count(*) AS n FROM mny_reviewed WHERE transaction_id = %s", (one("newsstand")["id"],))["n"] == 1  # looked at already
     assert client.get("/api/transactions?q=warranty").json()["total"] == 1
-    assert new["id"] != shop["id"] and new["pending"] is False
+    assert new["id"] != shop["id"]
     assert [r["name"] for r in new["receipts"]] == ["slip.pdf"] and client.get(f"/api/receipts/{new['receipts'][0]['id']}").content == pdf
     assert [(p["amount"], p["category"]) for p in new["splits"]] == [(-200, "Home"), (-80, "Gifts")]
     assert [(x["kind"], x["id"]) for x in related.of("item", 7)] == [("transaction", str(new["id"]))]
@@ -429,7 +434,7 @@ def test_balance_check(client, mm):
     put_keys()
     now = dt.datetime.now(dt.timezone.utc).isoformat()
     cred = {"id": "c", "updateRequired": False, "disconnectedFromDataProviderAt": None, "institution": {"name": "Bank", "status": None}}
-    FakeMM.accounts = [acct("101", "Checking", "depository", 5000, displayLastUpdatedAt=now, credential=cred),
+    FakeMM.accounts = [acct("101", "Checking", "depository", 4988, displayLastUpdatedAt=now, credential=cred),
                        acct("103", "Brokerage", "brokerage", 12000, holdingsCount=2, displayLastUpdatedAt=now, credential=cred),
                        acct("109", "Typed in", "depository", 50, isManual=True)]
     # Monarch's history: 4000 thirty days ago, 4500 ten days ago, 5000 now
@@ -440,11 +445,13 @@ def test_balance_check(client, mm):
     r = client.get("/api/balance-check").json()
     assert [(x["name"], x["status"], x["gap"]) for x in r["items"]] == [("Checking", "ok", 0)] and r["gaps"] == 0  # only what has a bank and transactions
     one = r["items"][0]
-    assert (one["from"], one["opening"], one["balance"], one["moved"], one["count"], one["pending"]) == (D(30), 4000, 5000, 1000, 3, -12)
-    # the bank counts the pending one in the balance: explained
-    FakeMM.accounts[0] = acct("101", "Checking", "depository", 4988, displayLastUpdatedAt=now, credential=cred)
+    assert (one["from"], one["opening"], one["balance"], one["moved"], one["count"], one["waiting"]) == (D(30), 4000, 4988, 988, 4, [])
+    # the bank's balance does not show yesterday's cafe yet: named, and not flagged
+    FakeMM.accounts[0] = acct("101", "Checking", "depository", 5000, displayLastUpdatedAt=now, credential=cred)
     assert client.post("/api/monarch/sync").json()["ok"]
-    assert [(x["status"], x["gap"]) for x in client.get("/api/balance-check").json()["items"]] == [("pending", -12)]
+    r = client.get("/api/balance-check").json()
+    assert [(x["status"], x["gap"]) for x in r["items"]] == [("waiting", 12)] and r["gaps"] == 0
+    assert [(t["name"], t["day"], t["amount"]) for t in r["items"][0]["waiting"]] == [("Cafe", D(1), -12)]
     # the plumber's is gone from Monarch (hidden there): the balance says 200 less than the transactions do
     FakeMM.accounts[0] = acct("101", "Checking", "depository", 5000, displayLastUpdatedAt=now, credential=cred)
     FakeMM.transactions = [tx("b1", 20, 500, "Employer"), tx("b2", 8, 700, "Employer"), tx("b3", 5, -200, "Plumber", hideFromReports=True)]
@@ -462,52 +469,57 @@ def test_balance_check(client, mm):
     assert client.post(f"/api/balance-check/{chk}/ok", json={"gap": None}).json()["ok"]
 
 
-def test_balance_check_dates_and_old_pending(client, mm, monkeypatch):
-    """What is no gap: a payment of the first day that the balance shows a day later, and one Monarch still calls
-    pending weeks after the bank took it. Weeks that cancel out are left out of where a gap appeared."""
+def test_balance_check_dates_and_what_monarch_calls_pending(client, mm, monkeypatch):
+    """What is no gap: a payment of the first day that the balance shows a day later, one Monarch still calls
+    pending weeks after the bank took it, and one of the past days the bank's balance does not show yet. Weeks that
+    cancel out are left out of where a gap appeared."""
     from app import balancecheck
     put_keys()
     now = dt.datetime.now(dt.timezone.utc).isoformat()
     cred = {"id": "c", "updateRequired": False, "disconnectedFromDataProviderAt": None, "institution": {"name": "Bank", "status": None}}
     checking = lambda bal: acct("101", "Checking", "depository", bal, displayLastUpdatedAt=now, credential=cred)  # noqa: E731
+    look = lambda: client.get("/api/balance-check").json()["items"][0]  # noqa: E731
     # the balance of forty days ago does not hold that day's card payment yet: the next day's does
     monkeypatch.setattr(FakeMM, "get_account_history", lambda self, i: _async(
         [{"date": D(40), "signedBalance": 4000}, {"date": D(39), "signedBalance": 3700}, {"date": D(20), "signedBalance": 5000}]))
     FakeMM.accounts = [checking(5000)]
     FakeMM.transactions = [tx("e1", 40, -300, "Card autopay"), tx("e2", 25, 1300, "Employer")]
     assert client.post("/api/monarch/sync").json()["ok"]
-    one = client.get("/api/balance-check").json()["items"][0]
+    one = look()
     assert (one["status"], one["gap"], one["from"], one["opening"], one["count"]) == ("ok", 0, D(39), 3700, 1)
-    # a bill still called pending twelve days on, which the bank took: counted, and named
+    # a bill Monarch still calls pending twelve days on, which the bank took: it counts like any other
     FakeMM.accounts = [checking(4880)]
     FakeMM.transactions.append(tx("e3", 12, -120, "Power company", pending=True))
     assert client.post("/api/monarch/sync").json()["ok"]
-    one = client.get("/api/balance-check").json()["items"][0]
-    assert (one["status"], one["gap"], one["pending"], one["moved"], one["count"]) == ("ok", 0, 0, 1180, 2)
-    assert [(x["name"], x["day"], x["amount"], x["days"], x["counted"]) for x in one["stale"]] == [("Power company", D(12), -120, 12, True)]
-    # its posted twin is there too: the pending one is a leftover, and stays out
+    one = look()
+    assert (one["status"], one["gap"], one["moved"], one["count"], one["waiting"]) == ("ok", 0, 1180, 2, [])
+    # the bank sent it again and Monarch kept the first too: there twice, a gap, and among the likely duplicates
     FakeMM.transactions.append(tx("e4", 11, -120, "Power company"))
     assert client.post("/api/monarch/sync").json()["ok"]
-    one = client.get("/api/balance-check").json()["items"][0]
-    assert (one["status"], one["gap"], one["count"]) == ("ok", 0, 2) and [x["counted"] for x in one["stale"]] == [False]
-    # one of this week is a hold: explained when the bank counts it, as before
-    FakeMM.accounts = [checking(4868)]
+    one = look()
+    assert (one["status"], one["gap"], one["count"]) == ("gap", 120, 3)
+    assert [[t["merchant"] for t in g["items"]] for g in client.get("/api/duplicates").json()["items"]] == [["Power company", "Power company"]]
+    FakeMM.transactions = [t for t in FakeMM.transactions if t["id"] != "e4"]
+    # a card purchase of two days ago the bank's balance does not show yet: named, not flagged; then the bank has it
     FakeMM.transactions.append(tx("e5", 2, -12, "Cafe", pending=True))
     assert client.post("/api/monarch/sync").json()["ok"]
-    one = client.get("/api/balance-check").json()["items"][0]
-    assert (one["status"], one["gap"], one["pending"]) == ("pending", -12, -12)
-    # a gap that is one: money out the account never got; the old pending one beside it is still counted, since the
-    # gap grew by just that in its week
-    FakeMM.accounts = [checking(4368)]
-    FakeMM.transactions = [t for t in FakeMM.transactions if t["id"] != "e4"]
+    one = look()
+    assert (one["status"], one["gap"], [t["name"] for t in one["waiting"]]) == ("waiting", 12, ["Cafe"])
+    FakeMM.accounts = [checking(4868)]
     assert client.post("/api/monarch/sync").json()["ok"]
-    chk = client.get("/api/accounts").json()["items"][0]["id"]
-    one = client.get("/api/balance-check").json()["items"][0]
-    assert (one["gap"], [x["counted"] for x in one["stale"]]) == (-632, [False])  # nothing says when: not counted, but named
-    db.ex("INSERT INTO mny_balances (account_id, day, balance, source) VALUES (%s, %s, 4880, 'sync')", (chk, D(9)))
-    one = client.get("/api/balance-check").json()["items"][0]
-    assert [(w["from"], w["to"], w["change"]) for w in one["weeks"]] == [(D(8), D(0), -512)]
-    assert (one["status"], one["gap"], one["pending"]) == ("gap", -512, -12) and [x["counted"] for x in one["stale"]] == [True]  # 500 missing, 12 on hold
+    assert (look()["status"], look()["gap"]) == ("ok", 0)
+    # a gap that is one: money out the account never got
+    FakeMM.accounts = [checking(4368)]
+    assert client.post("/api/monarch/sync").json()["ok"]
+    one = look()
+    assert (one["status"], one["gap"], one["waiting"]) == ("gap", -500, [])
+    assert [(w["from"], w["to"], w["change"]) for w in one["weeks"]] == [(D(19), D(0), -500)]
+    # which of the past week's are not in the balance yet: the latest ones, or else any of them, to the cent
+    t = lambda i, ago, amount: {"id": i, "day": dt.date.today() - dt.timedelta(days=ago), "amount": Decimal(str(amount))}  # noqa: E731
+    week = [t(1, 5, -5), t(2, 3, -7.25), t(3, 2, 40), t(4, 1, -9)]
+    ids = lambda gap, sign=1: sorted(x["id"] for x in balancecheck._waiting(week, Decimal(str(gap)), Decimal(sign)))  # noqa: E731
+    assert ids(9) == [4] and ids(-31) == [3, 4] and ids(-23.75) == [2, 3, 4] and ids(14) == [1, 4] and ids(-18.75) == [1, 2, 3, 4]
+    assert ids(30) == [] and ids(-9, -1) == [4]  # a card: what is owed went up by less than its purchases
     # where a gap appeared: the weeks that cancel out (a transaction dated a day off) are left out
     wk = lambda n, change: {"from": D(n), "to": D(n - 6), "change": change, "gap": 0}  # noqa: E731
     weeks = [wk(84, -50), wk(77, 20.5), wk(70, -30.5), wk(63, 10), wk(49, -40), wk(42, 40), wk(28, -7)]
