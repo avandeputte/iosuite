@@ -9,7 +9,7 @@ fits better); a PDF often does not, so there the amount alone can do.
 
 What comes out, for the Reconcile page: the transactions found (to tick), the lines the account does not have
 (missing: with the transaction of nearly that day and name whose amount differs, when there is one), the lines it has
-under a day outside the statement or still pending (elsewhere), and the transactions of those days the bank does not
+under a day outside the statement (elsewhere), and the transactions of those days the bank does not
 show (extra). Nothing is changed and the file is not kept: the person looks, adds or corrects, and finishes."""
 import datetime as dt
 import re
@@ -122,15 +122,15 @@ def _file(a: dict, data: bytes, order: str | None) -> dict:
 
 def _candidates(a: dict, start: dt.date, end: dt.date, listed: set) -> list[dict]:
     """The transactions a line of the file may be: the ones the Reconcile page lists for these days (in: true), and
-    around them the ones a few days before or after, and the pending ones."""
-    rows = db.q("SELECT id, day, amount, pending, merchant, description FROM mny_transactions WHERE account_id = %s AND day BETWEEN %s AND %s",
+    around them the ones a few days before or after."""
+    rows = db.q("SELECT id, day, amount, merchant, description FROM mny_transactions WHERE account_id = %s AND day BETWEEN %s AND %s",
                 (a["id"], start - dt.timedelta(days=statements.EARLIER_DAYS), end + dt.timedelta(days=NEAR)))
     out = []
     for r in rows:
         inside = r["id"] in listed
         if not inside and r["day"] < start - dt.timedelta(days=NEAR):
             continue
-        out.append({"id": r["id"], "day": r["day"], "amount": Decimal(r["amount"]), "in": inside, "pending": bool(r["pending"]),
+        out.append({"id": r["id"], "day": r["day"], "amount": Decimal(r["amount"]), "in": inside,
                     "name": r["merchant"] or r["description"] or "", "words": _words(r["merchant"], r["description"])})
     return out
 
@@ -160,7 +160,7 @@ def _match(lines: list[dict], cands: list[dict], strict: bool, flip: bool = Fals
                             continue
                         if signs and (c["amount"] > 0) != ((-amt if flip else amt) > 0):
                             continue
-                        rank = (not c["in"], c["pending"], c["id"])
+                        rank = (not c["in"], c["id"])
                         if best is None or rank < best[0]:
                             best = (rank, c)
                     if best:
@@ -188,7 +188,7 @@ def read(u: dict, a: dict, data: bytes, name: str | None = None, order: str | No
     balances: true, false, or None when that cannot be told), total: the lines read, sum: what they add up to (None
     when the file does not say which way each went), matched: [ids of the transactions found, to tick], missing:
     [{day, text, amount, signed, differs?: {id, day, amount, name}}] the lines the account does not have, elsewhere:
-    [{day, text, amount, id, at, why: before, after or pending}] the lines it has outside the statement, extra: [ids
+    [{day, text, amount, id, at, why: before or after}] the lines it has outside the statement, extra: [ids
     of the transactions of these days the file does not show], dateOrder, guessed, flipped, problems: the rows that
     could not be read}."""
     if not data:
@@ -246,7 +246,7 @@ def read(u: dict, a: dict, data: bytes, name: str | None = None, order: str | No
             out["matched"].append(c["id"])
         else:
             out["elsewhere"].append({**_line(ln, flipped), "id": c["id"], "at": c["day"].isoformat(),
-                                     "why": "pending" if c["pending"] else "before" if c["day"] < start else "after"})
+                                     "why": "before" if c["day"] < start else "after"})
         found.add(c["id"])
     out["matched"].sort()
     # what the account does not have: with the transaction of another amount that looks like it

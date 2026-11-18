@@ -70,7 +70,7 @@ quotes, and what the house and the cars are worth after their loans.
 - **Receipts**: keep the receipt with its transaction. Open the transaction and add a picture (on a phone, take it
   with the camera) or a PDF, up to 20 MB each. The list marks the transactions that have one, and can show only those
   with or without. Whoever sees the transaction sees its receipts. A receipt is deleted with its transaction; when
-  a pending transaction posts, its receipts move to the posted one.
+  Monarch sends a transaction again under a new entry, its receipts move to that one.
 - **Reconciled**: tick each transaction as checked against the bank's statement, filter on it, or tick every one shown.
 - **Tidy up**: one page for what keeps the transactions right, each with how much there is to do. The sidebar shows
   how many transactions need a look.
@@ -82,7 +82,7 @@ quotes, and what the house and the cars are worth after their loans.
   and give each its usual category; what comes in later follows.
 - **Tags** of your own (trip, reimbursable, tax) on any transaction, beside the ones Monarch sends: filter on a tag
   and see its total.
-- **Likely duplicates**: the same transaction kept twice (typed in and from the bank, or pending and posted) is
+- **Likely duplicates**: the same transaction kept twice (typed in and from the bank, or sent twice by the bank) is
   pointed out: keep one and hide the other, or say they are different.
 - **Reconcile with a statement**: give the statement's days and its two balances, tick what it shows, and finish when
   the difference is zero. The next statement starts where this one ended. Or let the bank's file do the ticking:
@@ -91,8 +91,9 @@ quotes, and what the house and the cars are worth after their loans.
   click), what has another amount, and what the account has that the bank does not show. The file is read on your
   server and not kept; a scanned statement (pictures of its pages) cannot be read.
 - **Balance check**: does each account's balance at the bank agree with its transactions here? Where it does not,
-  ioMoney says by how much, which way, and in which days the gap appeared. A payment Monarch still calls pending
-  weeks after the bank took it is counted and named, and a transaction dated a day off from the balance is no gap.
+  ioMoney says by how much, which way, and in which days the gap appeared. Every transaction counts, whatever
+  Monarch calls it: a card's purchase of the past days that the bank's balance does not show yet is named and not
+  flagged, and a transaction dated a day off from the balance is no gap.
 - **Rules kept in order**: each rule shows how many transactions it is for; one that matches nothing or never decides
   is marked, and a rule is offered when you gave the same payee the same category by hand again and again.
 - **History and undo**: every change made by hand is kept with who and when, and can be taken back; a transaction

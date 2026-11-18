@@ -13,10 +13,11 @@ What a sync does (sync(); every SYNC_HOURS hours from the chores in app/main.py,
 - accounts: each Monarch account is an account here (source monarch), with its balance today; a new one brings its
   balance history. Real estate (Zillow) and vehicles are accounts too: the house's and the cars' values come from there.
   Name, hidden and "in the net worth" stay as changed here; Monarch decides the rest.
-- transactions: those since the last sync (two weeks back, for late changes, and back to the oldest one still pending
-  here, so it is seen to post), or the past INITIAL_DAYS the first time.
+- transactions: those since the last sync (OVERLAP_DAYS back, for late changes), or the past INITIAL_DAYS the first
+  time. Whether Monarch calls one pending is not kept: it says so of payments the bank took weeks ago, so every
+  transaction it sends counts alike.
   A transaction whose category, notes or hidden was changed here keeps those. One that disappeared from Monarch inside
-  the window (a pending one that posted under another id, one deleted there) goes here too, and so does one hidden in
+  the window (one the bank sent again under another id, one deleted there) goes here too, and so does one hidden in
   Monarch ("Hide from reports": a duplicate, or one a person or a Monarch rule left out): it is not brought in at all.
 - an account Monarch reports that is not here, after the first sync, is held (mny_monarch_new) with its transactions
   until an admin says whether it is new or an account here that was deleted and made again in Monarch (when its bank
@@ -51,8 +52,8 @@ KEYS = [
      "hint": "kept here by ioMoney after it signs in; clear it to make ioMoney sign in again"},
 ]
 INITIAL_DAYS = 730      # transactions fetched on the first sync
-OVERLAP_DAYS = 14       # a later sync looks this far back before the last one
-PENDING_DAYS = 120      # ... and back to the oldest transaction still pending here, at most this far
+OVERLAP_DAYS = 45       # a later sync looks this far back before the last one: a card's hold can come back under another
+                        # id weeks later, and the one it replaced has to be seen to be gone
 PAGE = 500              # transactions per request
 TIMEOUT = 60
 SYNC_HOURS = 6
@@ -299,16 +300,16 @@ def _put_tx(t: dict, aid: int, groups: dict, cats: tuple = None) -> bool:
     cname, grp = categories.mapped(cat.get("name") or None, grp, *(cats or categories.maps()))
     w = model.words(merchant, t.get("plaidName"), cname, grp, t.get("notes"), ",".join(tags))
     db.ex("INSERT INTO mny_transactions (account_id, source, external_id, day, amount, merchant, description, category, "
-          "category_group, notes, tags, pending, hidden, recurring, words) "
-          "VALUES (%s, 'monarch', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+          "category_group, notes, tags, hidden, recurring, words) "
+          "VALUES (%s, 'monarch', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
           "ON DUPLICATE KEY UPDATE account_id = VALUES(account_id), day = VALUES(day), amount = VALUES(amount), "
-          "description = VALUES(description), tags = VALUES(tags), pending = VALUES(pending), recurring = VALUES(recurring), "
+          "description = VALUES(description), tags = VALUES(tags), recurring = VALUES(recurring), "
           "merchant = IF(edited, merchant, VALUES(merchant)), category = IF(edited, category, VALUES(category)), "
           "category_group = IF(edited, category_group, VALUES(category_group)), notes = IF(edited, notes, VALUES(notes)), "
           "hidden = IF(edited, hidden, VALUES(hidden)), words = IF(edited, words, VALUES(words))",
           (aid, str(t["id"]), day, amt, (merchant or "")[:255] or None, (t.get("plaidName") or "")[:255] or None,
            (cname or "")[:128] or None, (grp or "")[:128] or None, t.get("notes") or None,
-           json.dumps(tags) if tags else None, 1 if t.get("pending") else 0, 0,
+           json.dumps(tags) if tags else None, 0,
            1 if t.get("isRecurring") else 0, w))
     return True
 
@@ -336,7 +337,7 @@ async def _transactions(mm, ids: dict, since: dt.date, today: dt.date, groups: d
             seen.add(str(t["id"]))
             n += _put_tx(t, aid, groups, cats)
         _at("Transactions", n)
-    # gone from Monarch inside the window: a pending one that posted under another id, one deleted there. Only in the
+    # gone from Monarch inside the window: one the bank sent again under another id, one deleted there. Only in the
     # accounts Monarch still lists: an account deleted there (to be made again) keeps its transactions until they
     # are matched with the new account's
     aids = sorted(set(ids.values()))
@@ -345,7 +346,7 @@ async def _transactions(mm, ids: dict, since: dt.date, today: dt.date, groups: d
                    f"AND account_id IN ({db.marks(len(aids))})", (since, today, *aids))
         gone = [r["id"] for r in old if r["external_id"] not in seen]
         if gone:
-            receipts.carry(gone, seen)  # a pending one that posted: its receipts, links and split move to the posted one
+            receipts.carry(gone, seen)  # one that came back under another id: what was kept with it moves to that one
             db.ex(f"DELETE FROM mny_transactions WHERE id IN ({db.marks(len(gone))})", gone)
     # the household's rules, over what just came in (Monarch's own payee and category, unless changed here by hand)
     _at("Rules and transfers", n)
@@ -601,12 +602,6 @@ async def _run(full: bool, only: int = None, years: int = 2) -> dict:
     # an account's own sync (ONE) does not count: the others were not looked at then
     last = db.one("SELECT MAX(started_at) AS t FROM mny_syncs WHERE ok = 1 AND message NOT LIKE %s", (ONE + "%",))["t"]
     since = today - dt.timedelta(days=INITIAL_DAYS) if full or not last else last.date() - dt.timedelta(days=OVERLAP_DAYS)
-    # a transaction pending here is asked again until it posts (Monarch keeps its first date, often weeks before it
-    # posts) or is gone (it posted under another id): otherwise it would stay pending here, beside its posted twin
-    old = db.one("SELECT MIN(day) AS d FROM mny_transactions WHERE source = 'monarch' AND pending = 1 AND day >= %s",
-                 (today - dt.timedelta(days=PENDING_DAYS),))["d"]
-    if old and old < since:
-        since = old
     _at("Transactions")
     n_tx = await _transactions(mm, ids, since, today, groups)
     _from_transactions(ids.values())

@@ -430,7 +430,7 @@ def test_a_transaction_split_over_categories(client, as_user):
     assert find("category=Clothes") == ["Warehouse club"]
     client.patch(f"/api/transactions/{club['id']}", json={"notes": "membership renewed"})
     assert find("q=party") == ["Warehouse club"] and find("q=renewed") == ["Warehouse club"]
-    # its amount changed since (by hand here; a pending one that posts with a tip): the rest stays under its own category
+    # its amount changed since (by hand here; a card's hold that posts with a tip): the rest stays under its own category
     client.patch(f"/api/transactions/{club['id']}", json={"amount": -210})
     by = {c["category"]: c for c in client.get(f"/api/spending?start={today}&end={today}").json()["categories"]}
     assert by["Shopping"]["spent"] == 10 and by["Groceries"]["spent"] == 150
