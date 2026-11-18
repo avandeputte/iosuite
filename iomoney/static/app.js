@@ -2078,7 +2078,9 @@ async function showBalance(page) {
   const d = await api('api/balance-check');
   put(page, h('div', { class: 'pagehead' }, tidyBack(), h('h1', null, 'Balance check')));
   put(page, h('p', { class: 'muted' }, `Over the past ${d.days} days, each account’s balance at the bank should have moved by exactly what its transactions here add up to. `,
-    'Where it did not, a transaction is missing here or kept twice. This looks at the cash accounts and cards Monarch Money keeps with a bank behind them.'));
+    'Where it did not, a transaction is missing here or kept twice. This looks at the cash accounts and cards Monarch Money keeps with a bank behind them. ',
+    'Pending transactions are not counted, except one Monarch Money still calls pending after more than a week when the balance shows the bank took it.'));
+  const openTx = async (id) => { try { txDialog(await api(`api/transactions/${id}`)); } catch (e) { fail(e); } };
   if (!d.items.length) { put(page, h('div', { class: 'empty' }, icon('scale'), h('p', null, 'No accounts to check.'))); return; }
   const post = async (x, gap) => { try { await api(`api/balance-check/${x.id}/ok`, { method: 'POST', json: { gap } }); await refreshSummary(); onRoute(); } catch (e) { fail(e); } };
   const TAGS = { ok: ['Agrees', 'ok'], pending: ['Agrees but for the pending ones', 'ok'], accepted: ['Accepted as it is', ''], unknown: ['Too little history yet', ''] };
@@ -2092,11 +2094,22 @@ async function showBalance(page) {
       : h('p', { class: 'muted small' }, `Since ${fmtDay(x.from, true)} the balance went from ${money(x.opening, cur)} to ${money(x.balance, cur)}; the ${plural(x.count, 'transaction')} here add up to ${money(x.moved, cur)}.`,
         x.status === 'pending' ? ` The pending ones (${money(x.pending, cur)}) explain the difference.` : x.status === 'accepted' ? ` Off by ${money(Math.abs(x.gap), cur)}, accepted as it is.` : '');
     const box = h('div', { class: `box balc ${x.status}` }, head, facts);
+    // the ones Monarch still calls pending after more than a week: counted where the balance says the bank took them
+    const named = (list) => list.map((t, i) => [i ? ', ' : '', h('button', { class: 'lnk', onclick: () => openTx(t.id) }, `${t.name || '(no payee)'} (${fmtDay(t.day)}, ${money(t.amount, cur)})`)]);
+    const taken = (x.stale || []).filter((t) => t.counted), leftover = (x.stale || []).filter((t) => !t.counted);
+    if (taken.length) put(box, h('p', { class: 'small' }, 'Counted with them, though Monarch Money still calls ', taken.length === 1 ? 'it' : 'them', ' pending after more than a week: ', named(taken),
+      `. The balance shows the bank took ${taken.length === 1 ? 'it' : 'them'}; Monarch never marked ${taken.length === 1 ? 'it' : 'them'} posted.`));
+    if (leftover.length) put(box, h('p', { class: 'small' }, 'Not counted, still called pending after more than a week and not in the balance: ', named(leftover),
+      '. Most likely what is left of one that posted under another entry, or a hold the bank let go.',
+      x.status === 'gap' ? ` Should the bank have taken ${leftover.length === 1 ? 'it' : 'them'} after all, that explains ${money(Math.abs(leftover.reduce((n, t) => n + t.amount, 0)), cur)} of the difference.` : ''));
     if (x.status === 'gap') {
       const outMissing = x.isAsset ? x.gap < 0 : x.gap > 0;
-      put(box, h('p', null, outMissing ? `About ${money(Math.abs(x.gap), cur)} of money out is missing here, or money in is kept twice.` : `About ${money(Math.abs(x.gap), cur)} of money in is missing here, or money out is kept twice.`,
-        x.pending ? ` (${money(x.pending, cur)} is pending.)` : ''));
+      const what = x.isAsset ? 'The balance' : 'What is owed';
+      put(box, h('p', null, `${what} is ${money(Math.abs(x.gap), cur)} ${x.gap < 0 ? 'lower' : 'higher'} than these transactions explain: `,
+        outMissing ? 'money out is missing here, or money in is kept twice.' : 'money in is missing here, or money out is kept twice.',
+        x.pending ? ` ${money(x.pending, cur)} of the past week is still pending and not counted: if the bank counts it already, that part is explained.` : ''));
       if (x.weeks.length) {
+        put(box, h('p', { class: 'muted small', style: { margin: '10px 0 2px' } }, 'The weeks in which the two moved apart, and by how much (weeks that cancel each other out, a matter of dates, are left out):'));
         put(box, h('ul', { class: 'balw' }, x.weeks.map((k) => h('li', null, h('span', null, `${fmtDay(k.from)} to ${fmtDay(k.to, true)}`), h('span', { class: 'num' }, `${k.change > 0 ? '+' : ''}${money(k.change, cur)}`),
           h('a', { class: 'lnk small', href: `#/transactions?${new URLSearchParams({ account: x.id, month: k.to.slice(0, 7), hid: '1' })}` }, `The transactions of ${fmtMonth(k.to.slice(0, 7))}`)))));
       }

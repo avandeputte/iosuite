@@ -149,8 +149,13 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
 - **Balance check**: for each cash account and card from Monarch Money with a bank behind it, whether its balance
   moved over the past 90 days by what its transactions add up to. Where it did not: by how much, whether money out or
   money in is missing (or kept twice), and between which days the gap appeared, with the way to that month's
-  transactions. The pending ones explain a gap of exactly their sum; a gap looked at can be accepted, and is flagged
-  again once it changes.
+  transactions. The pending ones of the past week explain a gap of exactly their sum. One Monarch still calls pending
+  after more than a week is no hold any more: it is counted with the posted ones where the balance shows the bank
+  took it (Monarch never marked it posted), left out where it does not (what is left of one that posted under another
+  entry), and named on the card either way. A day's balance may not hold that day's transactions yet, so the check
+  starts up to three days earlier or later where its first week then agrees, and weeks whose gaps cancel out (a
+  transaction dated a day off) are left out of where the gap appeared. A gap looked at can be accepted, and is
+  flagged again once it changes.
 - **Rules kept in order**: the Rules page says for each rule how many transactions of the past two years it is for
   and the last one, and marks a rule that matches nothing or that an earlier rule always decides before. When the
   same payee was given the same category by hand three times and more and no rule does it, the rule is offered

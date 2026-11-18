@@ -460,3 +460,57 @@ def test_balance_check(client, mm):
     assert client.post("/api/monarch/sync").json()["ok"]
     assert [(x["status"], x["gap"]) for x in client.get("/api/balance-check").json()["items"]] == [("gap", -230)]
     assert client.post(f"/api/balance-check/{chk}/ok", json={"gap": None}).json()["ok"]
+
+
+def test_balance_check_dates_and_old_pending(client, mm, monkeypatch):
+    """What is no gap: a payment of the first day that the balance shows a day later, and one Monarch still calls
+    pending weeks after the bank took it. Weeks that cancel out are left out of where a gap appeared."""
+    from app import balancecheck
+    put_keys()
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    cred = {"id": "c", "updateRequired": False, "disconnectedFromDataProviderAt": None, "institution": {"name": "Bank", "status": None}}
+    checking = lambda bal: acct("101", "Checking", "depository", bal, displayLastUpdatedAt=now, credential=cred)  # noqa: E731
+    # the balance of forty days ago does not hold that day's card payment yet: the next day's does
+    monkeypatch.setattr(FakeMM, "get_account_history", lambda self, i: _async(
+        [{"date": D(40), "signedBalance": 4000}, {"date": D(39), "signedBalance": 3700}, {"date": D(20), "signedBalance": 5000}]))
+    FakeMM.accounts = [checking(5000)]
+    FakeMM.transactions = [tx("e1", 40, -300, "Card autopay"), tx("e2", 25, 1300, "Employer")]
+    assert client.post("/api/monarch/sync").json()["ok"]
+    one = client.get("/api/balance-check").json()["items"][0]
+    assert (one["status"], one["gap"], one["from"], one["opening"], one["count"]) == ("ok", 0, D(39), 3700, 1)
+    # a bill still called pending twelve days on, which the bank took: counted, and named
+    FakeMM.accounts = [checking(4880)]
+    FakeMM.transactions.append(tx("e3", 12, -120, "Power company", pending=True))
+    assert client.post("/api/monarch/sync").json()["ok"]
+    one = client.get("/api/balance-check").json()["items"][0]
+    assert (one["status"], one["gap"], one["pending"], one["moved"], one["count"]) == ("ok", 0, 0, 1180, 2)
+    assert [(x["name"], x["day"], x["amount"], x["days"], x["counted"]) for x in one["stale"]] == [("Power company", D(12), -120, 12, True)]
+    # its posted twin is there too: the pending one is a leftover, and stays out
+    FakeMM.transactions.append(tx("e4", 11, -120, "Power company"))
+    assert client.post("/api/monarch/sync").json()["ok"]
+    one = client.get("/api/balance-check").json()["items"][0]
+    assert (one["status"], one["gap"], one["count"]) == ("ok", 0, 2) and [x["counted"] for x in one["stale"]] == [False]
+    # one of this week is a hold: explained when the bank counts it, as before
+    FakeMM.accounts = [checking(4868)]
+    FakeMM.transactions.append(tx("e5", 2, -12, "Cafe", pending=True))
+    assert client.post("/api/monarch/sync").json()["ok"]
+    one = client.get("/api/balance-check").json()["items"][0]
+    assert (one["status"], one["gap"], one["pending"]) == ("pending", -12, -12)
+    # a gap that is one: money out the account never got; the old pending one beside it is still counted, since the
+    # gap grew by just that in its week
+    FakeMM.accounts = [checking(4368)]
+    FakeMM.transactions = [t for t in FakeMM.transactions if t["id"] != "e4"]
+    assert client.post("/api/monarch/sync").json()["ok"]
+    chk = client.get("/api/accounts").json()["items"][0]["id"]
+    one = client.get("/api/balance-check").json()["items"][0]
+    assert (one["gap"], [x["counted"] for x in one["stale"]]) == (-632, [False])  # nothing says when: not counted, but named
+    db.ex("INSERT INTO mny_balances (account_id, day, balance, source) VALUES (%s, %s, 4880, 'sync')", (chk, D(9)))
+    one = client.get("/api/balance-check").json()["items"][0]
+    assert [(w["from"], w["to"], w["change"]) for w in one["weeks"]] == [(D(8), D(0), -512)]
+    assert (one["status"], one["gap"], one["pending"]) == ("gap", -512, -12) and [x["counted"] for x in one["stale"]] == [True]  # 500 missing, 12 on hold
+    # where a gap appeared: the weeks that cancel out (a transaction dated a day off) are left out
+    wk = lambda n, change: {"from": D(n), "to": D(n - 6), "change": change, "gap": 0}  # noqa: E731
+    weeks = [wk(84, -50), wk(77, 20.5), wk(70, -30.5), wk(63, 10), wk(49, -40), wk(42, 40), wk(28, -7)]
+    assert [(w["from"], w["change"], w["gap"]) for w in balancecheck._settled(weeks)] == [(D(84), -50, -50), (D(28), -7, -57)]
+    far = [wk(84, -40), wk(21, 40)]  # two months apart: not a matter of dates
+    assert [w["change"] for w in balancecheck._settled(far)] == [-40, 40]
