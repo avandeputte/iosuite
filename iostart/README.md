@@ -36,9 +36,12 @@ what the app will show on the start page later (today's events, the newest photo
 - **Live**: every five minutes, and when the tab is shown again, the page brings the tiles, the cards, the weather
   and the dots up to date in place; at midnight it is drawn anew for the new day.
 - **A wall display** (the gear › Wall display, or `#/wall` as a tablet's home address): full screen, ioPix photos one
-  after another behind a big clock, the date, the weather and its next hours, and today's and the coming days'
-  events with the birthdays. It keeps the screen on where the browser allows it; Escape or the ✕ (shown on a touch)
-  goes back.
+  after another (drifting slowly, a new one every minute by default) behind a big clock, the date, the weather and its
+  next hours, and today's and the coming days' events with the birthdays, each with its place ("6:00 PM Dinner @ Nan
+  Xiang Dumpling", the part before the first comma). Behind the photos, and instead of them without ioPix, a sky in
+  the colours of the hour and the weather. Customize picks the background (photos, the sky or black) and how often
+  the photo changes; the picture button on the wall goes to the next background. It keeps the screen on where the
+  browser allows it; Escape or the ✕ (shown on a touch) goes back.
 - **A dot by each app's name**: green when the app answers its `/api/status`, red when it does not. Bookmarks the
   server cannot reach get a red dot too. The server asks each app once a minute and pings each bookmark every five (HEAD, redirects not followed; never its own address or a link-local one).
 - **Your own page** (the gear next to the date › Customize the page): untick the tiles and cards you do not need, put the tiles and
