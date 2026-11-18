@@ -1,0 +1,29 @@
+{
+  "key": "iotask",
+  "name": "ioTask",
+  "description": "Tasks",
+  "tag": "The family's task lists",
+  "color": "#146b5e",
+  "port": 8670,
+  "folder": "tasks",
+  "order": 50,
+  "compose": {
+    "name": "tasks",
+    "what": "tasks"
+  },
+  "items": [
+    {
+      "kind": "task",
+      "label": "Task",
+      "plural": "Tasks",
+      "href": "#/task/{id}"
+    }
+  ],
+  "notifications": [
+    {
+      "kind": "tasks",
+      "label": "Tasks",
+      "hint": "A task’s alert when it goes off, and in the morning what is due today"
+    }
+  ]
+}

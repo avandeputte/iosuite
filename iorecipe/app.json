@@ -1,0 +1,22 @@
+{
+  "key": "iorecipe",
+  "name": "ioRecipe",
+  "description": "Recipes",
+  "tag": "The family's recipes",
+  "color": "#4a7c23",
+  "port": 8690,
+  "folder": "recipes",
+  "order": 60,
+  "compose": {
+    "name": "recipes",
+    "what": "recipes"
+  },
+  "items": [
+    {
+      "kind": "recipe",
+      "label": "Recipe",
+      "plural": "Recipes",
+      "href": "#/recipe/{id}"
+    }
+  ]
+}

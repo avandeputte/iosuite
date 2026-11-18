@@ -7,9 +7,9 @@ name: Shared library
 on:
   push:
     branches: [main]
-    paths: ["shared/**", "demo/**", "*/update.sh", "*/setup.sh", "*/run.sh", ".github/workflows/shared.yml"]
+    paths: ["shared/**", "demo/**", "*/update.sh", "*/setup.sh", "*/run.sh", "*/app.json", "*/proxmox/ct/**", "install.sh", "docs/landing/compose/compose.js", ".github/workflows/shared.yml"]
   pull_request:
-    paths: ["shared/**", "demo/**", "*/update.sh", "*/setup.sh", "*/run.sh", ".github/workflows/shared.yml"]
+    paths: ["shared/**", "demo/**", "*/update.sh", "*/setup.sh", "*/run.sh", "*/app.json", "*/proxmox/ct/**", "install.sh", "docs/landing/compose/compose.js", ".github/workflows/shared.yml"]
   workflow_dispatch:
 
 defaults:
@@ -48,7 +48,7 @@ jobs:
           node --check iosuite_shared/static/push-sw.js
           sh -n templates/update.sh templates/setup.sh templates/run.sh
           python3 templates/render-update.py --check
-          python3 templates/render.py --check  # setup.sh and run.sh of every app, made from the templates
+          python3 templates/render.py --check  # apps.json from the apps' app.json, the lists of apps made from them, setup.sh and run.sh of every app
       - name: Tests
         env:
           IOSUITE_TEST_DB: 127.0.0.1:3306:root:root

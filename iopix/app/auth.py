@@ -15,10 +15,9 @@ from app import __version__, config
 APP = config.APP
 
 
-# the version, address, colour and icon register iopix in the suite's list of apps (suite_apps, at the first request),
+# the version and address (the name, colour and description: app.json) register iopix in the suite's list of apps,
 # where the start page and the other apps find it
-auth = Auth(APP, app_label="ioPix",
-            version=__version__, public_url=config.PUBLIC_URL or None, description="Photos", color="#3b4a8c")
+auth = Auth(APP, version=__version__, public_url=config.PUBLIC_URL or None)
 auth.deny_exempt = ("/mcp",)  # MCP clients sign in with an app password, whatever Cloudflare service token got them through
 
 
