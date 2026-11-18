@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iodocs"
+version = "0.0.0"  # not this app's version: the suite has one, iosuite_shared.__version__ (shared/iosuite_shared/__init__.py)
+description = "Self-hosted family papers: passports, licenses, policies and certificates with their scans, OCR, expiry reminders, REST, MCP"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = [
+  "iosuite-shared",   # the suite's shared library (shared/ of this repository): setup.sh, update.sh and the Dockerfile install it from there, at the same commit
+  "fastapi<1",
+  "uvicorn<1",
+  "pymysql<2",
+  "python-multipart<1",
+  "pyjwt[crypto]<3",              # Cloudflare Access tokens (proxy sign-in)
+  "mcp<3",                        # the MCP server at /mcp
+  "pillow>=10,<13",               # the scans: turned upright, made small, prepared for OCR
+  "pypdf>=4,<8",                  # the text of a PDF (a policy), and the pictures in a scanned one
+  "zxing-cpp>=2.2,<4",            # the barcode on the back of a driver's license (PDF417)
+]
+
+[project.optional-dependencies]
+test = ["pytest<10", "httpx<1", "pyflakes<4"]
+
+[project.urls]
+Homepage = "https://github.com/avandeputte/iosuite/tree/main/iodocs"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.iosuite]
+# Debian/Ubuntu packages setup.sh and update.sh install when missing (as root): Tesseract reads the scans (OCR),
+# pdftoppm (poppler-utils) turns a scanned PDF into pictures for it
+system-packages = ["tesseract-ocr", "tesseract-ocr-eng", "poppler-utils"]

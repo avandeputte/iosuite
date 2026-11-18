@@ -16,7 +16,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import access, bills, config, contacts, holiday, ical, members, model, places, subscribe, tasks, users, weather
+from app import access, bills, config, contacts, holiday, ical, members, model, papers, places, subscribe, tasks, users, weather
 from iosuite_shared import appleprofile, prefix, users as shared_users
 from iosuite_shared.access import json_body
 from iosuite_shared.errors import Invalid
@@ -801,6 +801,23 @@ def due_bills(request: Request, start: str, end: str):
         return {"available": True, "url": bills.url(), "items": bills.between(request, s, e)}
     except bills.Unavailable as x:
         return {"available": False, "reason": str(x), "url": bills.url(), "items": []}
+
+
+# ------------------------------------------------------------------ documents that expire, from ioDocs
+
+@router.get("/api/papers", dependencies=[access.signed_in])
+def expiring_papers(request: Request, start: str, end: str):
+    """The passports, licenses, policies and other documents from ioDocs that expire from start up to end (days,
+    YYYY-MM-DD; end not included): {available, url, items: [{id, day, title, kind, members}]}. ioDocs is asked as you,
+    so you get the documents it shows you; when it is not part of the suite, does not answer or does not let you in:
+    {available: false, reason} and no items."""
+    s, e = _date(start, "start"), _date(end, "end")
+    if not s < e <= s + dt.timedelta(days=400):
+        raise HTTPException(400, "end comes after start, a year later at most")
+    try:
+        return {"available": True, "url": papers.url(), "items": papers.between(request, s, e)}
+    except papers.Unavailable as x:
+        return {"available": False, "reason": str(x), "url": papers.url(), "items": []}
 
 
 # ------------------------------------------------------------------ ioContact

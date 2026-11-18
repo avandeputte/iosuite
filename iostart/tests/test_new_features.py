@@ -1,4 +1,4 @@
-"""ioMoney on its tile and in the search box, ioPix in the search box, a task and a note from the search box, and the
+"""ioMoney and ioDocs on their tiles and in the search box, ioPix in the search box, a task and a note from the search box, and the
 Bookmarks page's Tidy up (dead links, moved ones, the same address twice). The apps' answers are mocked; the link
 check asks a server made here."""
 import datetime as dt
@@ -81,6 +81,29 @@ def test_money_search_payees_then_transactions(client, answers):
     assert r["items"][1]["id"] == 7 and r["items"][1]["amount"] == -420.0 and r["items"][2]["name"] == "PLUMB & CO 1123"
     assert r["more"] is True
     assert ("iomoney", "/api/transactions", {"q": "plumb", "limit": 5}) in asked
+
+
+# ------------------------------------------------------------------ ioDocs
+
+def _doc(i, title, days, state, cover=None):
+    return {"id": i, "title": title, "kind": "passport", "kindLabel": "Passport", "expiresOn": "2027-01-02", "cover": cover,
+            "expiry": {"on": "2027-01-02", "days": days, "state": state}, "people": [{"id": 3, "displayName": "Ava Calloway"}]}
+
+
+def test_docs_tile_and_search(client, answers):
+    table, asked, _ = answers
+    table[("iodocs", "/api/documents")] = lambda p: {"items": [_doc(1, "Ava's passport", -2, "expired", "api/documents/1/files/4"),
+                                                               _doc(2, "Car insurance", 20, "soon"), _doc(3, "Riley's license", 50, "soon")]}
+    r = client.get("/api/widgets/iodocs?n=2").json()
+    assert [x["title"] for x in r["items"]] == ["Ava's passport", "Car insurance"] and r["more"] == 1 and r["expired"] == 1
+    assert r["items"][0] == {"id": 1, "title": "Ava's passport", "kind": "Passport", "photo": 4, "expiresOn": "2027-01-02", "days": -2,
+                             "state": "expired", "people": ["Ava Calloway"]}
+    assert ("iodocs", "/api/documents", {"status": "expiring", "sort": "expires", "limit": 100}) in asked
+    r = client.get("/api/widgets/iodocs?q=passport").json()
+    assert len(r["items"]) == 3 and r["more"] is False
+    assert ("iodocs", "/api/documents", {"q": "passport", "limit": 6}) in asked
+    table[("iodocs", "/api/documents/1/files/4")] = (b"jpg", "image/jpeg")
+    assert client.get("/api/widgets/iodocs/photo/1/4").content == b"jpg"
 
 
 # ------------------------------------------------------------------ ioPix

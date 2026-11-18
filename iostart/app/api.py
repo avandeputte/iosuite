@@ -446,8 +446,8 @@ def widget(key: str, request: Request, tz: str = "", kind: str = "", n: int = 0,
     when there are photos, else rediscover) and n (how many, up to 24) pick what the photo strip shows; for iocalendar,
     kind=week gives the coming week instead of today; for iocontact, q searches the contacts (the search box) instead
     of listing the birthdays ahead, and so does it for iocalendar (events), iotask (tasks), iorecipe (recipes), ionote
-    (notes), iothings (the things you own), iomoney (payees and transactions) and iopix (people, albums, folders and
-    places). iomoney without q: the bills due this week, the cash accounts about to run low and the bank links that are behind. 404 for an app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
+    (notes), iothings (the things you own), iomoney (payees and transactions), iodocs (documents) and iopix (people, albums, folders and
+    places). iomoney without q: the bills due this week, the cash accounts about to run low and the bank links that are behind; iodocs without q: the documents to renew (n of them). 404 for an app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
     tile as it is on any of these."""
     try:
         return widgets.get(request, key, tz, kind, n, q)
@@ -536,6 +536,17 @@ def widget_home_photo(item_id: int, file_id: int, request: Request):
         raise HTTPException(e.status, str(e))
     return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
                     headers={"Cache-Control": "private, max-age=86400"})
+
+@router.get("/api/widgets/iodocs/photo/{doc_id}/{file_id}", dependencies=[access.signed_in])
+def widget_docs_photo(doc_id: int, file_id: int, request: Request):
+    """A document's small picture from ioDocs, passed through (the search box)."""
+    try:
+        body, ctype = widgets.iodocs_photo(request, doc_id, file_id)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
+
 
 
 @router.get("/api/widgets/iorecipe/photo/{recipe_id}/{photo_id}", dependencies=[access.signed_in])

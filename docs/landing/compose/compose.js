@@ -26,6 +26,7 @@
     {key:"iorecipe", name:"ioRecipe", port:8690, folder:"recipes", sub:"recipes", what:"recipes"},
     {key:"iothings", name:"ioThings", port:8700, folder:"things", sub:"things", what:"inventory"},
     {key:"iomoney", name:"ioMoney", port:8710, folder:"money", sub:"money", what:"finances"},
+    {key:"iodocs", name:"ioDocs", port:8720, folder:"docs", sub:"docs", what:"papers"},
     {key:"iocontact", name:"ioContact", port:8640, folder:"contacts", sub:"contacts", what:"contacts"},
     {key:"iohealth", name:"ioHealth", port:8650, folder:"health", sub:"health", what:"health"},
     {key:"iodns", name:"ioDNS", port:8660, folder:"dns", sub:"dns", what:"DNS records", tool:true},
@@ -38,7 +39,7 @@
   var SITE = "https://iosuite.iothing.net/compose/";
   var MARK = "# answers: ";  // the line the page reads a file back from
   // >>> suite: setup-first
-  var SETUP_FIRST = ["iostart", "ionote", "iocalendar", "iotask", "iorecipe", "iothings", "iomoney", "iocontact", "iohealth", "iodns", "iobackup", "iopix"];  // the smaller images first
+  var SETUP_FIRST = ["iostart", "ionote", "iocalendar", "iotask", "iorecipe", "iothings", "iomoney", "iodocs", "iocontact", "iohealth", "iodns", "iobackup", "iopix"];  // the smaller images first
   // <<< suite: setup-first
 
   /* ---- the answers ---- */

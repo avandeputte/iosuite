@@ -18,6 +18,7 @@ Shared ioSuite database) through the library in [`shared/`](shared/).
 | [`iorecipe/`](iorecipe/) | ioRecipe | recipes | 8690 |
 | [`iothings/`](iothings/) | ioThings | everything you own: where it is, warranties, manuals, receipts, upkeep; imports Homebox | 8700 |
 | [`iomoney/`](iomoney/) | ioMoney | household finances: Monarch Money, the portfolio, house and car values | 8710 |
+| [`iodocs/`](iodocs/) | ioDocs | family papers: passports, licenses, policies, certificates; reads scans and reminds before they expire | 8720 |
 | [`iodns/`](iodns/) | ioDNS | admin tool: the DNS console | 8660 |
 | [`iobackup/`](iobackup/) | ioBackup | admin tool: database backups | 8680 |
 | [`shared/`](shared/) | iosuite-shared | the library every app uses: accounts, sign-in, roles, updates, the installer | |

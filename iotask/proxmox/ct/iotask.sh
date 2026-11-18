@@ -82,13 +82,14 @@ ask_app_settings() {
   fi
   # >>> suite: also (made by shared/templates/render.py from the apps' app.json)
   if [[ -z "${IOTASK_ALSO+x}" ]]; then  # the other apps of the suite in the same container (ioPix has its own script: photo mounts)
-    IOTASK_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 20 78 10 \
+    IOTASK_ALSO=$(whiptail --backtitle "$bt" --checklist "Also install in this container (same database server, each app its own database; same accounts and admin; each on its usual port):" 21 78 11 \
       iostart "ioStart (the start page)  (8630)" OFF \
       ionote "ioNote  (8610)" OFF \
       iocalendar "ioCalendar  (8620)" OFF \
       iorecipe "ioRecipe  (8690)" OFF \
       iothings "ioThings  (8700)" OFF \
       iomoney "ioMoney  (8710)" OFF \
+      iodocs "ioDocs  (8720)" OFF \
       iocontact "ioContact  (8640, LDAP 3890)" OFF \
       iohealth "ioHealth  (8650)" OFF \
       iodns "ioDNS  (8660, admin tool)" OFF \
@@ -151,7 +152,7 @@ echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:${IOTASK_PORT:-8670}${CL}"
 for a in ${IOTASK_ALSO//,/ }; do
   # >>> suite: ports
-  case "$a" in iostart) p=8630;; ionote) p=8610;; iocalendar) p=8620;; iotask) p=8670;; iorecipe) p=8690;; iothings) p=8700;; iomoney) p=8710;; iocontact) p=8640;; iohealth) p=8650;; iodns) p=8660;; iobackup) p=8680;; iopix) p=8600;; *) p="";; esac
+  case "$a" in iostart) p=8630;; ionote) p=8610;; iocalendar) p=8620;; iotask) p=8670;; iorecipe) p=8690;; iothings) p=8700;; iomoney) p=8710;; iodocs) p=8720;; iocontact) p=8640;; iohealth) p=8650;; iodns) p=8660;; iobackup) p=8680;; iopix) p=8600;; *) p="";; esac
   # <<< suite: ports
   [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
 done

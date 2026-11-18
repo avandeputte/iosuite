@@ -1,5 +1,5 @@
 # The whole ioSuite in one Docker stack: MariaDB with a database per app, the Shared ioSuite database (accounts, one
-# sign-in for every app) and ioStart (the start page), ioCalendar, ioTask, ioRecipe, ioThings, ioContact, ioNote, ioHealth and ioPix.
+# sign-in for every app) and ioStart (the start page), ioCalendar, ioTask, ioRecipe, ioThings, ioMoney, ioDocs, ioContact, ioNote, ioHealth and ioPix.
 #
 #   docker compose up -d        # or paste this file as a stack in Dockge / Portainer
 #
@@ -129,6 +129,16 @@ services:
       DB_NAME: iomoney
       # PUBLIC_URL: https://money.example.com
       # INTERNAL_URL: http://192.168.1.151:8710   # this host's LAN address and the port, for the suite's list of apps
+  iodocs:
+    <<: *app
+    image: ghcr.io/avandeputte/iosuite/iodocs:latest
+    container_name: iodocs
+    ports: ["8720:8720"]                 # web app, REST API, MCP (/mcp)
+    environment:
+      <<: *shared
+      DB_NAME: iodocs
+      # PUBLIC_URL: https://docs.example.com
+      # INTERNAL_URL: http://192.168.1.151:8720   # this host's LAN address and the port, for the suite's list of apps
 
   iocontact:
     <<: *app
@@ -201,6 +211,7 @@ configs:
       CREATE DATABASE IF NOT EXISTS iorecipe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS iothings CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS iomoney CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+      CREATE DATABASE IF NOT EXISTS iodocs CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS iocontact CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS ionote CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
       CREATE DATABASE IF NOT EXISTS iohealth CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -211,6 +222,7 @@ configs:
       GRANT ALL PRIVILEGES ON iorecipe.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON iothings.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON iomoney.* TO 'suite'@'%';
+      GRANT ALL PRIVILEGES ON iodocs.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON iocontact.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON ionote.* TO 'suite'@'%';
       GRANT ALL PRIVILEGES ON iohealth.* TO 'suite'@'%';

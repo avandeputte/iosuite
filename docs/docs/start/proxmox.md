@@ -20,6 +20,7 @@ the Proxmox VE host, as root, run the line for the app you want:
 | ioRecipe | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iorecipe/proxmox/ct/iorecipe.sh)"` | 1 CPU, 512 MB, 4 GB |
 | ioThings | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iothings/proxmox/ct/iothings.sh)"` | 1 CPU, 512 MB, 8 GB |
 | ioMoney | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iomoney/proxmox/ct/iomoney.sh)"` | 1 CPU, 512 MB, 4 GB |
+| ioDocs | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main/iodocs/proxmox/ct/iodocs.sh)"` | 1 CPU, 1024 MB, 8 GB |
 
 ## What it asks
 

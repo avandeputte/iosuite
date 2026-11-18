@@ -35,6 +35,7 @@ those manage the accounts in the Shared ioSuite database, whether one app uses t
 | The family's recipes, typed in or imported from the web | [ioRecipe](../apps/iorecipe.md) |
 | Everything you own, its manuals, warranties and upkeep (instead of Homebox) | [ioThings](../apps/iothings.md) |
 | The household's net worth, transactions from Monarch Money, a portfolio, the house and the cars | [ioMoney](../apps/iomoney.md) |
+| Passports, licenses, policies and certificates, read off their scans, with a reminder before they expire | [ioDocs](../apps/iodocs.md) |
 | A family address book on every phone and in every mail app | [ioContact](../apps/iocontact.md) |
 | Your Apple Health data, kept and charted at home | [ioHealth](../apps/iohealth.md) and the ioHealthSync iPhone app |
 
@@ -65,6 +66,7 @@ These are extras, switched on by having both apps; neither app needs the other:
 | ioStart + ioCalendar | "Quick add": type "dinner fri 19:00" in the start page's search box to make the event |
 | ioStart + ioTask or ioNote | "t buy milk sat" in the search box adds a task, "n the gate code is 4411" a note |
 | ioStart + ioMoney | the bills due this week on the tile, and payees and transactions in the search box |
+| ioDocs + ioCalendar or ioStart | the day each passport, license or policy expires on the calendar; the ones to renew on the start page's tile |
 | any two | the same accounts and roles, one admin panel, the same Settings, one sign-in |
 
 ## All of them at once

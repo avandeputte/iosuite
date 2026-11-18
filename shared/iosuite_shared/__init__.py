@@ -15,9 +15,10 @@ COOKIE_DOMAIN (the domain the session cookie is shared on, e.g. example.com; a r
 such as a LAN address, gets a cookie for that host only).
 """
 # The version of the suite: one number for every app (each app's __version__ is this one) and for this library.
-# An install is offered an update when this line is higher on GitHub. main raises it by itself after every merge that
-# changes something an install has (.github/workflows/version.yml): a pull request leaves this line alone.
-__version__ = "3.20.0"
+# Never set it in a pull request: main does what the next line says by itself, after every merge that changes
+# something an install has (.github/workflows/version.yml).
+# Bump it with every change that reaches users; an install is offered an update when this line is higher on GitHub.
+__version__ = "3.21.0"
 
 from iosuite_shared.errors import Invalid
 

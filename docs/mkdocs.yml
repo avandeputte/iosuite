@@ -100,6 +100,7 @@ nav:
       - ioRecipe: apps/iorecipe.md
       - ioThings: apps/iothings.md
       - ioMoney: apps/iomoney.md
+      - ioDocs: apps/iodocs.md
       - ioContact: apps/iocontact.md
       - ioHealth: apps/iohealth.md
       - ioStart start page: apps/iostart.md

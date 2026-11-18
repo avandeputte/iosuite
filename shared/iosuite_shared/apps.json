@@ -220,6 +220,35 @@
    ]
   },
   {
+   "key": "iodocs",
+   "name": "ioDocs",
+   "description": "Passports, licenses and policies",
+   "tag": "The family's papers",
+   "color": "#a03a6a",
+   "port": 8720,
+   "folder": "docs",
+   "order": 85,
+   "compose": {
+    "name": "docs",
+    "what": "papers"
+   },
+   "items": [
+    {
+     "kind": "document",
+     "label": "Document",
+     "plural": "Documents",
+     "href": "#/doc/{id}"
+    }
+   ],
+   "notifications": [
+    {
+     "kind": "docs",
+     "label": "Papers to renew",
+     "hint": "In the morning, the passports, licenses and policies about to expire"
+    }
+   ]
+  },
+  {
    "key": "iocontact",
    "name": "ioContact",
    "description": "Contacts",

@@ -157,7 +157,7 @@ export const RANK = { none: 0, viewer: 1, member: 2, editor: 3, admin: 4 };
 export const roleAtLeast = (r) => (RANK[S.user && S.user.role] || 0) >= RANK[r];
 export const canOwn = () => roleAtLeast('member');
 export const canShared = () => roleAtLeast('editor');
-export const S = { status: {}, user: null, suite: [], settings: {}, cals: [], hidden: new Set(), members: [], who: new Set(), view: 'month', date: dayStart(new Date()), occ: [], q: '', mini: null, editing: null, tasks: { items: [] }, bills: { items: [] } };
+export const S = { status: {}, user: null, suite: [], settings: {}, cals: [], hidden: new Set(), members: [], who: new Set(), view: 'month', date: dayStart(new Date()), occ: [], q: '', mini: null, editing: null, tasks: { items: [] }, bills: { items: [] }, papers: { items: [] } };
 export const calOf = (id) => S.cals.find((c) => c.id === id) || {};
 export const colorOf = (id) => calOf(id).color || 'var(--brand)';
 export const writable = () => S.cals.filter((c) => c.writable);
@@ -226,6 +226,22 @@ export function openBill(o) { if (S.bills.url) window.open(`${S.bills.url}/#/tra
 export function billChip(o) {
   return h('div', { class: `chip-ev bill ${o.paid ? 'done' : ''}`, style: { '--c': '#94650a' }, title: billTitle(o), onclick: (ev) => { ev.stopPropagation(); openBill(o); } },
     h('span', { class: 'bm' }, '$'), h('span', { class: 'nm' }, o.merchant), h('span', { class: 'amt' }, billAmount(o)));
+}
+// the documents from ioDocs that expire (a passport, a license, a policy), on the day they do
+export const papersOn = () => !!S.status.iodocs && S.settings.hidePapers !== '1';
+/** ioDocs did answer this person: the sidebar offers the documents, and remembers why they are away. */
+export const papersOffered = () => !!S.status.iodocs && !/not part of the suite|No role/.test(S.papers.reason || '');
+export const paperOcc = (p) => ({ ...p, paper: true, allDay: true, start: p.day, end: ymd(addDays(parseDay(p.day), 1)) });
+export function togglePapers() {
+  saveSettings({ hidePapers: papersOn() ? '1' : '' });
+  drawNav();
+  if (['month', 'week', 'day', 'agenda'].includes(route().view)) drawView();
+}
+export const paperTitle = (o) => `${o.title} expires\n${o.kind}`;
+export function openPaper(o) { if (S.papers.url) window.open(`${S.papers.url}/#/doc/${o.id}`, '_blank', 'noopener'); }
+export function paperChip(o) {
+  return h('div', { class: 'chip-ev paper', style: { '--c': '#a03a6a' }, title: paperTitle(o), onclick: (ev) => { ev.stopPropagation(); openPaper(o); } },
+    h('span', { class: 'bm' }, '!'), h('span', { class: 'nm' }, `${o.title} expires`));
 }
 export const taskTitle = (o) => `${o.title}\n${o.list ? `${o.list} · ` : ''}${o.allDay ? 'Due this day' : `Due at ${fmtTime(span(o)[0])}`}${o.done ? ' · done' : ''}${o.repeats ? ' · repeats' : ''}`;
 export function taskChip(o) {

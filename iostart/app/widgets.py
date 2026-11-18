@@ -38,7 +38,7 @@ from app import apps
 TIMEOUT = 4  # seconds, per request to an app
 _pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="widgets")
 UA = "ioStart page"
-WIDGETS = ("iopix", "iocalendar", "iotask", "iohealth", "iomoney", "iocontact", "iorecipe", "ionote", "iothings")
+WIDGETS = ("iopix", "iocalendar", "iotask", "iohealth", "iomoney", "iodocs", "iocontact", "iorecipe", "ionote", "iothings")
 
 
 class Unavailable(Exception):
@@ -432,6 +432,39 @@ def iothings_photo(request: Request, item_id: int, file_id: int) -> tuple[bytes,
     return fetch(request, "iothings", f"/api/items/{int(item_id)}/files/{int(file_id)}", {"size": "small"}, raw=True)
 
 
+# ------------------------------------------------------------------ ioDocs: the papers to renew, and what the search box finds
+
+def _doc_row(r: dict) -> dict:
+    m = re.search(r"/files/(\d+)$", str(r.get("cover") or ""))
+    e = r.get("expiry") if isinstance(r.get("expiry"), dict) else {}
+    return {"id": r.get("id"), "title": r.get("title") or "(no title)", "kind": r.get("kindLabel") or "", "photo": int(m.group(1)) if m else None,
+            "expiresOn": r.get("expiresOn"), "days": e.get("days"), "state": e.get("state"),
+            "people": [p.get("displayName") for p in (r.get("people") or []) if isinstance(p, dict) and p.get("displayName")]}
+
+
+def iodocs(request: Request, n: int = 3) -> dict:
+    """{items: [{id, title, kind, expiresOn, days, state, people}], more, expired}: the documents this person sees in
+    ioDocs that have expired or come within their reminder (the soonest first, up to n; more: how many are left out;
+    expired: how many of them have)."""
+    got = fetch(request, "iodocs", "/api/documents", {"status": "expiring", "sort": "expires", "limit": 100})
+    rows = [_doc_row(r) for r in got.get("items", [])]
+    return {"items": rows[:n], "more": max(0, len(rows) - n), "expired": sum(1 for r in rows if r["state"] == "expired")}
+
+
+def iodocs_search(request: Request, q: str, n: int = 5) -> dict:
+    """{items: [{id, title, kind, photo, expiresOn, days, state, people}], more}: the documents (ioDocs) with every word
+    of q in their title, kind, number, issuer, notes, own fields, people or the text read off their scans. photo: the id
+    of the file whose small picture is the cover, if any."""
+    got = fetch(request, "iodocs", "/api/documents", {"q": q[:80], "limit": n + 1})
+    rows = got.get("items", [])
+    return {"items": [_doc_row(r) for r in rows[:n]], "more": len(rows) > n}
+
+
+def iodocs_photo(request: Request, doc_id: int, file_id: int) -> tuple[bytes, str]:
+    """A document's small picture (its cover), from ioDocs."""
+    return fetch(request, "iodocs", f"/api/documents/{int(doc_id)}/files/{int(file_id)}", {"size": "small"}, raw=True)
+
+
 def _lines(text) -> list[str]:
     return [ln.strip().lstrip("#>*- ").strip() for ln in str(text or "").splitlines() if ln.strip().lstrip("#>*- ").strip()]
 
@@ -693,10 +726,11 @@ def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q:
         raise Unavailable(404, f"{key} has nothing to show here")
     if tz and not re.fullmatch(r"[A-Za-z0-9_+\-/]{1,64}", tz):
         tz = ""
-    if q.strip() and key in ("iocalendar", "iotask", "iorecipe", "ionote", "iothings", "iomoney", "iopix"):
+    if q.strip() and key in ("iocalendar", "iotask", "iorecipe", "ionote", "iothings", "iomoney", "iodocs", "iopix"):
         return {"iocalendar": lambda: iocalendar_search(request, q.strip(), tz), "iotask": lambda: iotask_search(request, q.strip(), tz),
                 "iorecipe": lambda: iorecipe_search(request, q.strip()), "ionote": lambda: ionote_search(request, q.strip()),
                 "iothings": lambda: iothings_search(request, q.strip()), "iomoney": lambda: iomoney_search(request, q.strip()),
+                "iodocs": lambda: iodocs_search(request, q.strip()),
                 "iopix": lambda: iopix_search(request, q.strip())}[key]()
     if key == "iopix":
         return iopix(request, tz, min(max(int(n or 0), 1), 24) if n else 4, kind if kind in ("onthisday", "rediscover") else "")
@@ -712,4 +746,6 @@ def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q:
         return iotask(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
     if key == "iomoney":
         return iomoney(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
+    if key == "iodocs":
+        return iodocs(request, min(max(int(n or 0), 1), 12) if n else 3)
     return iohealth(request, tz)

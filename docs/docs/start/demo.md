@@ -40,6 +40,8 @@ with a colour, linked to their card in ioContact and their face in ioPix.
 - **ioThings**: the house's rooms, appliances, electronics, the car, receipts, warranties, upkeep and its log.
 - **ioMoney**: checking, savings, a card, investments, the house and the car with their loans, six months of
   transactions, recurring payments and the net worth over time.
+- **ioDocs**: everyone's passports (with scans that read back), two driver's licenses (front and the barcode on the
+  back), birth and marriage certificates, the home and car insurance, the car's registration, health cards and the wills.
 - **ioHealth**: three months of steps, heart rate, sleep, weight, activity rings and workouts (with routes) for each.
 - **ioDNS** and **ioBackup**: example names, servers and jobs, all turned off, so nothing is synced or run.
 
