@@ -114,9 +114,11 @@ In a checkout an app uses `../shared` as it is (`pip install -e ../shared`), so 
 with every app in the same pull request. `update.sh` is the same in every app, made from
 `shared/templates/update.sh` by `shared/templates/render-update.py`.
 
-The suite has one version, `__version__` in `shared/iosuite_shared/__init__.py`; every app reports it. Bump that one
-line with every change that reaches users, whichever app it is in. On main, a new version becomes the release
-`v<version>` and every app's image is tagged `v<version>` (and `latest`).
+The suite has one version, `__version__` in `shared/iosuite_shared/__init__.py`; every app reports it. A pull request
+leaves that line alone: main raises it by itself after every merge that changes something an install has
+(`.github/workflows/version.yml`), by the last number, or by the middle one when the pull request carries the label
+`feature` (the first with `major`). Each new version becomes the release `v<version>` and every app's image is
+tagged `v<version>` (and `latest`). An app's tests run when its folder or `shared/` changed.
 
 ## License
 
