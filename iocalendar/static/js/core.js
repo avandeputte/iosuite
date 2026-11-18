@@ -17,6 +17,7 @@ export const ICONS = {
   chevL: 'M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z',
   chevR: 'M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z',
   clock: 'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z',
+  money: 'M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z',
   repeat: 'M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z',
   bell: 'M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z',
   dup: 'M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z',
@@ -222,7 +223,10 @@ export function billAmount(o) {
   return `${o.approximate ? '≈ ' : ''}${o.amount > 0 ? '+' : ''}${s}`;
 }
 export const billTitle = (o) => `${o.merchant}: ${billAmount(o)}${o.amount > 0 ? ' in' : ''}\n${[o.category, o.account, o.frequency, o.paid ? 'paid' : null].filter(Boolean).join(' · ')}`;
-export function openBill(o) { if (S.bills.url) window.open(`${S.bills.url}/#/transactions?${new URLSearchParams({ q: o.merchant })}`, '_blank', 'noopener'); }
+/** ioMoney's page for the bill: the transaction that paid it, else its payments found by name. */
+export const billUrl = (o) => (S.bills.url ? (o.transactionId ? `${S.bills.url}/#/transaction/${o.transactionId}` : `${S.bills.url}/#/transactions?${new URLSearchParams({ q: o.merchant })}`) : '');
+/** The bill's card (event.js): what it is, and the links of the transaction that paid it. */
+export function openBill(o) { import('./event.js').then((m) => m.openBillCard(o)).catch(fail); }
 export function billChip(o) {
   return h('div', { class: `chip-ev bill ${o.paid ? 'done' : ''}`, style: { '--c': '#94650a' }, title: billTitle(o), onclick: (ev) => { ev.stopPropagation(); openBill(o); } },
     h('span', { class: 'bm' }, '$'), h('span', { class: 'nm' }, o.merchant), h('span', { class: 'amt' }, billAmount(o)));

@@ -1,5 +1,7 @@
 """Linked items (iosuite_shared.related): the links themselves in ios_related, and the routes every app mounts, with the
 other apps faked (related.ask: what each app would answer the viewer)."""
+import io
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -119,13 +121,34 @@ def test_link_list_and_unlink(suite_apps):
     assert c.post("/api/related/task/12", json={"kind": "event", "id": 99}).status_code == 404, "both items must be seen"
     assert c.post("/api/related/task/13", json={"kind": "recipe", "id": 3}).status_code == 404
     assert c.post("/api/related/task/12", json={"kind": "task", "id": 12}).status_code == 400
-    # a recipe's links are changed in ioRecipe, where this person's role there counts: here they are only shown
-    assert not c.get("/api/related/recipe/3").json()["canEdit"]
-    assert c.post("/api/related/recipe/3", json={"kind": "event", "id": 5}).status_code == 403
-    assert c.delete(f"/api/related/recipe/3/{got['link']}").status_code == 403
     assert c.delete(f"/api/related/task/12/{got['link']}").status_code == 200
     assert c.get("/api/related/task/12").json()["items"] == []
     assert c.delete(f"/api/related/task/12/{got['link']}").status_code == 404
+
+
+def test_another_apps_item_has_its_links_changed_there(suite_apps, monkeypatch):
+    """A recipe's links are changed in ioRecipe, where this person's role there counts: from here the change is passed
+    on to it as the viewer (ioCalendar showing the ioMoney transaction that paid a bill)."""
+    sent = []
+
+    def as_viewer(request, app, path, params=None, body=None, method=None, **kw):
+        sent.append((app, method or ("POST" if body is not None else "GET"), path, body))
+        if path.endswith("/404"):
+            raise urllib.error.HTTPError(path, 404, "Not Found", {}, io.BytesIO(b'{"detail": "No such link"}'))
+        return {"ok": True} if method == "DELETE" else {"kind": "event", "id": "5", "title": "School meeting", "link": 9}
+    monkeypatch.setattr(related.links, "as_viewer", as_viewer)
+    c = client()
+    related.add(("recipe", 3), ("task", 12))
+    assert c.get("/api/related/recipe/3").json()["canEdit"], "a member of ioRecipe too"
+    assert c.post("/api/related/recipe/3", json={"kind": "event", "id": 5}).json()["link"] == 9
+    assert c.delete("/api/related/recipe/3/9").json() == {"ok": True}
+    r = c.delete("/api/related/recipe/3/404")
+    assert r.status_code == 404 and r.json()["detail"] == "No such link", "ioRecipe's answer, as it gave it"
+    assert sent == [("iorecipe", "POST", "/api/related/recipe/3", {"kind": "event", "id": "5"}),
+                    ("iorecipe", "DELETE", "/api/related/recipe/3/9", None), ("iorecipe", "DELETE", "/api/related/recipe/3/404", None)]
+    assert related.of("recipe", 3)[0]["kind"] == "task", "nothing changed here: ioRecipe does it"
+    users.set_role(users.find("sam")["id"], "iorecipe", "viewer")
+    assert not c.get("/api/related/recipe/3").json()["canEdit"], "only a viewer in ioRecipe: shown, not changed"
 
 
 def test_a_viewer_sees_links_but_does_not_change_them(suite_apps):

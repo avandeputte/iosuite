@@ -1,5 +1,5 @@
 import { DOW, LOCAL_TZ, RDAY, S, addDays, addMonths, api, calOf, dayStart, describeReminder, describeRule, fail, fill, h, icon, isAuto, loadCals, memberBadge, ordinal, pad2, parseDay, sameDay, saveSettings, toast, weekStart, writable, ymd } from './core.js';
-import { deleteEvent, forOccurrence, ridQ } from './event.js';
+import { deleteEvent, forOccurrence, linkedBox, ridQ } from './event.js';
 import { go } from './main.js';
 import { askScope, daysBetween } from './views.js';
 
@@ -294,6 +294,8 @@ export async function showEdit(page, r) {
   h('p', { class: 'muted small', style: { margin: '4px 0 0' } }, 'Reminders go to the calendar apps on your phone and computer (through CalDAV).'),
   h('div', { class: 'fsec' }, icon('note'), 'Notes'), notes,
   h('div', { class: 'fsec' }, icon('link'), 'Link'), url,
+  // the items linked to it in the other apps (an ioMoney transaction, a note, a task): changed at once, as on its card
+  editing && /^\d+$/.test(String(r.id)) && !isAuto(C) ? linkedBox(r.id) : null,
   h('div', { class: 'formbar' }, h('button', { class: 'pillbtn primary', onclick: save }, icon('check', 's'), 'Save'),
     h('a', { class: 'pillbtn noic', href: `#/${S.view}/${ymd(S.date)}` }, 'Cancel'), h('span', { style: { flex: 1 } }),
     editing ? h('button', { class: 'pillbtn danger', onclick: () => deleteEvent({ ...original, id: r.id, recurring: !!original.rrule, recurrenceId: r.rid }) }, icon('delete', 's'), 'Delete') : null));

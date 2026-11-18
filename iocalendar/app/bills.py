@@ -46,7 +46,8 @@ def forget() -> None:
 
 def between(request: Request, start: dt.date, end: dt.date) -> list[dict]:
     """The bills due from start up to end (end not included) that the viewer sees in ioMoney:
-    [{id, day, merchant, amount, currency, approximate, frequency, category, account, paid}], by day."""
+    [{id, day, merchant, amount, currency, approximate, frequency, category, account, paid, transactionId: the ioMoney
+    transaction that paid it (its links show on the bill's card), or None}], by day."""
     if not enabled():
         raise Unavailable(404, "ioMoney is not part of the suite")
     if links.resting(PROVIDER):
@@ -68,6 +69,6 @@ def between(request: Request, start: dt.date, end: dt.date) -> list[dict]:
         out.append({"id": b.get("id"), "day": day, "merchant": b.get("merchant") or "Bill", "amount": b.get("amount"),
                     "currency": b.get("currency") or got.get("currency"), "approximate": bool(b.get("approximate")),
                     "frequency": b.get("frequency"), "category": b.get("category"), "account": b.get("account"),
-                    "paid": bool(b.get("paid"))})
+                    "paid": bool(b.get("paid")), "transactionId": b.get("transactionId")})
     out.sort(key=lambda b: (b["day"], (b["merchant"] or "").lower()))
     return out
