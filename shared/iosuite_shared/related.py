@@ -36,29 +36,18 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
-from iosuite_shared import db, links, suite, users
+from iosuite_shared import catalog, db, links, suite, users
 from iosuite_shared.access import json_body
 
 log = logging.getLogger("iosuite_shared.related")
 
-# kind -> the app its items are in, and what one is called
-KINDS = {
-    "event": {"app": "iocalendar", "label": "Event", "plural": "Events"},
-    "task": {"app": "iotask", "label": "Task", "plural": "Tasks"},
-    "note": {"app": "ionote", "label": "Note", "plural": "Notes"},
-    "contact": {"app": "iocontact", "label": "Contact", "plural": "Contacts"},
-    "recipe": {"app": "iorecipe", "label": "Recipe", "plural": "Recipes"},
-    "photo": {"app": "iopix", "label": "Photo", "plural": "Photos"},
-    "item": {"app": "iothings", "label": "Thing", "plural": "Things"},
-    "asset": {"app": "iomoney", "label": "House or car", "plural": "Houses and cars"},
-    "transaction": {"app": "iomoney", "label": "Transaction", "plural": "Transactions"},
-    "document": {"app": "iodocs", "label": "Document", "plural": "Documents"},
-}
+# kind -> the app its items are in, what one is called, where one opens there: the apps' manifests (<app>/app.json "items")
+KINDS = catalog.ITEMS
 MAX_LINKS = 200  # links per item
 TIMEOUT = 5      # seconds, per request to an app
 UA = "ioSuite linked items"
 _pool = ThreadPoolExecutor(max_workers=12, thread_name_prefix="related")
-_ID = {"note": re.compile(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}")}
+_UUID = re.compile(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}")
 _NUM = re.compile(r"[1-9][0-9]{0,17}")
 
 
@@ -75,9 +64,9 @@ def check(kind: str, item_id) -> tuple[str, str]:
     kind, item_id = str(kind or "").strip().lower(), str(item_id or "").strip()
     if kind not in KINDS:
         raise ValueError(f"No such kind of item: {kind[:20]!r}")
-    if not (_ID.get(kind) or _NUM).fullmatch(item_id):
+    if not (_UUID if KINDS[kind].get("id") == "uuid" else _NUM).fullmatch(item_id):
         raise ValueError(f"Not the id of a {KINDS[kind]['label'].lower()}: {item_id[:40]!r}")
-    return kind, item_id.upper() if kind == "note" else item_id
+    return kind, item_id.upper() if KINDS[kind].get("id") == "uuid" else item_id
 
 
 # ------------------------------------------------------------------ the links themselves (ios_related)
@@ -205,9 +194,8 @@ def _item(kind: str, item_id, title: str, text: str = "", when: str = None, all_
     ('' for the item's only one), None without one."""
     app = KINDS[kind]["app"]
     base = links.url(app) or ""
-    href = {"event": "#/event/{}", "task": "#/task/{}", "note": "#/note/{}", "contact": "#/c/{}", "recipe": "#/recipe/{}",
-            "photo": "#/photos?p={}", "item": "#/item/{}", "asset": "#/account/{}", "transaction": "#/transaction/{}", "document": "#/doc/{}"}[kind].format(urllib.parse.quote(str(item_id)))
-    return {"kind": kind, "id": str(item_id), "app": app, "title": (title or "").strip()[:120] or "(no title)",
+    href = KINDS[kind]["href"].replace("{id}", urllib.parse.quote(str(item_id)))
+    return {"kind": kind, "id": str(item_id), "app": app, "appName": catalog.name_of(app), "title": (title or "").strip()[:120] or "(no title)",
             "text": (text or "").strip()[:140], "when": when, "allDay": bool(all_day), "done": bool(done),
             "image": image, "url": f"{base}/{href}" if base else None}
 

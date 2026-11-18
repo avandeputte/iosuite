@@ -247,7 +247,7 @@ def _remove(names, own, **kw):
 def test_installed_lists_the_caller_and_what_has_a_config(tmp_path):
     opt, own = _server(tmp_path)
     assert install.app_of(own) == "iostart"
-    assert install.installed(opt, own) == ["iostart", "iocalendar", "ionote", "iotask"]
+    assert install.installed(opt, own) == ["iostart", "ionote", "iocalendar", "iotask"]  # the installer's order (catalog.install_order)
     (opt / "iorecipe" / "app" / "data").mkdir(parents=True)  # what a removed app leaves: no config.env, not installed
     assert "iorecipe" not in install.installed(opt, own)
 
@@ -424,7 +424,7 @@ def test_reach_one_address_the_start_page_answers_for_every_app(tmp_path):
     opt, own = _server(tmp_path)
     assert install.reach_now(opt, own) == "ports"
     ok, calls = _reach("one", own, opt)
-    assert ok and calls["switch"] == [True] and calls["restart"] == ["iocalendar", "ionote", "iotask"]
+    assert ok and calls["switch"] == [True] and calls["restart"] == ["ionote", "iocalendar", "iotask"]
     assert "HOST" not in _env(opt, "iostart")  # the start page is the one the network reaches
     assert _env(opt, "iocalendar")["HOST"] == "127.0.0.1" and _env(opt, "ionote")["HOST"] == "127.0.0.1"
     assert _env(opt, "iocalendar")["DB_PASSWORD"] == "s3cret" and _env(opt, "ionote")["DATA_DIR"]  # every other line as it was

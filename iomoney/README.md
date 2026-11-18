@@ -58,9 +58,10 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   is the amount or words that have it, such as an account's last digits); a category, a payee,
   notes or hidden changed here stays as changed through later syncs (Monarch itself is not changed). A
   transaction hidden in Monarch ("Hide from reports", often a duplicate) is not brought in at all, and the sync
-  removes it here when it was (Sync two years again cleans the past two years). A pending one is asked about again on
-  every sync until it posts (up to four months back), so it does not stay pending here, nor stay beside the posted one
-  Monarch sends under a new id. One hidden here, by a rule or by hand,
+  removes it here when it was (Sync two years again cleans the past two years). Whether Monarch calls a
+  transaction pending is not kept (it says so of payments the bank took weeks ago): every transaction it sends counts
+  alike. Each sync looks 45 days back, so one Monarch sends again under a new id (a card's hold that posted) does
+  not stay here beside the new one. One hidden here, by a rule or by hand,
   is left out of the lists, the sums and the transfer matching; the list shows those, dimmed, with "With the hidden".
 - **Transfers**: money that leaves one of the household's accounts and arrives in another (to savings, a card's payment,
   a loan's payment) is one transfer: its two halves are linked, shown as "To Savings" / "From Checking", and left out
@@ -93,8 +94,8 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   large photo is made smaller in the browser before it is sent. They are kept in the database (`mny_receipts`), so
   the suite's backup holds them; whoever sees the transaction sees them, whoever may change it adds and removes
   them. The list marks a transaction that has one and filters on it (`receipt=yes|no`). A receipt goes with its
-  transaction; when Monarch gives a pending transaction a new id as it posts, the sync moves its receipts, its links
-  and its split to the posted one (same account, within ten days, the same amount, or the same payee and nearly the
+  transaction; when Monarch gives a transaction a new id (a card's hold that posted), the sync moves its receipts, its links,
+  its split and that it was looked at to the new one (same account, within ten days, the same amount, or the same payee and nearly the
   amount). `POST /api/transactions/{id}/receipts` (the file as the body), `GET`, `DELETE /api/receipts/{id}`.
 - **Linked to a thing**: a transaction can be linked to the items of the other apps (the suite's linked items, kind
   `transaction`): the thing it paid for in ioThings, so the price sits beside the thing's warranty; a note, a
@@ -118,7 +119,7 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   show them, or mark them reconciled, in one go (up to 2000). **Undo** in the note that follows takes it all back.
 - **Needs a look**: the transactions that came in since the list was first opened and nobody looked at yet (what was
   there before counts as seen), and the ones without a category (not a split one or half of a transfer; not the
-  pending or hidden ones). Saving a change takes one off the list; so does its tick, **All looked at**, or the bar
+  hidden ones). Saving a change takes one off the list; so does its tick, **All looked at**, or the bar
   for the ones ticked. The Transactions page filters on it too.
 - **Payees**: everyone the transactions were paid to or came from, with how many, how much, the last day and the
   category (and a mark when its transactions are in several). Editors rename a payee, give it the name of another to
@@ -128,7 +129,7 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   which stay Monarch's. Typed in the transaction's dialog or given to many at once; the list filters on a tag, and
   the Categories page lists every tag with its count and total, where editors rename, merge and delete their own.
 - **Likely duplicates**: transactions in one account, of the same amount, at most three days apart, that look like
-  one kept twice (the same payee or bank's text; one added here and one from Monarch; one pending and one posted).
+  one kept twice (the same payee or bank's text; one added here and one from Monarch).
   Keep one and hide the other (one added here can be deleted), or say they are different: not shown again.
 - **Reconcile with a statement** (an account's menu): the statement's first and last day and the balance at its start
   and its end; tick the transactions it shows (the hidden ones too; the earlier ones the statement before left open
@@ -140,7 +141,7 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
   day within five; which way the money went counts where the file says it, and a file that writes money out as a
   positive number is turned around), and what was found is ticked. What differs is listed: the lines the account
   does not have (**Add** one, or all of them; with the transaction of another amount that looks like it, when
-  there is one), the lines it has under a day outside the statement or still pending, and the transactions of those
+  there is one), the lines it has under a day outside the statement, and the transactions of those
   days the bank does not show (marked in the list, left unticked). Nothing is finished until **Finish**; the file is
   read on the server and not kept. A PDF is read as text, in whatever form the bank laid it out: the days from "…
   through …", the balances after "beginning balance", "new balance" and their like, every line that starts with a
@@ -149,10 +150,9 @@ and a single-page vanilla JS app, with everything stored in MariaDB / MySQL, and
 - **Balance check**: for each cash account and card from Monarch Money with a bank behind it, whether its balance
   moved over the past 90 days by what its transactions add up to. Where it did not: by how much, whether money out or
   money in is missing (or kept twice), and between which days the gap appeared, with the way to that month's
-  transactions. The pending ones of the past week explain a gap of exactly their sum. One Monarch still calls pending
-  after more than a week is no hold any more: it is counted with the posted ones where the balance shows the bank
-  took it (Monarch never marked it posted), left out where it does not (what is left of one that posted under another
-  entry), and named on the card either way. A day's balance may not hold that day's transactions yet, so the check
+  transactions. Every transaction counts, whatever Monarch calls it. Where the gap is exactly what some of the
+  past week's transactions add up to (a card's purchase the bank's balance does not show yet), those are named and
+  the account is not flagged. A day's balance may not hold that day's transactions yet, so the check
   starts up to three days earlier or later where its first week then agrees, and weeks whose gaps cancel out (a
   transaction dated a day off) are left out of where the gap appeared. A gap looked at can be accepted, and is
   flagged again once it changes.

@@ -31,7 +31,6 @@ const IC = {
   check: 'M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
   open: 'M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z',
 };
-const APPS = { iocalendar: 'ioCalendar', iotask: 'ioTask', ionote: 'ioNote', iocontact: 'ioContact', iorecipe: 'ioRecipe', iopix: 'ioPix', iothings: 'ioThings', iomoney: 'ioMoney', iodocs: 'ioDocs' };
 const svg = (d, cls = 'rl-ic') => { const s = document.createElement('span'); s.className = cls; s.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`; return s; };
 
 const CSS = `
@@ -149,7 +148,7 @@ export function mount(el, opts = {}) {
     el.append(h('div', { class: 'rl-head' }, h('h3', null, svg(IC.link), 'Linked'),
       canEdit ? h('button', { class: 'rl-add', type: 'button', title: 'Link an event, a task, a note, a contact, a recipe, a photo or a thing', onclick: pick }, svg(IC.add), 'Link') : null));
     if (!items.length) { el.append(h('div', { class: 'rl-none' }, opts.empty || 'Nothing linked yet. Link meeting notes, a recipe, a contact, a photo…')); return; }
-    el.append(h('div', { class: 'rl-list' }, items.map((x) => h('div', { class: 'rl-item', role: 'link', tabindex: '0', title: `Open in ${APPS[x.app] || x.app}`,
+    el.append(h('div', { class: 'rl-list' }, items.map((x) => h('div', { class: 'rl-item', role: 'link', tabindex: '0', title: `Open in ${x.appName || x.app}`,
       onclick: (e) => { if (!e.target.closest('.rl-x')) open(x, opts.onOpen); }, onkeydown: (e) => { if (e.key === 'Enter') open(x, opts.onOpen); } },
       pic(x), h('span', { class: 'rl-txt' }, h('span', { class: 'rl-t' + (x.done ? ' done' : '') }, x.title), h('span', { class: 'rl-s' }, subtitle(x))),
       canEdit ? h('button', { class: 'rl-x', type: 'button', title: 'Remove the link (the item stays)', 'aria-label': 'Remove the link', onclick: () => unlink(x) }, svg(IC.close)) : null))));

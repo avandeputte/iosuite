@@ -12,10 +12,9 @@ from app import __version__, config
 
 APP = config.APP
 
-# version, address, description and color go into the suite's list of apps (iosuite_shared.suite, read by ioStart);
-# ioDNS is an admin tool: only the suite admins reach it and see it in the start page and the app switchers
-auth = Auth(APP, app_label="ioDNS", basic_realm="ioDNS", version=__version__, public_url=config.PUBLIC_URL or None,
-            description="Local DNS", color="#0e7c86", admin_tool=True)
+# the version and address (the name, description and colour: app.json) go into the suite's list of apps (read by ioStart);
+# ioDNS is an admin tool (app.json): only the suite admins reach it and see it in the start page and the app switchers
+auth = Auth(APP, version=__version__, public_url=config.PUBLIC_URL or None)
 
 
 # updates (the daily check, update.sh, restart) and the server log, as in every app of the suite (iosuite_shared.updates);

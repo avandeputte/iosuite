@@ -17,7 +17,7 @@ rm -rf site docs/img
 mkdir -p docs/img && cp landing/img/* docs/img/
 mkdocs build --strict
 cp -R landing/. site/
-# a page for each app (/ioContact/ and the others), from landing/apps.toml
+# a page for each app (/ioContact/ and the others), from landing/apps.toml and the apps' manifests
 python3 tools/app-pages.py site
 rm site/apps.toml
 cat > site/sitemap.xml <<XML
@@ -25,7 +25,7 @@ cat > site/sitemap.xml <<XML
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://iosuite.iothing.net/</loc></url>
   <url><loc>https://iosuite.iothing.net/compose/</loc></url>
-$(python3 -c 'import tomllib; d=tomllib.load(open("landing/apps.toml","rb")); print("\n".join("  <url><loc>https://iosuite.iothing.net/%s/</loc></url>" % d[k]["name"] for k in d["order"]))')
+$(python3 -c 'import json; d=json.load(open("../shared/iosuite_shared/apps.json")); print("\n".join("  <url><loc>https://iosuite.iothing.net/%s/</loc></url>" % m["name"] for m in d["apps"] if not m.get("adminTool")))')
 $(grep -o '<loc>[^<]*</loc>' site/docs/sitemap.xml | sed 's/^/  <url>/; s/$/<\/url>/')
 </urlset>
 XML

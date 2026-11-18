@@ -30,4 +30,4 @@ version = {attr = "iosuite_shared.__version__"}
 include = ["iosuite_shared*"]
 
 [tool.setuptools.package-data]
-iosuite_shared = ["static/*.js", "static/*.css"]
+iosuite_shared = ["static/*.js", "static/*.css", "apps.json"]

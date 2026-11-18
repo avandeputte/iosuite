@@ -11,9 +11,8 @@ from app import __version__, config
 
 APP = config.APP
 
-# version, address, description and color go into the suite's list of apps (iosuite_shared.suite, read by ioStart)
-auth = Auth(APP, app_label="ioRecipe", basic_realm="ioRecipe", version=__version__, public_url=config.PUBLIC_URL or None,
-            description="Recipes", color="#4a7c23")
+# the version and address (the name, description and colour: app.json) go into the suite's list of apps (read by ioStart)
+auth = Auth(APP, version=__version__, public_url=config.PUBLIC_URL or None)
 auth.deny_exempt = ("/mcp",)  # assistants sign in with app passwords, whatever got them through a proxy
 
 # updates (the daily check, update.sh, restart) and the server log, as in every app of the suite (iosuite_shared.updates);

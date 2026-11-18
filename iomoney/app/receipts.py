@@ -4,7 +4,7 @@ The bytes are kept in the database (mny_receipt_parts, in parts of PART_BYTES), 
 (ioBackup) holds them too and nothing lives beside the app. A receipt is a picture or a PDF, told by its first bytes
 (not by what the upload says it is), and is served as it came. Whoever sees the transaction sees its receipts; whoever
 may change it adds and removes them. They go with the transaction when it is deleted; when Monarch gives a
-transaction a new id (a pending one that posted), the sync carries them over to it (carry)."""
+transaction a new id (a card's hold that posted), the sync carries them over to it (carry)."""
 import mimetypes
 import re
 
@@ -123,11 +123,12 @@ def forget(tids) -> None:
 
 
 def carry(gone: list[int], seen: set) -> int:
-    """Monarch no longer has these transactions; the ones it sent this time have the ids in seen. A pending
-    transaction that posted comes back under another id: what was kept with the old one here (its receipts, its own
-    tags, its links to the suite's other items, its split when the amount stayed) moves to the one that took its place: in
-    the same account, within CARRY_DAYS, of the same amount, or of the same payee and nearly the amount (a tip
-    added). How many were carried over; the links of the others are removed."""
+    """Monarch no longer has these transactions; the ones it sent this time have the ids in seen. A card's
+    hold that posted can come back under another id: what was kept with the old one here (its receipts, its own
+    tags, its links to the suite's other items, that it was looked at, and when the amount stayed its split and
+    that it was reconciled) moves to the one that took its place: in the same account, within CARRY_DAYS, of the
+    same amount, or of the same payee and nearly the amount (a tip added). How many were carried over; the links
+    of the others are removed."""
     gone = [int(i) for i in gone]
     if not gone:
         return 0
@@ -136,7 +137,9 @@ def carry(gone: list[int], seen: set) -> int:
     linked = {int(i) for i in related.having(KIND, gone)}
     split = {r["transaction_id"] for r in db.q(f"SELECT DISTINCT transaction_id FROM mny_splits WHERE transaction_id IN ({marks})", gone)}
     tagged = {r["transaction_id"] for r in db.q(f"SELECT DISTINCT transaction_id FROM mny_tags WHERE transaction_id IN ({marks})", gone)}
-    want = sorted(kept | linked | split | tagged)
+    looked = {r["transaction_id"] for r in db.q(f"SELECT transaction_id FROM mny_reviewed WHERE transaction_id IN ({marks}) "
+                                                f"UNION SELECT transaction_id FROM mny_reconciled WHERE transaction_id IN ({marks})", gone + gone)}
+    want = sorted(kept | linked | split | tagged | looked)
     n, taken = 0, set(gone)
     for old in (db.q(f"SELECT id, account_id, day, amount, merchant FROM mny_transactions WHERE id IN ({db.marks(len(want))}) ORDER BY id", want) if want else []):
         cands = db.q("SELECT id, day, amount, merchant, external_id FROM mny_transactions WHERE source = 'monarch' AND account_id = %s "
@@ -159,6 +162,9 @@ def carry(gone: list[int], seen: set) -> int:
         with db.tx():
             db.ex("UPDATE mny_receipts SET transaction_id = %s WHERE transaction_id = %s", (new["id"], old["id"]))
             db.ex("UPDATE IGNORE mny_tags SET transaction_id = %s WHERE transaction_id = %s", (new["id"], old["id"]))
+            db.ex("UPDATE IGNORE mny_reviewed SET transaction_id = %s WHERE transaction_id = %s", (new["id"], old["id"]))
+            if new["amount"] == old["amount"]:
+                db.ex("UPDATE IGNORE mny_reconciled SET transaction_id = %s WHERE transaction_id = %s", (new["id"], old["id"]))
             if old["id"] in split and new["amount"] == old["amount"] and not db.one("SELECT 1 AS x FROM mny_splits WHERE transaction_id = %s LIMIT 1", (new["id"],)):
                 db.ex("UPDATE mny_splits SET transaction_id = %s WHERE transaction_id = %s", (new["id"], old["id"]))
                 db.ex("UPDATE mny_transactions SET edited = 1 WHERE id = %s", (new["id"],))

@@ -37,10 +37,11 @@
 #   ... | IOSTART_DB=127.0.0.1:3306/iostart:iostart:PASSWORD IOSTART_ADMIN=alex:PASSWORD DB_ADMIN_PASSWORD=PASSWORD \
 #         bash -s -- --yes --db-admin root --add all
 # (see that app's `setup.sh --help`): passwords in the environment stay out of the process list and the shell history.
-# The apps: iostart iocalendar iocontact ionote iohealth iotask iorecipe iothings iomoney iodocs iopix iodns iobackup
 set -euo pipefail
 REPO="${IOSUITE_REPO:-https://github.com/avandeputte/iosuite}"
-APPS="iostart iocalendar iocontact ionote iohealth iotask iorecipe iothings iomoney iodocs iopix iodns iobackup"
+# >>> suite: apps (made by shared/templates/render.py from the apps' app.json)
+APPS="iostart ionote iocalendar iotask iorecipe iothings iomoney iodocs iocontact iohealth iodns iobackup iopix"
+# <<< suite: apps
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 

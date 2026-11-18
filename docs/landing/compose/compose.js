@@ -8,14 +8,15 @@
    has Dockge and Portainer show the whole stack as exited. So the file is the whole install: nothing to edit, nothing
    to click afterwards.
 
-   The apps, their ports and their folders on the suite's one address are the ones of the shared library
-   (shared/iosuite_shared/install.py APPS, suite.py FOLDERS); tools/check-facts.py holds this list to them. */
+   The apps, their ports and their folders on the suite's one address come from the apps' manifests (<app>/app.json):
+   shared/templates/render.py writes the lists between the "suite:" marks. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
   else root.ioCompose = factory();
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
+  // >>> suite: apps (made by shared/templates/render.py from the apps' app.json)
   var APPS = [
     {key:"iostart", name:"ioStart", port:8630, folder:"", sub:"home", what:"start page"},
     {key:"iopix", name:"ioPix", port:8600, folder:"pix", sub:"photos", what:"photos"},
@@ -31,12 +32,15 @@
     {key:"iodns", name:"ioDNS", port:8660, folder:"dns", sub:"dns", what:"DNS records", tool:true},
     {key:"iobackup", name:"ioBackup", port:8680, folder:"backup", sub:"backup", what:"backups", tool:true}
   ];
+  // <<< suite: apps
   var BY = {};
   APPS.forEach(function (a) { BY[a.key] = a; });
   var IMAGE = "ghcr.io/avandeputte/iosuite/";
   var SITE = "https://iosuite.iothing.net/compose/";
   var MARK = "# answers: ";  // the line the page reads a file back from
-  var SETUP_FIRST = ["iostart", "iocalendar", "iotask", "iocontact", "iothings", "iomoney", "iodocs", "iohealth", "iodns", "ionote", "iobackup", "iorecipe", "iopix"];  // the smaller images first
+  // >>> suite: setup-first
+  var SETUP_FIRST = ["iostart", "ionote", "iocalendar", "iotask", "iorecipe", "iothings", "iomoney", "iodocs", "iocontact", "iohealth", "iodns", "iobackup", "iopix"];  // the smaller images first
+  // <<< suite: setup-first
 
   /* ---- the answers ---- */
   function defaults(password, tz) {

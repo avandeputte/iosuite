@@ -1,7 +1,7 @@
 # The content of the app pages (iosuite.iothing.net/ioContact/ and the others), one table per app.
 # tools/app-pages.py turns it into site/<name>/index.html at build time (build.sh), with the look of the home page.
 #
-#   name, color, port, tag      the app's name, colour, default port and one-line description
+#   (its name, colour, default port, one-line description and its place in the list: the app's manifest, <app>/app.json)
 #   eyebrow, headline, lede     the top of the page; lede may hold <strong>, <a> and <code>
 #   chips                       short facts under the lede
 #   hero / hero_alt / phone     the big screenshot, its description, and the phone screenshot beside it (optional)
@@ -14,14 +14,9 @@
 #
 # Keep it true to the app: the guide's page (docs/apps/<key>.md) is the reference for what each app does.
 
-order = ["iostart", "iopix", "ionote", "iocalendar", "iotask", "iorecipe", "iothings", "iomoney", "iodocs", "iocontact", "iohealth"]
 
 # ---------------------------------------------------------------------------------------------------------------------
 [iostart]
-name = "ioStart"
-color = "#2f3a5a"
-port = 8630
-tag = "The start page"
 eyebrow = "the start page · optional"
 headline = "Every app, and today, on one page."
 lede = "A home page for the family: a tile for each installed app with what matters today on it, the week ahead, a search box across everything, bookmarks and the weather. <strong>It is optional</strong>: every app works without it. It earns its place once you run two or more."
@@ -87,10 +82,6 @@ text = "today's steps, the rings and last night's sleep."
 
 # ---------------------------------------------------------------------------------------------------------------------
 [iopix]
-name = "ioPix"
-color = "#3b4a8c"
-port = 8600
-tag = "Photos"
 eyebrow = "photos"
 headline = "Your photo library, in every browser."
 lede = "Browse, search, map and edit a library of photos from any browser, with search by what is in the photos, faces and places, worked out <strong>on your own server</strong>. A web companion for digiKam, or a library of its own without it."
@@ -146,10 +137,6 @@ text = "photos from this day in earlier years on the tile, a strip of photos und
 
 # ---------------------------------------------------------------------------------------------------------------------
 [ionote]
-name = "ioNote"
-color = "#1c5a5e"
-port = 8610
-tag = "Notes, clipboard snippets and screenshots"
 eyebrow = "notes"
 headline = "Your notes, searchable everywhere."
 lede = "Notes with folders, tags and pins, and full-text search that reads the text <strong>inside pictures</strong> too. On the Mac everything you copy and every screenshot lands in an Inbox, to keep what is worth keeping. Every note is private to the account that made it."
@@ -203,10 +190,6 @@ text = "link the invoice or the manual you noted down to the thing it is about."
 
 # ---------------------------------------------------------------------------------------------------------------------
 [iocalendar]
-name = "ioCalendar"
-color = "#963522"
-port = 8620
-tag = "The family calendar"
 eyebrow = "calendar"
 headline = "The family calendar every phone already speaks to."
 lede = "Shared and private calendars, repeating events, reminders and public holidays, with each event tagged with the family member it is for. <strong>CalDAV</strong> puts the same events in Apple Calendar, on Android and in Thunderbird, without another app to install."
@@ -277,10 +260,6 @@ text = "today's events on the tile, a This week card, and Quick add from the sea
 
 # ---------------------------------------------------------------------------------------------------------------------
 [iotask]
-name = "ioTask"
-color = "#146b5e"
-port = 8670
-tag = "The family's task lists"
 eyebrow = "tasks"
 headline = "The family's to-dos, in the reminders app each phone already has."
 lede = "Shared and private lists, due dates, repeats, alerts and subtasks, with each task tagged with who it is for. <strong>CalDAV</strong> puts the same lists in Apple Reminders, Tasks.org and Thunderbird, and quick add understands plain words."
@@ -351,10 +330,6 @@ text = "the tasks due today on the tile, the overdue ones first."
 
 # ---------------------------------------------------------------------------------------------------------------------
 [iorecipe]
-name = "ioRecipe"
-color = "#4a7c23"
-port = 8690
-tag = "The family's recipes"
 eyebrow = "recipes"
 headline = "The family's recipe book, on every screen in the kitchen."
 lede = "Recipes with their ingredients, steps and photos, brought in from a web address, pasted text, a photo of a cookbook page or Mealie. Cook from it: the amounts follow the servings, and the ingredients go to the shopping list. A page without recipe data is read by a <strong>small AI model that runs inside the app</strong>: nothing is sent to an AI service."
@@ -417,10 +392,6 @@ text = "a tile on the start page, and recipes in the search box."
 
 # ---------------------------------------------------------------------------------------------------------------------
 [iothings]
-name = "ioThings"
-color = "#2a6f97"
-port = 8700
-tag = "Everything you own"
 eyebrow = "home inventory"
 headline = "What you own, where it is, and what it needs."
 lede = "An inventory of everything the family owns: the appliances, the tools, the bikes, the camping gear in the attic, with their manuals, receipts and warranties, and the upkeep they need. It does what Homebox does, and <strong>brings a Homebox inventory over</strong> in one step."
@@ -489,10 +460,6 @@ text = "a tile on the start page, and the things in the search box."
 
 # ---------------------------------------------------------------------------------------------------------------------
 [iomoney]
-name = "ioMoney"
-color = "#94650a"
-port = 8710
-tag = "Household finances"
 eyebrow = "household finances"
 headline = "The household's money in one place."
 lede = "Every account, the transactions, a portfolio with its quotes, and what the house and the cars are worth after their loans. It copies from <strong>Monarch Money</strong> every six hours, only reading, and keeps accounts by hand beside them. Without Monarch it is a net worth and portfolio tracker."
@@ -579,10 +546,6 @@ text = "a tile on the start page."
 
 # ---------------------------------------------------------------------------------------------------------------------
 [iodocs]
-name = "ioDocs"
-color = "#a03a6a"
-port = 8720
-tag = "The family's papers"
 eyebrow = "the family's papers"
 headline = "Every passport, license and policy, and when to renew it."
 lede = "The family's papers in one place: passports, ID cards, driver's licenses, insurance policies, the car's registration, birth and marriage certificates, wills. Each with its scans, whose it is and a reminder early enough to renew it. <strong>Drop a photo and it is read</strong>, on your own server: a passport's machine-readable lines and the barcode on the back of a license fill the document in."
@@ -651,10 +614,6 @@ text = "a To renew tile on the start page, and the documents in the search box."
 
 # ---------------------------------------------------------------------------------------------------------------------
 [iocontact]
-name = "ioContact"
-color = "#4f2f7d"
-port = 8640
-tag = "Contacts for the family"
 eyebrow = "contacts"
 headline = "One family address book, on every device."
 lede = "Every field a phone has, relations kept on both sides and drawn as a <strong>family tree</strong>, birthdays and anniversaries. CardDAV puts the same contacts on every phone and in every mail app, and an LDAP directory serves the printers and desk phones."
@@ -722,10 +681,6 @@ text = "a Birthdays card on the start page, and people in the search box."
 
 # ---------------------------------------------------------------------------------------------------------------------
 [iohealth]
-name = "ioHealth"
-color = "#e8445a"
-port = 8650
-tag = "Apple Health, on your own server"
 eyebrow = "health"
 headline = "Your Apple Health data, on your own server."
 lede = "The ioHealthSync iPhone app copies Apple Health to your server, in the background. The web app shows the rings, sleep, workouts with their routes, every metric over any range and how they relate. <strong>Everyone in the household</strong> syncs into their own account and sees only their own data."

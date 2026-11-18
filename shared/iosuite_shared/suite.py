@@ -37,11 +37,12 @@ import threading
 import time
 from urllib.parse import urlsplit
 
-from iosuite_shared import config, db, prefix
+from iosuite_shared import catalog, config, db, prefix
 from iosuite_shared.errors import Invalid
 
-# Every app's default port: different for each, so all of them can run on one host. The apps' tests check theirs.
-PORTS = {"iopix": 8600, "ionote": 8610, "iocalendar": 8620, "iostart": 8630, "iocontact": 8640, "iohealth": 8650, "iodns": 8660, "iotask": 8670, "iobackup": 8680, "iorecipe": 8690, "iothings": 8700, "iomoney": 8710, "iodocs": 8720}
+# Every app's default port: different for each, so all of them can run on one host (its manifest, <app>/app.json). The
+# apps' tests check theirs.
+PORTS = catalog.PORTS
 
 FIELDS = ("name", "description", "version", "color", "icon")
 # Where every app serves its mark (static/icons/mark.svg in its repo, the web app's files under /static/): the same in
@@ -232,8 +233,7 @@ def note_seen(app: str, request, take_address: bool = True) -> None:
 # The start page passes https://home.example.com/calendar/… on to ioCalendar (iostart: app/frontdoor.py), so one name,
 # one certificate and one port serve every app. One switch for the suite (Settings › Global settings › Apps), kept in
 # the Shared ioSuite database; while it is on, the address of an app in the suite's list is its folder there.
-FOLDERS = {"iopix": "pix", "ionote": "notes", "iocalendar": "calendar", "iocontact": "contacts", "iohealth": "health",
-           "iodns": "dns", "iotask": "tasks", "iobackup": "backup", "iorecipe": "recipes", "iothings": "things", "iomoney": "money", "iodocs": "docs"}
+FOLDERS = catalog.FOLDERS  # from the apps' manifests (<app>/app.json "folder")
 DOOR = "iostart"            # the app that answers at the address itself
 TAKEN = frozenset(("api", "static", "dav", "mcp", "bookmarks"))  # the start page's own first folders: never an app's
 ONE_ADDRESS = "one_address"  # the setting (ios_settings, app ''): "1" while it is on

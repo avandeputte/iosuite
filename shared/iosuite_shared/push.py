@@ -39,7 +39,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from iosuite_shared import credentials, db, outbound, suite, users
+from iosuite_shared import catalog, credentials, db, outbound, suite, users
 from iosuite_shared.errors import Invalid
 
 log = logging.getLogger("iosuite_shared.push")
@@ -49,17 +49,9 @@ PREFS = "notifications"                  # ios_user_data (app '') of each accoun
 MORNING = "08:00"
 SUBJECT = "https://github.com/avandeputte/iosuite"  # who sends, for the push services (a URL or a mailto:)
 
-# What there is to get. app: the app it comes from (offered only to people who use it); admin: suite admins only.
-KINDS = [
-    {"kind": "tasks", "app": "iotask", "label": "Tasks", "hint": "A task’s alert when it goes off, and in the morning what is due today"},
-    {"kind": "events", "app": "iocalendar", "label": "Event reminders", "hint": "The reminders set on events"},
-    {"kind": "birthdays", "app": "iocontact", "label": "Birthdays", "hint": "In the morning, whose birthday or anniversary it is"},
-    {"kind": "things", "app": "iothings", "label": "Upkeep and warranties", "hint": "In the morning, the upkeep that is due and the warranties about to end"},
-    {"kind": "docs", "app": "iodocs", "label": "Papers to renew", "hint": "In the morning, the passports, licenses and policies about to expire"},
-    {"kind": "health", "app": "iohealth", "label": "Health goals", "hint": "When you reach one of your daily goals"},
-    {"kind": "health_week", "app": "iohealth", "label": "Weekly health summary",
-     "hint": "On Monday morning, last week’s steps, sleep and workouts next to the week before"},
-    {"kind": "backups", "app": "iobackup", "label": "Failed backups", "hint": "When a backup does not finish", "admin": True},
+# What there is to get: what each app's manifest (<app>/app.json "notifications") offers, then the suite's own.
+# app: the app it comes from (offered only to people who use it); admin: suite admins only.
+KINDS = catalog.NOTIFICATIONS + [
     {"kind": "updates", "app": None, "label": "New version", "hint": "When a newer version of the suite is out", "admin": True},
 ]
 KIND = {k["kind"]: k for k in KINDS}

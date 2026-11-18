@@ -24,7 +24,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-from iosuite_shared import apppasswords, db, routers, sessions, suite, users
+from iosuite_shared import apppasswords, catalog, db, routers, sessions, suite, users
 from iosuite_shared.access import ACCESS_ROLES, UNCLAIMED, Access, BodyCap, TooLarge, content_type, json_body, public_user
 from iosuite_shared.proxyauth import Forwarded, Proxy, authlog, peer_of, seen
 from iosuite_shared.errors import Invalid
@@ -38,12 +38,18 @@ class Auth:
     def __init__(self, app: str, read_only=None, read_only_message: str = None, app_label: str = None, basic_realm: str = None,
                  version: str = None, public_url: str = None, description: str = None, color: str = None,
                  register: bool = True, internal_url: str = None, admin_tool: bool = False):
-        """version, public_url (the app's PUBLIC_URL; empty: the address it is reached at), description and color (the
-        icon is suite.ICON, the same path in every app) and internal_url (where it is inside the network; None:
+        """version, public_url (the app's PUBLIC_URL; empty: the address it is reached at), app_label, description,
+        color and admin_tool (each by default its manifest's: <app>/app.json, iosuite_shared.catalog; the icon is
+        suite.ICON, the same path in every app) and internal_url (where it is inside the network; None:
         suite.local_url(), from INTERNAL_URL or the LAN address and PORT) go into the suite's list of apps (iosuite_shared.suite) when the app first reaches the Shared ioSuite database; register=False
         keeps the app out of it. admin_tool=True: an app behind the scenes (ioDNS, ioBackup), for suite admins only:
         everybody else is none there, so it is on no one else's start page or app switcher."""
         self.app = app
+        mine = catalog.APPS.get(app) or {}
+        app_label = app_label or mine.get("name")
+        description = description or mine.get("description")
+        color = color or mine.get("color")
+        admin_tool = admin_tool or bool(mine.get("adminTool"))
         if admin_tool:
             suite.declare_admin_tool(app)
         self.suite_entry = dict(name=app_label or app, url=public_url or None, version=version, description=description,

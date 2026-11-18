@@ -8,18 +8,17 @@ repository. It reads docs/ and landing/ and fails on:
 
   - a link to a file in this repository (raw.githubusercontent.com/.../iosuite/main/x,
     github.com/.../iosuite/blob|tree/main/x) that is not there;
-  - a default port, next to an app's name, that is not the one in the shared library's list of apps
-    (shared/iosuite_shared/install.py, APPS);
+  - a default port, next to an app's name, that is not the one in its manifest (<app>/app.json);
   - a Proxmox container size in docs/start/proxmox.md that is not the app's ct script default (var_cpu, var_ram,
     var_disk);
   - an image ghcr.io/avandeputte/iosuite/<app> that the app's docker-compose.yml does not use;
   - an app missing from the Docker Compose builder's list (landing/compose/compose.js), or one there with a folder
-    that is not the one the suite serves it in (shared/iosuite_shared/suite.py, FOLDERS).
+    that is not the one its manifest names.
 
 The docs workflow runs it whenever a page or an app changes, so a change in an app that makes a page wrong fails in
 the same pull request.
 """
-import ast
+import json
 import pathlib
 import re
 import sys
@@ -28,8 +27,9 @@ HERE = pathlib.Path(__file__).resolve().parent.parent
 SRC = HERE.parent
 OWNER = "avandeputte"
 REPO = "iosuite"
-LABELS = {"ioPix": "iopix", "ioNote": "ionote", "ioCalendar": "iocalendar", "ioStart": "iostart", "ioContact": "iocontact",
-          "ioHealth": "iohealth", "ioTask": "iotask", "ioRecipe": "iorecipe", "ioThings": "iothings", "ioMoney": "iomoney", "ioDocs": "iodocs", "ioDNS": "iodns", "ioBackup": "iobackup"}
+# the apps, from their manifests (<app>/app.json), as the shared library has them gathered
+APPS = json.loads((SRC / "shared" / "iosuite_shared" / "apps.json").read_text())["apps"]
+LABELS = {m["name"]: m["key"] for m in APPS}
 
 problems = []
 
@@ -40,25 +40,13 @@ def pages():
 
 
 def app_ports(src):
-    """shared/iosuite_shared/install.py's APPS, read without importing it."""
-    tree = ast.parse((src / "shared" / "iosuite_shared" / "install.py").read_text())
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "APPS" for t in node.targets):
-            apps = {}
-            for k, v in zip(node.value.keys, node.value.values):
-                kw = {x.arg: x.value for x in v.keywords}
-                apps[k.value] = ast.literal_eval(kw["port"])
-            return apps
-    raise SystemExit("no APPS in iosuite_shared/install.py")
+    """Every app's default port (its manifest)."""
+    return {m["key"]: m["port"] for m in APPS}
 
 
 def suite_folders(src):
-    """shared/iosuite_shared/suite.py's FOLDERS (the folder each app is served in on the suite's one address)."""
-    tree = ast.parse((src / "shared" / "iosuite_shared" / "suite.py").read_text())
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "FOLDERS" for t in node.targets):
-            return ast.literal_eval(node.value)
-    raise SystemExit("no FOLDERS in iosuite_shared/suite.py")
+    """The folder each app is served in on the suite's one address (its manifest)."""
+    return {m["key"]: m["folder"] for m in APPS if m.get("folder")}
 
 
 def main():
@@ -78,7 +66,7 @@ def main():
 
         # 2. default ports next to an app's name
         ports = app_ports(src)
-        near = re.compile(r"\b(ioPix|ioNote|ioCalendar|ioStart|ioContact|ioHealth|ioTask|ioRecipe|ioThings|ioMoney|ioDocs|ioDNS|ioBackup)\b(?:[^\n\d]{0,14}?)\b(8\d\d0)\b")
+        near = re.compile(r"\b(" + "|".join(LABELS) + r")\b(?:[^\n\d]{0,14}?)\b(8\d\d0)\b")
         js = re.compile(r'name:"(io\w+)",\s*port:(\d+)')
         for p, text in pages():
             for m in list(near.finditer(text)) + list(js.finditer(text)):

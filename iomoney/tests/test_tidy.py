@@ -177,7 +177,7 @@ def test_likely_duplicates(client, as_user):
     assert [[t["id"] for t in x["items"]] for x in g] == [[c1["id"], c2["id"], c3["id"]], [d1["id"], d2["id"]]]
     assert g[1]["why"] == "same" and g[1]["whyText"] and far["id"] not in [t["id"] for x in g for t in x["items"]]
     assert client.get("/api/tidy").json()["duplicates"] == 2
-    # one typed in and one from the bank look alike whatever they are called; a pending one beside the posted one too
+    # one typed in and one from the bank look alike whatever they are called
     db.ex("UPDATE mny_transactions SET source = 'monarch', external_id = 'm1', merchant = 'Bloom & Co' WHERE id = %s", (far["id"],))
     typed = tx(client, a, -42.5, "flowers", 21)
     g = client.get("/api/duplicates").json()["items"]

@@ -1,9 +1,9 @@
 """Likely duplicates: the same transaction kept twice.
 
 It happens when a transaction typed in by hand also comes from Monarch Money, when a file is imported over what was
-there, or when a pending transaction stays beside the one that posted. Two transactions look like one when they are
+there, or when the bank sends one again and the first stays. Two transactions look like one when they are
 in the same account, of the same amount, at most DAYS apart, and alike: the same payee or bank's text, or one typed in
-(or imported) and the other from Monarch, or one pending and the other not. Nothing is removed by itself: a person
+(or imported) and the other from Monarch. Nothing is removed by itself: a person
 keeps one and hides (or, typed in here, deletes) the other, or says they are two (mny_duplicate_nots)."""
 import datetime as dt
 import re
@@ -23,15 +23,13 @@ def _norm(s) -> str:
 
 def _alike(a: dict, b: dict) -> str | None:
     """Why two transactions of the same account and amount look like one, or None."""
-    if a["pending"] != b["pending"]:
-        return "pending"
     if a["source"] != b["source"]:
         return "typed"
     names = lambda t: {x for x in (_norm(t["merchant"]), _norm(t["description"])) if x}  # noqa: E731
     return "same" if names(a) & names(b) else None
 
 
-WHY = {"pending": "One is pending, the other posted", "typed": "One was added here, the other came from Monarch Money",
+WHY = {"typed": "One was added here, the other came from Monarch Money",
        "same": "The same payee, amount and nearly the same day"}
 
 

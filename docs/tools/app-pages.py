@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Writes a page for each app, site/<name>/index.html (https://iosuite.iothing.net/ioContact/ and the others), from
-landing/apps.toml. build.sh runs it after copying landing/ into site/; the pages use landing/site.css and
+landing/apps.toml (what the page says) and the app's manifest (<app>/app.json, gathered in
+shared/iosuite_shared/apps.json: its name, colour, port, one-line tag, and where it comes in the list). build.sh runs it after copying landing/ into site/; the pages use landing/site.css and
 landing/app.js like the home page. Usage: python3 tools/app-pages.py site
 """
 import html
+import json
 import sys
 import tomllib
 from pathlib import Path
@@ -18,8 +20,9 @@ GITHUB_SVG = ('<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 
               '.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56'
               '.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 '
               '16 8c0-4.42-3.58-8-8-8Z"/></svg>')
-SHORT = {"iostart": "start page", "iopix": "photos", "ionote": "notes", "iocalendar": "calendar", "iotask": "tasks",
-         "iorecipe": "recipes", "iothings": "inventory", "iomoney": "finances", "iodocs": "papers", "iocontact": "contacts", "iohealth": "health"}
+# every app with a page (the admin tools have none): its manifest, in order
+MANIFESTS = [m for m in json.loads((HERE.parent / "shared" / "iosuite_shared" / "apps.json").read_text())["apps"] if not m.get("adminTool")]
+SHORT = {m["key"]: (m.get("compose") or {}).get("what") or m["description"].lower() for m in MANIFESTS}
 
 
 def e(s):
@@ -224,7 +227,11 @@ def page(key, a, apps, order):
 def main():
     out = Path(sys.argv[1] if len(sys.argv) > 1 else "site")
     data = tomllib.loads((HERE / "landing" / "apps.toml").read_text())
-    order = data.pop("order")
+    order = [m["key"] for m in MANIFESTS]
+    for m in MANIFESTS:
+        if m["key"] not in data:
+            sys.exit(f"apps.toml: no [{m['key']}]: every app with a manifest gets a page")
+        data[m["key"]].update(name=m["name"], color=m["color"], port=m["port"], tag=m["tag"])
     for key in order:
         a = data[key]
         for img in [a["hero"], a.get("phone")] + [h["img"] for h in a["highlights"]]:

@@ -1,0 +1,28 @@
+{
+  "key": "iomoney",
+  "name": "ioMoney",
+  "description": "Household finances",
+  "tag": "Household finances",
+  "color": "#94650a",
+  "port": 8710,
+  "folder": "money",
+  "order": 80,
+  "compose": {
+    "name": "money",
+    "what": "finances"
+  },
+  "items": [
+    {
+      "kind": "asset",
+      "label": "House or car",
+      "plural": "Houses and cars",
+      "href": "#/account/{id}"
+    },
+    {
+      "kind": "transaction",
+      "label": "Transaction",
+      "plural": "Transactions",
+      "href": "#/transaction/{id}"
+    }
+  ]
+}
