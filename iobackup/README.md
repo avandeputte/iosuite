@@ -30,6 +30,9 @@ whose backup files it reads and writes unchanged.
   **restore**: tick databases (everything, or pick tables, views, routines, events), optionally under another name,
   tick users and roles, pick the server and the options (structure only, replace existing users, carry on past
   errors), review what it would overwrite there, and confirm.
+- **Stored files as files**: the photos, scans, receipts and attachments the suite's apps keep in their databases are
+  also written out as plain files in each backup, to open without restoring anything (see below). *Download as .zip*
+  on a backup gives just those.
 
 Access: suite admins only (a backup holds everybody's data). Everybody else has no access, whatever role or default
 role says, and ioBackup takes no roles. The servers' passwords and the Google
@@ -43,7 +46,24 @@ One file, `<job>-<YYYYmmdd-HHMMSS>.mdbk.tar`, holding:
 * one consistent `mariadb-dump --single-transaction` of all the job's databases (one snapshot across them), split into
   a gzip file per object so any piece can be restored on its own;
 * `accounts.json`: every user (`SHOW CREATE USER`) and role with its grants;
-* `manifest.json`: what is in it, the source server and its version, and a SHA-256 of every piece.
+* `manifest.json`: what is in it, the source server and its version, and a SHA-256 of every piece;
+* `files/`: the files the apps keep in their databases, as plain files (on by default; a job's *The files the apps
+  keep in their databases* turns it off). An app is recognised by its tables, whatever its database is called:
+
+  | App | Where its files go |
+  | --- | --- |
+  | ioThings | `files/ioThings/<thing>/<file>` (manuals, receipts, warranties named `Manual - …`, `Receipt - …`) |
+  | ioDocs | `files/ioDocs/<document>/<file>`, archived ones under `Archived/` |
+  | ioMoney | `files/ioMoney/<year>/<day> <merchant> <amount> - <file>` |
+  | ioNote | `files/ioNote/<person>/<note title>/Picture.<ext>` and the note's attachments |
+  | ioRecipe | `files/ioRecipe/<recipe>/Photo 1.jpg`, `Step 3.jpg` |
+  | ioStart | `files/ioStart/Bookmark icons/<bookmark>.svg` |
+
+  They are read just after the dump, in one transaction per database; the dump stays what a restore reads, and the
+  bytes are the same. Two things of the same name get `Name (2)`. Any archive tool opens the backup to get at them
+  (`tar -xf Nightly-20261103-020000.mdbk.tar files`, or double-click it on a Mac), and so does
+  `python3 -m app.offline files Nightly-20261103-020000.mdbk.tar -o files`. This makes a backup larger by about the
+  size of those files, which are in the dump as well.
 
 It is plain SQL inside a plain tar, readable without ioBackup, and `app/offline.py` restores it on any machine with
 Python 3 and the MariaDB client, with no web app, database or settings (for when the machine that ran ioBackup is gone):

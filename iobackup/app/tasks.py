@@ -171,7 +171,7 @@ def _do_backup(p: dict, emit, ev) -> dict:
     tar, manifest = engine.run_backup(
         server, job["databases"], include_users=job["includeUsers"], workdir=str(config.WORK_DIR), label=label,
         lock_all=job["lockAll"], desync=job["desync"], compress_level=int(job["compressLevel"] or 6),
-        log=emit, cancel=ev, source_name=server["name"])
+        log=emit, cancel=ev, source_name=server["name"], files=job["files"])
     try:
         size = os.path.getsize(tar)
         d = open_destination(dest)

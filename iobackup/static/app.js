@@ -165,7 +165,7 @@ async function runJob(j) {
 async function editJob(j) {
   const isNew = !j;
   j = j || { name: '', serverId: (S.servers[0] || {}).id, destinationId: (S.destinations[0] || {}).id, databases: 'all', includeUsers: true, keep: 7,
-    enabled: true, desync: false, lockAll: false, compressLevel: 6, schedule: { mode: 'daily', time: '02:00' } };
+    enabled: true, desync: false, lockAll: false, compressLevel: 6, files: true, schedule: { mode: 'daily', time: '02:00' } };
   const sch = { mode: 'manual', time: '02:00', minute: 0, every: 1, days: [1], day: 1, cron: '0 2 * * *', ...j.schedule };
   const inp = (attrs) => h('input', { class: 't', ...attrs });
   const f = {
@@ -175,6 +175,7 @@ async function editJob(j) {
     all: h('input', { type: 'radio', name: 'dbm', checked: j.databases === 'all', onchange: () => { dbBox.hidden = true; } }),
     some: h('input', { type: 'radio', name: 'dbm', checked: j.databases !== 'all', onchange: () => { dbBox.hidden = false; loadDbs(); } }),
     users: h('input', { type: 'checkbox', checked: j.includeUsers }),
+    files: h('input', { type: 'checkbox', checked: j.files !== false }),
     keep: inp({ type: 'number', min: 0, value: j.keep, style: { width: '110px' } }),
     enabled: h('input', { type: 'checkbox', checked: j.enabled }),
     desync: h('input', { type: 'checkbox', checked: j.desync }),
@@ -224,7 +225,7 @@ async function editJob(j) {
     if (schedule.mode === 'weekly' && !schedule.days.length) throw new Error('Pick at least one day of the week');
     const json = { name: f.name.value, serverId: +f.server.value, destinationId: +f.dest.value, databases: f.all.checked ? 'all' : [...picked],
       includeUsers: f.users.checked, keep: +f.keep.value || 0, enabled: f.enabled.checked, desync: f.desync.checked, lockAll: f.lock.checked,
-      compressLevel: +f.level.value, schedule };
+      compressLevel: +f.level.value, files: f.files.checked, schedule };
     await api(isNew ? 'api/jobs' : `api/jobs/${j.id}`, { method: isNew ? 'POST' : 'PUT', json });
     return true;
   };
@@ -238,7 +239,8 @@ async function editJob(j) {
     h('div', { class: 'field' }, h('span', null, 'What to back up'),
       h('label', { class: 'check' }, f.all, 'All the databases (new ones are picked up by themselves)'),
       h('label', { class: 'check' }, f.some, 'Only these databases'), dbBox,
-      h('label', { class: 'check' }, f.users, 'Users, roles and their grants')),
+      h('label', { class: 'check' }, f.users, 'Users, roles and their grants'),
+      h('label', { class: 'check' }, f.files, 'The files the apps keep in their databases, also as plain files (photos, scans, receipts, attachments), to open without a restore')),
     h('div', { class: 'field' }, h('span', null, 'When'), row(f.mode, h('label', { class: 'check' }, f.enabled, 'On'))), schedBox,
     fld('How many backups to keep', f.keep, 'After each good backup, the older backups of this job beyond this number are deleted from the destination. 0 keeps them all.'),
     h('details', null, h('summary', { class: 'muted' }, 'Galera and more'), galeraNote,
@@ -485,6 +487,10 @@ function restoreForm(did, name, c) {
     h('div', { class: 'box' }, h('h2', null, icon('backup'), c.label || c.name),
       h('p', { class: 'muted small' }, `Taken ${when(c.created)} from ${c.source} · MariaDB ${c.server_version}${c.galera ? ' · Galera' : ''} · ${c.consistency}`),
       h('p', { class: 'muted small' }, name)),
+    c.files ? h('div', { class: 'box' }, h('h2', null, icon('folder'), 'Files',
+      h('span', { style: { marginLeft: 'auto' } }, h('a', { class: 'pillbtn noic tiny', href: `${base}/files.zip` }, 'Download as .zip'))),
+      h('p', { class: 'muted small' }, `${c.files.count} files, ${size(c.files.bytes)}: ${Object.entries(c.files.apps).map(([a, n]) => `${a} ${n}`).join(', ')}`),
+      h('p', { class: 'muted small' }, 'The photos, scans, receipts and attachments the apps keep in their databases, as plain files with their own names, by app and by what they belong to. They are also in the backup file itself, under files/: any archive tool opens it.')) : null,
     h('div', { class: 'box' }, h('h2', null, icon('dns'), 'Databases', c.databases.length ? h('span', { style: { marginLeft: 'auto' } }, allDbs) : null),
       !c.databases.length ? h('p', { class: 'muted' }, 'This backup holds no database.') :
         dbState.map((s) => h('div', { style: { padding: '8px 0', borderBottom: '1px solid var(--line)' } },

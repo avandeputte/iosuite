@@ -3,12 +3,15 @@ Who may call each route is on the route (app/access.py)."""
 from __future__ import annotations
 
 import datetime as _dt
+import os
+import tempfile
 import threading
 import time
 
 from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 
 from app import access, config, engine, gdrive, model, schedule, tasks
 from app.destinations import open_destination, safe_name
@@ -273,6 +276,26 @@ def download_backup(did: int, name: str):
     if r.headers.get("Content-Length"):
         headers["Content-Length"] = r.headers["Content-Length"]
     return StreamingResponse(r.iter_content(1 << 20), media_type="application/x-tar", headers=headers)
+
+
+@router.get("/destinations/{did}/backups/{name}/files.zip", dependencies=[access.admin])
+def download_files(did: int, name: str):
+    """The files the apps keep in their databases (photos, scans, receipts...), as the backup holds them, in one .zip."""
+    path = _archive(did, name)
+    config.WORK_DIR.mkdir(parents=True, exist_ok=True)
+    fd, out = tempfile.mkstemp(prefix="files-", suffix=".zip", dir=str(config.WORK_DIR))
+    os.close(fd)
+    try:
+        with engine.Archive(path) as a:
+            if not a.files_summary():
+                raise ValueError("This backup holds no stored files")
+            a.write_files_zip(out)
+    except BaseException:
+        os.unlink(out)
+        raise
+    zname = name[:-len(engine.ARCHIVE_SUFFIX)] if name.endswith(engine.ARCHIVE_SUFFIX) else name
+    return FileResponse(out, media_type="application/zip", filename=zname + "-files.zip",
+                        background=BackgroundTask(os.unlink, out))
 
 
 # ---------------------------------------------------------------- runs
