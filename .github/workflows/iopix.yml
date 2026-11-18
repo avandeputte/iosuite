@@ -1,6 +1,7 @@
-# Builds the container image and pushes it to GitHub's registry (ghcr.io) on every push to
-# main, also tagged v<the suite's version> (shared/iosuite_shared/__init__.py); pull requests only build. The image holds no models: the
-# container downloads them on first start (AUTO_MODELS), see the README.
+# Tests on pull requests and on main, when ioPix or the shared library changed; a pull request also builds the
+# container image. main's image is built and pushed to GitHub's registry (ghcr.io) for every version of the suite
+# (tagged latest and v<version>, shared/iosuite_shared/__init__.py): version.yml sets the version and starts this
+# workflow for it. The image holds no models: the container downloads them on first start (AUTO_MODELS), see the README.
 name: ioPix
 
 on:
@@ -25,6 +26,9 @@ env:
 
 jobs:
   tests:
+    # on a pull request and on main when the app (or the shared library) changed; not when version.yml starts the
+    # workflow for the image of a new version
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     services:
       mariadb:  # iopix's own database is MariaDB-only: the suite creates its test databases on this one (tests/mariadb.py)
@@ -69,6 +73,9 @@ jobs:
 
   image:
     needs: tests
+    # a pull request builds the image to see that it builds. main's images are built once the version is set:
+    # version.yml starts this workflow for every app (every app carries the suite's version), tests left out
+    if: ${{ always() && github.event_name != 'push' && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -113,9 +120,10 @@ jobs:
           cache-to: type=gha,mode=max,scope=iopix
 
   installer:
-    # the self-extracting Linux installer: built here so a change that breaks it shows; shared.yml builds it again for
+    # the self-extracting Linux installer: built here so a change that breaks it shows; version.yml builds it again for
     # the suite's release and attaches it there
     needs: tests
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -155,7 +155,7 @@ devices, calendars, holidays and birthdays), then for admins family and server (
 
 ### Releases
 
-Every version of the suite merged into main is released by itself: when `__version__` (`shared/iosuite_shared/__init__.py`, one number for every app) has no GitHub release yet, CI makes the release `v<version>` with the merge's message as notes, and the image is published as `ghcr.io/avandeputte/iosuite/iocalendar:v<version>` (and `latest`). Bump the version in a change to release it.
+Every version of the suite merged into main is released by itself: when `__version__` (`shared/iosuite_shared/__init__.py`, one number for every app) has no GitHub release yet, CI makes the release `v<version>` with the merge's message as notes, and the image is published as `ghcr.io/avandeputte/iosuite/iocalendar:v<version>` (and `latest`). main sets the version by itself after a merge (`.github/workflows/version.yml`).
 
 ## Reverse proxy and HTTPS
 
