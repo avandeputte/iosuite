@@ -24,6 +24,7 @@ Give each app a host name under one domain, for example:
 | ioRecipe | `recipes.example.com` | `192.168.1.10:8690` |
 | ioThings | `things.example.com` | `192.168.1.10:8700` |
 | ioMoney | `money.example.com` | `192.168.1.10:8710` |
+| ioDocs | `docs.example.com` | `192.168.1.10:8720` |
 
 and set in each app's `config.env`:
 

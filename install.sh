@@ -40,7 +40,7 @@
 set -euo pipefail
 REPO="${IOSUITE_REPO:-https://github.com/avandeputte/iosuite}"
 # >>> suite: apps (made by shared/templates/render.py from the apps' app.json)
-APPS="iostart ionote iocalendar iotask iorecipe iothings iomoney iocontact iohealth iodns iobackup iopix"
+APPS="iostart ionote iocalendar iotask iorecipe iothings iomoney iodocs iocontact iohealth iodns iobackup iopix"
 # <<< suite: apps
 say() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }

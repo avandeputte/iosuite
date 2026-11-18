@@ -1,0 +1,113 @@
+# Tests against a MariaDB service on pull requests and on main, when the app or the shared library changed; a pull
+# request also builds the container image. main's image is built and pushed to ghcr.io for every version of the suite
+# (tagged latest and v<version>, shared/iosuite_shared/__init__.py): version.yml sets the version, starts this
+# workflow for it and makes the suite's release.
+# Made from shared/templates/workflow.yml (shared/templates/render.py): only the "own:" blocks are this app's.
+name: ioDocs
+
+on:
+  push:
+    branches: [main]
+    paths: ["iodocs/**", "shared/**", "demo/**", ".github/workflows/iodocs.yml"]
+  pull_request:
+    paths: ["iodocs/**", "shared/**", "demo/**", ".github/workflows/iodocs.yml"]
+  workflow_dispatch:
+
+# every step runs in the app's folder; the shared library sits beside it in shared/
+defaults:
+  run:
+    working-directory: iodocs
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/avandeputte/iosuite/iodocs
+
+jobs:
+  tests:
+    # on a pull request and on main when the app (or the shared library) changed; not when version.yml starts the
+    # workflow for the image of a new version
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # >>> own: setup
+      - name: Tesseract and Poppler (the scans are read with them)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-eng poppler-utils
+      # <<< own: setup
+      - name: Syntax checks
+        run: |
+          python -m pip install -q -e ../shared
+          python -m pip install -q -e ".[test]" pyflakes
+          python3 ../shared/templates/render-update.py --check
+          python3 ../shared/templates/render.py --check
+          python -m pyflakes app tests
+          for f in static/app.js static/js/*.js; do [ -e "$f" ] || continue; node --input-type=module --check < "$f" || exit 1; done  # ES modules, parsed as modules
+          for f in *.sh; do sh -n "$f"; done
+          bash -n proxmox/ct/iodocs.sh proxmox/install/iodocs-install.sh
+          # >>> own: checks
+          # <<< own: checks
+      - name: Tests
+        # scratch databases iodocs_test and iodocs_test_auth on the service (iosuite_shared.testing)
+        env:
+          IOSUITE_TEST_DB: 127.0.0.1:3306:root:root
+        run: python -m pytest -q -p no:cacheprovider tests
+      # >>> own: tests
+      # <<< own: tests
+
+  image:
+    needs: tests
+    # a pull request builds the image to see that it builds. main's images are built once the version is set:
+    # version.yml starts this workflow for every app (every app carries the suite's version), tests left out
+    if: ${{ always() && github.event_name != 'push' && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: echo "version=$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' ../shared/iosuite_shared/__init__.py)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=v${{ steps.version.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: iodocs/Dockerfile
+          # >>> own: platforms
+          platforms: linux/amd64,linux/arm64
+          # <<< own: platforms
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: COMMIT=${{ github.sha }}
+          # >>> own: build
+          # <<< own: build

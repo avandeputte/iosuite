@@ -252,6 +252,9 @@ text = "the tasks that are due show on their day beside the events, and are tick
 app = "iomoney"
 text = "the household's coming bills on the day they are due, for the people with a role in ioMoney."
 [[iocalendar.together]]
+app = "iodocs"
+text = "the day a passport, a license or a policy expires, for the people who see it in ioDocs."
+[[iocalendar.together]]
 app = "iostart"
 text = "today's events on the tile, a This week card, and Quick add from the search box."
 
@@ -540,6 +543,74 @@ text = "link the house or a car to the things, notes and photos about it."
 [[iomoney.together]]
 app = "iostart"
 text = "a tile on the start page."
+
+# ---------------------------------------------------------------------------------------------------------------------
+[iodocs]
+eyebrow = "the family's papers"
+headline = "Every passport, license and policy, and when to renew it."
+lede = "The family's papers in one place: passports, ID cards, driver's licenses, insurance policies, the car's registration, birth and marriage certificates, wills. Each with its scans, whose it is and a reminder early enough to renew it. <strong>Drop a photo and it is read</strong>, on your own server: a passport's machine-readable lines and the barcode on the back of a license fill the document in."
+chips = ["Reads passports and licenses", "Renewal reminders", "Per-document privacy", "Scans in the database", "On the calendar", "MCP"]
+hero = "iodocs.jpg"
+hero_alt = "ioDocs: the family's documents, the soonest to expire first"
+phone = "iodocs-phone.jpg"
+phone_alt = "A passport in ioDocs on a phone"
+alone = "ioDocs needs its database and the Shared ioSuite database, and Tesseract on the server to read scans (the installers and the Docker image bring it). Reminders and their notifications work without any other app."
+
+[[iodocs.highlights]]
+title = "Everything, the soonest to expire first"
+text = "Every document as a card with its scan, whose it is and how long it has left; by person, by kind, or found by any word on it, the words read off the scans included."
+img = "iodocs.jpg"
+alt = "ioDocs cards"
+
+[[iodocs.highlights]]
+title = "Read off the scan"
+text = "A passport's or ID card's machine-readable lines, each checked against its check digit, and the barcode on the back of a US or Canadian license give the number, the name, the dates and the rest. What is read fills the empty fields; what differs is offered, never written over."
+img = "iodocs-scan.jpg"
+alt = "A license just read: the fields filled in from its barcode"
+
+[[iodocs.highlights]]
+title = "One document, all of it"
+text = "The scans, the number (masked until you ask), the dates, whose it is and who may see it, the fields of your own, and what it is linked to in the other apps."
+img = "iodocs-doc.jpg"
+alt = "A passport with its scan, its dates and its people"
+
+[[iodocs.highlights]]
+title = "Before it is too late"
+text = "Each kind has its reminder: a passport nine months ahead (many countries want six months left), a license two, a policy one. The ones due are on a page of their own and in the morning notification."
+img = "iodocs-renew.jpg"
+alt = "The documents to renew"
+
+[[iodocs.features]]
+title = "Whose it is"
+text = "The family members a document is for, from the suite's one family list, or none for the household's own papers."
+[[iodocs.features]]
+title = "Who sees it"
+text = "Per document: the whole family, its people and the grown-ups, or only its people (a will). New accounts have no role here until an admin gives one."
+[[iodocs.features]]
+title = "Renew"
+text = "The new passport in place of the old one, which is archived and linked to it."
+[[iodocs.features]]
+title = "Any paper"
+text = "Seventeen kinds, from visas to diplomas, each with fields of your own: a policy's deductible, the agent's phone."
+[[iodocs.features]]
+title = "Read on your server"
+text = "Tesseract and the barcode reader run on the server: no scan leaves it. A PDF's own text is used when it has some."
+[[iodocs.features]]
+title = "For AI assistants"
+text = "An MCP server: “when does Ava's passport expire?”, “what's our car insurance policy number?”."
+
+[[iodocs.together]]
+app = "iocalendar"
+text = "the day each document expires shows on the calendar, for the people who see it."
+[[iodocs.together]]
+app = "iothings"
+text = "link the car's registration and its insurance to the car."
+[[iodocs.together]]
+app = "iocontact"
+text = "link a policy to the insurer or the agent."
+[[iodocs.together]]
+app = "iostart"
+text = "a To renew tile on the start page, and the documents in the search box."
 
 # ---------------------------------------------------------------------------------------------------------------------
 [iocontact]

@@ -71,9 +71,9 @@ TZ=Europe/Brussels  LOG_FILE=…  UPDATE_CHECK=0  MCP=1
 
 Default ports, different for every app so that all of them can run on one host (`suite.PORTS`):
 
-| ioPix | ioNote | ioCalendar | ioSuite | ioContact | ioHealth | ioDNS | ioTask | ioBackup | ioRecipe | ioThings | ioMoney |
-|-------|---------|------------|---------|------------|----------|-------|---------|----------|----------|--------|---------|
-| 8600  | 8610    | 8620       | 8630    | 8640 (LDAP 3890) | 8650 | 8660 | 8670 | 8680 | 8690 | 8700 | 8710 |
+| ioPix | ioNote | ioCalendar | ioSuite | ioContact | ioHealth | ioDNS | ioTask | ioBackup | ioRecipe | ioThings | ioMoney | ioDocs |
+|-------|---------|------------|---------|------------|----------|-------|---------|----------|----------|--------|---------|--------|
+| 8600  | 8610    | 8620       | 8630    | 8640 (LDAP 3890) | 8650 | 8660 | 8670 | 8680 | 8690 | 8700 | 8710 | 8720 |
 
 The database is the **Shared ioSuite database**: accounts, sessions, roles and app passwords, and the suite-wide
 settings and list of apps. Its default name and account are `iosuite`; `IOSUITE_DB_*` are the only variables read.
@@ -502,7 +502,7 @@ Every database in the suite follows the same rules, so the apps read alike and c
 
 | What | Rule |
 |---|---|
-| Tables | `<prefix>_<plural noun>`, snake_case. Prefixes: `ios_` (this library), `prt_` (ioStart), `nts_` (ioNote), `pix_` (ioPix), `cal_` (ioCalendar), `con_` (ioContact), `hlt_` (ioHealth), `dns_` (ioDNS), `tsk_` (ioTask), `bkp_` (ioBackup), `rcp_` (ioRecipe), `thg_` (ioThings), `mny_` (ioMoney) |
+| Tables | `<prefix>_<plural noun>`, snake_case. Prefixes: `ios_` (this library), `prt_` (ioStart), `nts_` (ioNote), `pix_` (ioPix), `cal_` (ioCalendar), `con_` (ioContact), `hlt_` (ioHealth), `dns_` (ioDNS), `tsk_` (ioTask), `bkp_` (ioBackup), `rcp_` (ioRecipe), `thg_` (ioThings), `mny_` (ioMoney), `doc_` (ioDocs) |
 | Child tables | `<prefix>_<parent singular>_<children>`: `con_contact_emails`, `pix_album_photos` |
 | Keys | `id` (a natural key the devices sync by keeps its name: `uuid`); references `<table singular>_id` |
 | Accounts | `user_id` (the row belongs to an account), `owner_id` (NULL: shared with everyone), `created_by` / `decided_by` (who did it) |

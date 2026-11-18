@@ -19,6 +19,7 @@ container or one database server:
 | ioRecipe | 8690 | `iorecipe` | `/opt/iorecipe/app` |
 | ioThings | 8700 | `iothings` | `/opt/iothings/app` |
 | ioMoney | 8710 | `iomoney` | `/opt/iomoney/app` |
+| ioDocs | 8720 | `iodocs` | `/opt/iodocs/app` |
 
 ## One line: install, add, remove, reconfigure
 

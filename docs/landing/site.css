@@ -121,7 +121,7 @@ header{
   background:var(--card);border:1px solid var(--line);border-radius:16px;
   padding:26px 24px 16px;box-shadow:var(--shadow);margin:0;
 }
-.mix-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.mix-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 @media (max-width:980px){ .mix-grid{grid-template-columns:repeat(4,1fr)} }
 @media (max-width:560px){ .mix-grid{grid-template-columns:repeat(3,1fr)} }
 .mix-app{
