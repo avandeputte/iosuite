@@ -296,7 +296,7 @@ def _csv(text: str, mapping=None, order: str = None, flip: bool = False) -> dict
                 out["problems"].append({"line": n + 1, "why": str(e)})
             continue
         out["rows"].append({"line": n + 1, "day": day, "amount": amt, "payee": cell(r, "payee") or None, "notes": cell(r, "notes") or None,
-                            "category": cell(r, "category") or None, "fitid": None})
+                            "category": cell(r, "category") or None, "fitid": None, "cells": r})
     return out
 
 

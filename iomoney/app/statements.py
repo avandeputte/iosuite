@@ -31,6 +31,16 @@ def _balance_on(aid: int, day: dt.date) -> Decimal | None:
     return Decimal(r["balance"]) if r else None
 
 
+def balance_before(a: dict, day: dt.date) -> Decimal | None:
+    """The balance at the end of the day before this one: the one kept for it. An account kept by hand keeps today's
+    alone, and that one moves with each transaction: there, today's less what the transactions since moved it by."""
+    b = _balance_on(a["id"], day - dt.timedelta(days=1))
+    if b is None and a["source"] == "manual" and a.get("track") == "transactions" and a["balance"] is not None:
+        since = db.one("SELECT COALESCE(SUM(amount), 0) AS s FROM mny_transactions WHERE account_id = %s AND pending = 0 AND day >= %s", (a["id"], day))["s"]
+        b = Decimal(a["balance"]) - _sign(a) * Decimal(since)
+    return b
+
+
 def of(u: dict, a: dict) -> dict:
     """{items: the statements the account was reconciled against, the latest first, next: {start, opening} where the
     next one starts (the day after the last one and its closing balance; without one, the account's first
@@ -41,7 +51,7 @@ def of(u: dict, a: dict) -> dict:
     else:
         first = db.one("SELECT MIN(day) AS d FROM mny_transactions WHERE account_id = %s", (a["id"],))["d"]
         start = max(first, dt.date.today() - dt.timedelta(days=31)) if first else None
-        opening = _balance_on(a["id"], start - dt.timedelta(days=1)) if start else None
+        opening = balance_before(a, start) if start else None
     return {"items": [_public(r) for r in rows], "writable": model.can_write(u, a), "isAsset": bool(a["is_asset"]),
             "next": {"start": start.isoformat() if start else None, "opening": model.n2(opening)}}
 

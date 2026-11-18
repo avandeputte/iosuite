@@ -541,7 +541,7 @@ title = "Transfers linked"
 text = "To savings, a card's payment, a loan's payment: the two halves are found and linked, and a rule learns from each."
 [[iomoney.features]]
 title = "Reconciled"
-text = "Tick an account's transactions off against the bank's statement until the difference is zero; a balance check says when an account and its transactions disagree."
+text = "Upload the bank's statement PDF or its CSV file and the account is ticked off against it, with what is missing on either side pointed out; a balance check says when an account and its transactions disagree."
 [[iomoney.features]]
 title = "Tidy up"
 text = "The transactions that need a look, likely duplicates, the payees to rename or merge, your own tags, and many transactions changed at once."

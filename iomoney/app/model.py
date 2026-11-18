@@ -817,10 +817,11 @@ def with_transfers(items: list[dict], u: dict) -> list[dict]:
 
 
 def _move_balance(aid: int, delta: Decimal) -> None:
-    """A manual account that follows its transactions: its balance moves with each one added, changed or deleted."""
+    """A manual account that follows its transactions: its balance moves with each one added, changed or deleted.
+    What is owed (a card, a loan) is kept as a positive number, so there money out makes the balance go up."""
     a = account_row(aid)
     if delta and a and a["source"] == "manual" and a.get("track") == "transactions":
-        set_balance(aid, dt.date.today(), Decimal(a["balance"]) + delta, "manual")
+        set_balance(aid, dt.date.today(), Decimal(a["balance"]) + (delta if a["is_asset"] else -delta), "manual")
 
 
 def create_transaction(u: dict, a: dict, b: dict) -> dict:

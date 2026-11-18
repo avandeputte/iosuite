@@ -1743,7 +1743,7 @@ async function showTidy(page) {
     tile('#/rules', 'tune', '--c-teal', 'Rules', 'What each rule does, the ones that do nothing, the ones missing'),
     tile('#/changes', 'history', '--c-slate', 'Recent changes', 'What was changed by hand, each with its way back')));
   put(page, h('h2', { class: 'recurhead' }, icon('bank'), h('span', null, 'Against the bank')), h('div', { class: 'tidygrid' },
-    tile(reconcile, 'check', '--c-green', 'Reconcile with a statement', 'Tick an account’s transactions off against the bank’s statement'),
+    tile(reconcile, 'check', '--c-green', 'Reconcile with a statement', 'Tick an account’s transactions off against the bank’s statement, by hand or from its PDF or CSV file'),
     tile(imp, 'upload', '--c-orange', 'Import a bank file', 'CSV, OFX or QFX into an account kept by hand')));
 }
 
@@ -1921,7 +1921,14 @@ async function showReconcile(page, a) {
   put(page, h('p', { class: 'muted' }, 'Take the bank’s statement: its first and last day, and the balance at its start and at its end. Tick each transaction the statement shows. ',
     'When the ticked ones add up to what the balance moved by, the account agrees with the bank up to that day.',
     d.isAsset ? null : ' What is owed counts as a positive balance here, so a purchase makes it go up.'));
-  put(page, h('div', { class: 'box' }, h('div', { class: 'grid' }, fld('First day', f.start), fld('Last day', f.end), fld(d.isAsset ? 'Balance at the start' : 'Owed at the start', f.opening), fld(d.isAsset ? 'Balance at the end' : 'Owed at the end', f.closing))));
+  // the bank's own file held against the account: the statement's PDF, or a CSV, OFX or QFX file from its website
+  let cmp = null, found = new Set(), extra = new Set();
+  const cmpbox = h('div', { class: 'cmpbox' });
+  const pick = h('input', { type: 'file', accept: '.pdf,.csv,.ofx,.qfx,.qbo,.txt,application/pdf,text/csv', hidden: true,
+    onchange: (e) => { const x = e.target.files[0]; e.target.value = ''; if (x) read({ aid: a.id, file: x }); } });
+  const pickBtn = h('button', { class: 'pillbtn', onclick: () => pick.click() }, icon('upload', 'xs'), 'Compare with the bank’s file');
+  put(page, h('div', { class: 'box' }, h('div', { class: 'grid' }, fld('First day', f.start), fld('Last day', f.end), fld(d.isAsset ? 'Balance at the start' : 'Owed at the start', f.opening), fld(d.isAsset ? 'Balance at the end' : 'Owed at the end', f.closing)),
+    h('div', { class: 'cmppick' }, pickBtn, pick, h('span', { class: 'muted small' }, 'The statement’s PDF, or a CSV, OFX or QFX file from the bank’s website: its days and balances are filled in, what it shows is ticked, and what differs is listed. The file is read and not kept.'))), cmpbox);
   const lines = h('div');
   const bar = h('div', { class: 'bulkbar recbar' });
   put(page, lines, bar);
@@ -1935,7 +1942,7 @@ async function showReconcile(page, a) {
       if (diff && !await confirmDialog('Finish with a difference', `The transactions ticked do not add up to the statement: ${money(Math.abs(diff) / 100, a.currency)} is left. Keep the statement as it is anyway?`, 'Finish anyway')) return;
       try {
         const r = await api(`api/accounts/${a.id}/statements`, { method: 'POST', json: { start: f.start.value, end: f.end.value, opening: o, closing: c, ids: [...ticked], anyway: !!diff } });
-        toast(`${plural(r.reconciled, 'transaction')} reconciled`); onRoute();
+        S.recFile = null; toast(`${plural(r.reconciled, 'transaction')} reconciled`); onRoute();
       } catch (e) { fail(e); }
     };
     fill(bar, h('span', null, `${ticked.size} of ${items.length} ticked: `, h('b', { class: 'num' }, money(sum / 100, a.currency))),
@@ -1950,7 +1957,7 @@ async function showReconcile(page, a) {
     try {
       const got = await api(`api/accounts/${a.id}/statement?${new URLSearchParams({ start: f.start.value, end: f.end.value })}`);
       items = got.items; sign = got.sign;
-      for (const t of items) if (t.reconciled && !t.earlier) ticked.add(t.id);
+      for (const t of items) if (cmp ? found.has(t.id) : t.reconciled && !t.earlier) ticked.add(t.id);  // with the bank's file: what it shows
       const boxes = [];
       const row = (t) => {
         const b = h('input', { type: 'checkbox', checked: ticked.has(t.id) ? true : null, disabled: w ? null : true, 'aria-label': 'On the statement' });
@@ -1959,7 +1966,8 @@ async function showReconcile(page, a) {
         boxes.push([t, b, li]);
         put(li, h('label', { class: 'r' }, b, h('span', { class: 'day' }, fmtDay(t.day)),
           h('span', { class: 'main' }, h('b', null, t.merchant || t.description || '(no payee)', t.earlier ? h('span', { class: 'tag', title: 'From before this statement, not ticked off on the one before' }, 'Earlier') : null,
-            t.hidden ? h('span', { class: 'tag' }, 'Hidden') : null), h('small', null, [t.transfer ? `Transfer ${t.amount < 0 ? 'to' : 'from'} ${t.transfer.account}` : t.category, t.description && t.description !== t.merchant ? t.description : null].filter(Boolean).join(' · '))),
+            t.hidden ? h('span', { class: 'tag' }, 'Hidden') : null,
+            cmp && extra.has(t.id) ? h('span', { class: 'tag warn', title: 'In the account in these days, but the bank’s file does not show it' }, cmp.kind === 'pdf' ? 'Not on the statement' : 'Not in the file') : null), h('small', null, [t.transfer ? `Transfer ${t.amount < 0 ? 'to' : 'from'} ${t.transfer.account}` : t.category, t.description && t.description !== t.merchant ? t.description : null].filter(Boolean).join(' · '))),
           h('span', { class: 'pt' }, amt(t.amount, t.currency))));
         return li;
       };
@@ -1970,8 +1978,88 @@ async function showReconcile(page, a) {
     } catch (e) { fill(lines, h('p', { class: 'muted' }, e.message || String(e))); }
     summary();
   };
+  /** What the file and the account do not agree on, above the list: the lines the account does not have (to add, or
+      with the transaction of another amount that looks like it), the ones it has under another day, and how many
+      of its own the file does not show (marked in the list). */
+  const drawCmp = () => {
+    const r = cmp;
+    if (!r) { fill(cmpbox); return; }
+    const it = r.kind === 'pdf' ? 'statement' : 'file', onIt = r.kind === 'pdf' ? 'on the statement' : 'in the file';
+    const can = w && followsTx(a);
+    const again = () => read(S.recFile);
+    const post = (x) => api(`api/accounts/${a.id}/transactions`, { method: 'POST', json: x });
+    const addOne = async (x) => {
+      const g = { merchant: inp(x.text), day: inp(x.day, { type: 'date' }), amount: inp(x.signed ? x.amount : -Math.abs(x.amount), { inputmode: 'decimal', placeholder: '-12.50 out, 100 in' }) };
+      const ok = await dialog('Add the transaction', h('div', null, h('div', { class: 'grid' }, fld('Payee', g.merchant, true), fld('Amount', g.amount), fld('Date', g.day)),
+        x.signed ? null : h('p', { class: 'muted small' }, 'The statement does not say which way the money went: it is put as money out. Take the minus away for money in.'),
+        a.source === 'manual' ? null : h('p', { class: 'muted small' }, 'Added here, by hand, beside Monarch Money’s own. Should Monarch still bring it later, it shows under Likely duplicates.')),
+      [{ label: 'Cancel', value: false }, { label: 'Add', value: true, primary: true }]);
+      if (!ok) return;
+      try { await post({ merchant: g.merchant.value, day: g.day.value, amount: g.amount.value }); toast('Added'); await again(); } catch (e) { fail(e); }
+    };
+    const addAll = async (xs) => {
+      if (!await confirmDialog('Add them all', `Add the ${plural(xs.length, 'transaction')} the account does not have, as the ${it} gives them?`, 'Add them')) return;
+      let n = 0;
+      cmpbox.classList.add('busy');
+      try { for (const x of xs) { await post({ merchant: x.text, day: x.day, amount: x.amount }); n += 1; } } catch (e) { fail(e); }
+      if (n) toast(`${plural(n, 'transaction')} added`);
+      await again();
+    };
+    const open = async (id) => { try { txDialog(await api(`api/transactions/${id}`)); } catch (e) { fail(e); } };
+    const line = (x, note, ...right) => h('li', null, h('div', { class: 'r' }, h('span', { class: 'day' }, fmtDay(x.day)),
+      h('span', { class: 'main' }, h('b', null, x.text || '(no text)'), note ? h('small', null, note) : null),
+      h('span', { class: 'pt' }, x.signed ? amt(x.amount, a.currency) : h('span', { class: 'num' }, money(x.amount, a.currency))), right));
+    const lone = r.missing.filter((x) => !x.differs);
+    const here = [...extra].filter((id) => items.some((t) => t.id === id)).length;
+    const notes = [
+      r.total ? null : 'No lines could be read from it, only its days and balances: tick the transactions by hand.',
+      r.adds === true ? 'Its lines add up to its two balances, so all of it was read.' : null,
+      r.adds === false ? 'Its lines as read do not add up to its two balances: a line may have been missed or read wrong, so look over the ticks.' : null,
+      r.kind === 'pdf' && r.total && r.closing == null ? 'Its balances were not found: type them from the statement.' : null,
+      r.worked ? `The ${it} gives no balance: the one at the end is the account’s balance on the day before its first day plus its lines. Check it against the bank’s.` : null,
+      r.kind !== 'pdf' && r.closing == null ? 'The file gives no balance, and none is kept for the day before its first day: type the two balances to finish.' : null,
+      r.flipped ? 'The file writes money out as a positive number: it was turned around.' : null,
+      r.problems ? `${plural(r.problems, 'row')} of the file could not be read.` : null];
+    const order = r.guessed && r.dateOrder !== 'ymd' ? h('p', { class: 'muted small' }, `Its dates read both ways: they were taken as ${r.dateOrder === 'mdy' ? 'month, then day' : 'day, then month'}. `,
+      h('button', { class: 'lnk', onclick: () => read({ ...S.recFile, order: r.dateOrder === 'mdy' ? 'dmy' : 'mdy' }) }, r.dateOrder === 'mdy' ? 'Read them as day, then month' : 'Read them as month, then day')) : null;
+    const agree = r.total && !r.missingCount && !r.elsewhere.length && !here;
+    fill(cmpbox, h('div', { class: 'box' },
+      h('div', { class: 'cmphead' }, icon(agree ? 'check' : 'receipt', 's'),
+        h('b', null, `${r.name || `The ${it}`}: ${plural(r.total, 'line')}, ${r.matched.length} found here and ticked`), h('span', { class: 'grow' }),
+        h('button', { class: 'iconbtn', title: `Put the ${it} away`, 'aria-label': `Put the ${it} away`, onclick: () => { cmp = null; S.recFile = null; drawCmp(); load(); } }, icon('close', 's'))),
+      agree ? h('p', { class: 'cmpok' }, `Everything ${onIt} is in the account, and everything in the account in these days is ${onIt}.`) : null,
+      notes.filter(Boolean).map((x) => h('p', { class: 'muted small' }, x)), order,
+      r.missingCount ? [h('h3', null, `${r.kind === 'pdf' ? 'On the statement' : 'In the file'}, not here (${r.missingCount})`, can && lone.length > 1 && lone.every((x) => x.signed) ? h('button', { class: 'pillbtn tiny', onclick: () => addAll(lone) }, icon('add', 'xs'), `Add the ${lone.length}`) : null),
+        h('ul', { class: 'rows flat cmprows' }, r.missing.map((x) => (x.differs
+          ? line(x, [`Here for ${money(x.differs.amount, a.currency)}: ${x.differs.name || '(no payee)'}, ${fmtDay(x.differs.day)}`], h('button', { class: 'pillbtn tiny', onclick: () => open(x.differs.id) }, 'Open'))
+          : line(x, null, can ? h('button', { class: 'pillbtn tiny', onclick: () => addOne(x) }, icon('add', 'xs'), 'Add') : null)))),
+        r.missingCount > r.missing.length ? h('p', { class: 'muted small' }, `The first ${r.missing.length} are shown.`) : null] : null,
+      r.elsewhere.length ? [h('h3', null, `Here, outside these days (${r.elsewhere.length})`),
+        h('ul', { class: 'rows flat cmprows' }, r.elsewhere.map((x) => line(x, x.why === 'pending' ? `Still pending here, ${fmtDay(x.at)}: it is ticked once it posts` : `Here on ${fmtDay(x.at)}, ${x.why} the ${it}’s ${x.why === 'before' ? 'first' : 'last'} day`,
+          h('button', { class: 'pillbtn tiny', onclick: () => open(x.id) }, 'Open'))))] : null,
+      here ? h('p', { class: 'cmpextra' }, h('span', { class: 'tag warn' }, r.kind === 'pdf' ? 'Not on the statement' : 'Not in the file'),
+        ` ${plural(here, 'transaction')} of these days ${here === 1 ? 'is' : 'are'} in the account but not ${onIt}: marked below and left unticked.`) : null));
+  };
+  const read = async (src) => {
+    S.recFile = src;
+    pickBtn.disabled = true; cmpbox.classList.add('busy');
+    try {
+      const q = new URLSearchParams({ name: src.file.name });
+      if (src.order) q.set('order', src.order);
+      const r = await api(`api/accounts/${a.id}/statement/read?${q}`, { method: 'POST', body: src.file, headers: { 'Content-Type': 'application/octet-stream' } });
+      cmp = r; found = new Set(r.matched); extra = new Set(r.extra);
+      if (r.start) f.start.value = r.start;
+      if (r.end) f.end.value = r.end;
+      if (r.opening != null) f.opening.value = r.opening;
+      if (r.closing != null) f.closing.value = r.closing;
+      await load(); drawCmp();
+    } catch (e) { S.recFile = null; fail(e); }
+    pickBtn.disabled = false; cmpbox.classList.remove('busy');
+  };
   f.start.onchange = load; f.end.onchange = load; f.opening.oninput = summary; f.closing.oninput = summary;
   await load();
+  if (S.recFile && S.recFile.aid === a.id) await read(S.recFile);  // back from a transaction changed here: the file once more
+  else S.recFile = null;
   if (d.items.length) {
     put(page, h('h2', { class: 'recurhead' }, icon('history'), h('span', null, 'Statements reconciled')), h('ul', { class: 'rows flat' }, d.items.map((s) => h('li', null, h('div', { class: 'r' },
       h('span', { class: 'main' }, h('b', null, `${fmtDay(s.start, true)} to ${fmtDay(s.end, true)}`),
