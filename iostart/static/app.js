@@ -244,10 +244,12 @@ async function showHome(page) {
   drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
   // the tiles: an app with something to show gets a column of its own; the others share one column beside them, as
   // many as there are, each shrinking to fit the row's height (with no widget tile to set that height, three to a column)
+  // a low tile of an app in LOW gets one line under its name instead (ioDocs: what is to renew)
   const tile = (a, small) => h('a', { class: `app${small ? ' small' : ''}`, href: a.url, 'data-app': a.key, title: a.url },
-    h('img', { src: a.icon, alt: '' }), h('span', { class: 'who' }, h('span', { class: 'nmrow' }, appName(a.name, a.color), h('span', { class: 'st' }))),
+    h('img', { src: a.icon, alt: '' }), h('span', { class: 'who' }, h('span', { class: 'nmrow' }, appName(a.name, a.color), h('span', { class: 'st' })),
+      small && LOW[a.key] ? h('span', { class: 'line muted small' }) : null),
     h('div', { class: 'more' }));  // what the app shows here: drawWidgets
-  const big = S.apps.filter((a) => WIDGETS[a.key]), rest = S.apps.filter((a) => !WIDGETS[a.key]);
+  const big = S.apps.filter((a) => WIDGETS[a.key] && !LOW[a.key]), rest = S.apps.filter((a) => !big.includes(a));
   const per = big.length ? rest.length : 3, stacks = [];
   for (let i = 0; i < rest.length; i += per) {
     const some = rest.slice(i, i + per);
@@ -848,9 +850,15 @@ const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iotask: 
 const pixPhotoUrl = (pix, id) => `${pix.url}/#/photos?p=${id}`;
 const viewerTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
 
+/* Apps whose tile is a low one in the shared column, with one line under the name rather than a column of its own:
+   draw(d) gives that line's text, or [text, warn]. */
+const LOW = { iodocs: drawDocsLine };
+
 function drawWidgets(page, again = false) {
   const tz = viewerTz();
   for (const tile of page.querySelectorAll('.app[data-app]')) {
+    const line = tile.querySelector('.who > .line');
+    if (line) { drawLowLine(tile, line, tz); continue; }
     const draw = WIDGETS[tile.dataset.app], box = tile.querySelector('.more');
     if (!draw || !box) continue;
     const why = (text) => { if (box.isConnected) box.replaceChildren(h('div', { class: 'wg' }, h('div', { class: 'muted small wgwhy' }, text))); };
@@ -940,6 +948,30 @@ function drawMoneyWidget(d) {
     shown.map((b) => h('div', { class: 'wgev', title: [b.name, long(b.day), b.account, b.approximate ? 'about this much' : null].filter(Boolean).join(' · ') },
       h('span', { class: 'wgwhen muted' }, short(b.day)), h('span', { class: 'wgtitle' }, b.name),
       h('span', { class: 'wgamt' }, `${b.approximate ? '~' : ''}${money(-b.amount, b.currency)}`)))];
+}
+
+/** A low tile's one line (LOW); an app that is down or closed to this account leaves the line empty. */
+function drawLowLine(tile, line, tz) {
+  fetch(`api/widgets/${tile.dataset.app}?tz=${encodeURIComponent(tz)}`, { credentials: 'same-origin' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (!d || !line.isConnected) return;
+      const [text, warn, title] = LOW[tile.dataset.app](d);
+      line.classList.toggle('wgwarn', !!warn); line.classList.toggle('muted', !warn);
+      line.replaceChildren(warn ? icon('warn', 's') : '', text);
+      tile.title = title || tile.href;
+    })
+    .catch(() => { /* the next refresh */ });
+}
+
+/** ioDocs in its low tile: "Nothing to renew", "2 to renew", "1 expired +2" (short, to fit the narrow tile); the tooltip names them. */
+function drawDocsLine(d) {
+  const items = d.items || [], n = items.length + (d.more || 0);
+  if (!n) return ['Nothing to renew'];
+  const expired = items.filter((x) => x.state === 'expired').length;
+  const text = expired ? `${expired} expired${n > expired ? ` +${n - expired}` : ''}` : `${n} to renew`;
+  const title = items.map((x) => `${x.title}: ${docWhen(x)}`).concat(d.more ? [`+${d.more} more`] : []).join('\n');
+  return [text, expired > 0, title];
 }
 
 /** ioDocs: the passports, licenses and policies that have expired or come within their reminder, the soonest first. */
