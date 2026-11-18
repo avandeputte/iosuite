@@ -91,7 +91,8 @@ quotes, and what the house and the cars are worth after their loans.
   click), what has another amount, and what the account has that the bank does not show. The file is read on your
   server and not kept; a scanned statement (pictures of its pages) cannot be read.
 - **Balance check**: does each account's balance at the bank agree with its transactions here? Where it does not,
-  ioMoney says by how much, which way, and in which days the gap appeared.
+  ioMoney says by how much, which way, and in which days the gap appeared. A payment Monarch still calls pending
+  weeks after the bank took it is counted and named, and a transaction dated a day off from the balance is no gap.
 - **Rules kept in order**: each rule shows how many transactions it is for; one that matches nothing or never decides
   is marked, and a rule is offered when you gave the same payee the same category by hand again and again.
 - **History and undo**: every change made by hand is kept with who and when, and can be taken back; a transaction

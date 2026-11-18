@@ -118,7 +118,8 @@ def data_checks() -> dict:
     search_transactions(needs_look=true) lists them), likelyDuplicates (groups of transactions that look like one
     kept twice: the same account and amount within three days, with why), and balanceCheck (for each cash account
     and card from Monarch Money: whether its balance moved by what its transactions add up to over the past 90 days,
-    the gap when not, and the weeks in which it appeared). Nothing is changed."""
+    the gap when not, the weeks in which it appeared, and stale: the ones still called pending after more than a
+    week, counted where the balance shows the bank took them). Nothing is changed."""
     u = who()
     _need_role(u)
     dup = [{"why": g["whyText"], "transactions": [{k: t[k] for k in ("id", "account", "day", "amount", "merchant", "description", "pending", "source")}
