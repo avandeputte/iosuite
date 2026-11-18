@@ -36,7 +36,7 @@ def balance_before(a: dict, day: dt.date) -> Decimal | None:
     alone, and that one moves with each transaction: there, today's less what the transactions since moved it by."""
     b = _balance_on(a["id"], day - dt.timedelta(days=1))
     if b is None and a["source"] == "manual" and a.get("track") == "transactions" and a["balance"] is not None:
-        since = db.one("SELECT COALESCE(SUM(amount), 0) AS s FROM mny_transactions WHERE account_id = %s AND pending = 0 AND day >= %s", (a["id"], day))["s"]
+        since = db.one("SELECT COALESCE(SUM(amount), 0) AS s FROM mny_transactions WHERE account_id = %s AND day >= %s", (a["id"], day))["s"]
         b = Decimal(a["balance"]) - _sign(a) * Decimal(since)
     return b
 
@@ -58,7 +58,7 @@ def of(u: dict, a: dict) -> dict:
 
 def lines(u: dict, a: dict, start, end) -> dict:
     """The transactions to tick off against a statement from start to end: those of these days (the hidden ones too:
-    they are on the statement; not the pending ones), and before them the earlier ones not ticked off on the
+    they are on the statement), and before them the earlier ones not ticked off on the
     statement before (earlier: true). Each as the lists give it."""
     s, e = model.day(start, "The first day"), model.day(end, "The last day")
     if e < s:
@@ -69,9 +69,9 @@ def lines(u: dict, a: dict, start, end) -> dict:
     cols = ("t.*, a.owner_id, a.name AS account_name, a.currency, "
             "EXISTS (SELECT 1 FROM mny_reconciled r WHERE r.transaction_id = t.id) AS reconciled")
     rows = db.q(f"SELECT {cols} FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id "
-                "WHERE t.account_id = %s AND t.pending = 0 AND t.day BETWEEN %s AND %s ORDER BY t.day, t.id", (a["id"], s, e))
+                "WHERE t.account_id = %s AND t.day BETWEEN %s AND %s ORDER BY t.day, t.id", (a["id"], s, e))
     early = db.q(f"SELECT {cols} FROM mny_transactions t JOIN mny_accounts a ON a.id = t.account_id "
-                 "WHERE t.account_id = %s AND t.pending = 0 AND t.day >= %s AND t.day < %s "
+                 "WHERE t.account_id = %s AND t.day >= %s AND t.day < %s "
                  "AND NOT EXISTS (SELECT 1 FROM mny_reconciled r WHERE r.transaction_id = t.id) ORDER BY t.day, t.id",
                  (a["id"], s - dt.timedelta(days=EARLIER_DAYS), s)) if before else []
     items = model.with_transfers([model.tx_public(t, u) for t in list(early) + list(rows)], u)
@@ -93,7 +93,7 @@ def save(u: dict, a: dict, b: dict) -> dict:
         ids = sorted({int(i) for i in (b.get("ids") or [])})
     except (TypeError, ValueError):
         raise Invalid("ids: the transactions ticked off") from None
-    rows = db.q(f"SELECT id, amount FROM mny_transactions WHERE account_id = %s AND pending = 0 AND day <= %s AND id IN ({db.marks(len(ids))})",
+    rows = db.q(f"SELECT id, amount FROM mny_transactions WHERE account_id = %s AND day <= %s AND id IN ({db.marks(len(ids))})",
                 (a["id"], e, *ids)) if ids else []
     if len(rows) != len(ids):
         raise Invalid("Some of the transactions ticked off are not this account's, or are after the statement")

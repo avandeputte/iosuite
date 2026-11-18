@@ -777,8 +777,8 @@ async def read_statement(aid: int, request: Request, name: str | None = None, or
     order: how day and month stand in its dates (mdy, dmy, ymd), when the guess is wrong; flip: 1 or 0, whether it
     writes money out as a positive number (as left out: whichever fits). {kind, start, end, opening, closing, worked,
     adds, total, sum, matched: the transactions found (to tick), missing: the lines the account does not have (with
-    differs: the transaction of another amount that looks like it), elsewhere: the lines it has outside these days
-    or still pending, extra: the transactions of these days the file does not show, dateOrder, guessed, flipped}."""
+    differs: the transaction of another amount that looks like it), elsewhere: the lines it has outside these days,
+    extra: the transactions of these days the file does not show, dateOrder, guessed, flipped}."""
     u = _u(request)
     raw = await request.body()
     return await run_in_threadpool(lambda: statementfile.read(u, model.account(u, aid), raw, name, order, flip))
@@ -803,7 +803,7 @@ def delete_statement(sid: int, request: Request):
 @router.get("/api/balance-check", dependencies=[access.signed_in])
 def balance_check(request: Request, days: int = balancecheck.DAYS):
     """For each cash account and card from Monarch Money with a bank behind it: whether its balance moved, over the
-    past days, by what its transactions add up to (status ok, pending, accepted, gap or unknown), the gap, and the
+    past days, by what its transactions add up to (status ok, waiting, accepted, gap or unknown), the gap, and the
     weeks in which it appeared."""
     return balancecheck.check(_u(request), days)
 

@@ -672,7 +672,7 @@ def tx_public(t: dict, u: dict = None) -> dict:
     out = {"id": t["id"], "accountId": t["account_id"], "account": t.get("account_name"), "day": t["day"].isoformat(),
            "amount": n2(t["amount"]), "currency": t.get("currency"), "merchant": t["merchant"], "description": t["description"],
            "category": t["category"], "group": t["category_group"], "notes": t["notes"], "tags": tags,
-           "pending": bool(t["pending"]), "hidden": bool(t["hidden"]),
+           "hidden": bool(t["hidden"]),
            "edited": bool(t["edited"]), "source": t["source"], "reconciled": bool(t.get("reconciled"))}
     if u is not None:
         out["writable"] = can_write(u, t)

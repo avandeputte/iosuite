@@ -2,7 +2,7 @@
 
 A transaction needs a look when it came in after the household started looking (the first time this page was used:
 what was there before counts as seen) or has no category (and is neither split nor half of a transfer), is not
-pending (a pending one comes back under another id when it posts) and not hidden, and nobody marked it reviewed.
+hidden, and nobody marked it reviewed.
 Changing a transaction by hand marks it; so does Reviewed on the page, for one, for those ticked, or for all."""
 import time
 
@@ -21,7 +21,7 @@ def since() -> int:
 
 def where() -> tuple[str, list]:
     """SQL for the transactions (t) that need a look."""
-    return ("t.pending = 0 AND t.hidden = 0 AND NOT EXISTS (SELECT 1 FROM mny_reviewed v WHERE v.transaction_id = t.id) "
+    return ("t.hidden = 0 AND NOT EXISTS (SELECT 1 FROM mny_reviewed v WHERE v.transaction_id = t.id) "
             "AND (t.created_at >= FROM_UNIXTIME(%s) OR ((t.category IS NULL OR t.category = '') "
             "AND NOT EXISTS (SELECT 1 FROM mny_splits s WHERE s.transaction_id = t.id) "
             "AND NOT EXISTS (SELECT 1 FROM mny_transfers x WHERE x.out_id = t.id OR x.in_id = t.id)))", [since()])
