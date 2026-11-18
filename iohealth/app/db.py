@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 import pymysql
 from iosuite_shared import db as shared_db
+from iosuite_shared import schema
 
 from app import config
 
@@ -213,8 +214,7 @@ def migrate():
     """Create the tables and views that are missing (idempotent)."""
     with _lock, pool.auto() as con:
         with con.cursor() as cur:
-            for stmt in SCHEMA:
-                cur.execute(stmt + TABLE_OPTIONS)
+            schema.create(cur, SCHEMA, TABLE_OPTIONS)
             cur.execute(DELAY_BY_TYPE)
             cur.execute(DELAY_BY_DAY)
             cur.execute("CREATE TABLE IF NOT EXISTS hlt_schema_version (version INT PRIMARY KEY, applied_at DATETIME(3) NOT NULL)" + TABLE_OPTIONS)

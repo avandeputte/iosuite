@@ -20,7 +20,7 @@ from iosuite_shared import config, schema
 
 log = logging.getLogger("iosuite_shared.db")
 
-SCHEMA_VERSION = 11  # recorded in ios_schema_version; the tables are made as SCHEMA says (pre-release: no upgrade steps)
+SCHEMA_VERSION = 11  # recorded in ios_schema_version; the tables are made as SCHEMA says, and get the columns and indexes added to it later (schema.create)
 PREFIX = "ios"
 OPTIONS = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 
@@ -434,8 +434,7 @@ def init():
             pass  # no right to create databases: it has to exist already
         with tx() as con:
             with con.cursor() as cur:
-                for stmt in SCHEMA:
-                    cur.execute(stmt + OPTIONS)
+                schema.create(cur, SCHEMA, OPTIONS)
                 schema.ensure_version_table(cur, PREFIX)
                 schema.record_version(cur, PREFIX, SCHEMA_VERSION)
         _ready = True

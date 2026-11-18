@@ -256,8 +256,7 @@ def init():
             return
         ensure_database()
         with _db.tx() as con, con.cursor() as cur:
-            for stmt in SCHEMA:
-                cur.execute(stmt + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
+            schema.create(cur, SCHEMA, " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci")
             cur.execute("INSERT IGNORE INTO nts_settings (name, value) VALUES ('write_lock', '')")  # tx()
             schema.ensure_version_table(cur, PREFIX)
             schema.record_version(cur, PREFIX, SCHEMA_VERSION)
