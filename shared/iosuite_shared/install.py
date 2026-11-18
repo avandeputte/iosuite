@@ -73,25 +73,16 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from iosuite_shared import catalog
+
 # the one repository of the suite: a folder per app, the shared library in shared/
 REPO = "avandeputte/iosuite"
-# name -> how to set it up (its folder in the repository has the same name, and so do its database and its database
-# user by default: iothings). `env` is the prefix of the environment variables its setup.sh reads the secrets from (PFX_DB, PFX_SUITE_DB, PFX_ADMIN).
-APPS = {
-    "iostart": dict(label="ioStart", port=8630, env="IOSTART"),
-    "iocalendar": dict(label="ioCalendar", port=8620, env="IOCALENDAR"),
-    "iocontact": dict(label="ioContact", port=8640, env="IOCONTACT"),
-    "ionote": dict(label="ioNote", port=8610, env="IONOTE", data=True),
-    "iohealth": dict(label="ioHealth", port=8650, env="IOHEALTH"),
-    "iotask": dict(label="ioTask", port=8670, env="IOTASK"),
-    "iodns": dict(label="ioDNS", port=8660, env="IODNS"),
-    "iobackup": dict(label="ioBackup", port=8680, env="IOBACKUP"),
-    "iorecipe": dict(label="ioRecipe", port=8690, env="IORECIPE"),
-    "iothings": dict(label="ioThings", port=8700, env="IOTHINGS"),
-    "iomoney": dict(label="ioMoney", port=8710, env="IOMONEY"),
-    "iopix": dict(label="ioPix", port=8600, env="IOPIX", data=True,
-                  extra=["--no-digikam", "--features", "none"], photos=True, launchd="com.iopix"),
-}
+# name -> how to set it up, from the apps' manifests (iosuite_shared.catalog: <app>/app.json "install"), in the order
+# they are installed: its folder in the repository has the same name, and so do its database and its database user by
+# default (iothings). `env` is the prefix of the environment variables its setup.sh reads the secrets from (PFX_DB,
+# PFX_SUITE_DB, PFX_ADMIN).
+APPS = {k: dict(label=catalog.APPS[k]["name"], port=catalog.APPS[k]["port"], env=catalog.env_of(k), **(catalog.APPS[k].get("install") or {}))
+        for k in catalog.install_order()}
 DEFAULT_PHOTOS = "/library/photos"
 # What a person keeps that no removal deletes, by the config.env setting that names its folder: (setting, what it is)
 KEPT = (("PHOTOS_ROOT", "photos"), ("BACKUP_DIR", "backups"), ("DIGIKAM_DB_DIR", "digiKam database"))

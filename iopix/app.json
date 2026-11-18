@@ -1,0 +1,37 @@
+{
+  "key": "iopix",
+  "name": "ioPix",
+  "description": "Photos",
+  "tag": "Photos",
+  "color": "#3b4a8c",
+  "port": 8600,
+  "folder": "pix",
+  "order": 20,
+  "heavy": true,
+  "keepsOwn": [
+    "setup",
+    "workflow"
+  ],
+  "compose": {
+    "name": "photos",
+    "what": "photos"
+  },
+  "install": {
+    "data": true,
+    "extra": [
+      "--no-digikam",
+      "--features",
+      "none"
+    ],
+    "photos": true,
+    "launchd": "com.iopix"
+  },
+  "items": [
+    {
+      "kind": "photo",
+      "label": "Photo",
+      "plural": "Photos",
+      "href": "#/photos?p={id}"
+    }
+  ]
+}

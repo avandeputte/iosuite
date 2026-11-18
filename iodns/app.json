@@ -1,0 +1,15 @@
+{
+  "key": "iodns",
+  "name": "ioDNS",
+  "description": "Local DNS",
+  "tag": "Local DNS",
+  "color": "#0e7c86",
+  "port": 8660,
+  "folder": "dns",
+  "order": 110,
+  "adminTool": true,
+  "compose": {
+    "name": "dns",
+    "what": "DNS records"
+  }
+}

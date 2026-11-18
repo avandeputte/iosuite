@@ -1,0 +1,29 @@
+{
+  "key": "iothings",
+  "name": "ioThings",
+  "description": "Everything you own",
+  "tag": "Everything you own",
+  "color": "#2a6f97",
+  "port": 8700,
+  "folder": "things",
+  "order": 70,
+  "compose": {
+    "name": "things",
+    "what": "inventory"
+  },
+  "items": [
+    {
+      "kind": "item",
+      "label": "Thing",
+      "plural": "Things",
+      "href": "#/item/{id}"
+    }
+  ],
+  "notifications": [
+    {
+      "kind": "things",
+      "label": "Upkeep and warranties",
+      "hint": "In the morning, the upkeep that is due and the warranties about to end"
+    }
+  ]
+}

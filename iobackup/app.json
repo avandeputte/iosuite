@@ -1,0 +1,23 @@
+{
+  "key": "iobackup",
+  "name": "ioBackup",
+  "description": "Database backups",
+  "tag": "Database backups",
+  "color": "#8a4b0f",
+  "port": 8680,
+  "folder": "backup",
+  "order": 120,
+  "adminTool": true,
+  "compose": {
+    "name": "backup",
+    "what": "backups"
+  },
+  "notifications": [
+    {
+      "kind": "backups",
+      "label": "Failed backups",
+      "hint": "When a backup does not finish",
+      "admin": true
+    }
+  ]
+}

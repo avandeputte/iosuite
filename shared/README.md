@@ -420,12 +420,27 @@ database; pass `settings=(get, set)` to keep it elsewhere.
 
 ## The suite's apps
 
+### What each app is: its manifest
+
+Every app's folder holds one `app.json`: its key, name, colour, default port, folder on the suite's one address, how
+the suite installer sets it up, the kinds of items it has (linked items) and the notifications it sends
+(`iosuite_shared/catalog.py` lists the fields). `python3 shared/templates/render.py` gathers them into
+`iosuite_shared/apps.json`, which goes with every install of the library (an app installed alone still knows the
+others' ports and folders), and writes every list of apps made from them: install.sh, the Proxmox scripts' "Also
+install" lists, the Docker Compose builder. CI runs it with `--check`. The library's lists read `catalog`:
+`suite.PORTS`, `suite.FOLDERS`, `install.APPS`, `push.KINDS`, `related.KINDS`, and `Auth` takes the name, description,
+colour and admin-tool flag from it. A new app: its folder, its `app.json` (copy one), then `render.py`.
+
+The manifest says what an app is, not that it is there: which apps a person sees is the list below, which each app
+writes itself when it runs.
+
+### Where each app is: the list in the Shared ioSuite database
+
 Each app installs on its own, so the Shared ioSuite database also keeps the list of the suite's apps (table `ios_apps`), which
 every app writes itself: no address to type into the start page or into another app.
 
 ```python
-auth = Auth("iocalendar", app_label="ioCalendar", version=__version__, public_url=config.PUBLIC_URL,
-            description="Calendar", color="#963522")
+auth = Auth("iocalendar", version=__version__, public_url=config.PUBLIC_URL)  # name, description, colour: app.json
 ```
 
 Every app serves its web app's files under `/static/` and its mark at `/static/icons/mark.svg` (`suite.ICON`,
