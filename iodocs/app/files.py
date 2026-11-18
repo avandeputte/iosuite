@@ -168,10 +168,10 @@ def read(u: dict, d: dict, fid, apply: bool = True) -> dict:
     db.ex("UPDATE doc_files SET text = %s, found = %s, read_at = CURRENT_TIMESTAMP WHERE id = %s AND doc_id = %s",
           (got["text"], json.dumps(found, ensure_ascii=False, default=_json) if found else None, int(fid), d["id"]))
     rewords(d["id"])
-    out = {"found": found, "source": got["source"], "filled": [], "differs": [], "available": can}
+    out = {"found": found, "source": got["source"], "filled": [], "differs": [], "unread": [], "available": can}
     if apply and found:
         from app import model
-        out.update(model.apply_found(u, model.get(d["id"]), got["found"]))
+        out.update(model.apply_found(u, model.get(d["id"]), {**got["found"], "source": got["source"]}))
     out["file"] = one(d["id"], fid)
     return out
 

@@ -516,6 +516,7 @@ def renew(u: dict, d: dict, data: dict) -> dict:
 
 # ---- what a scan says, applied
 
+ZONE_KINDS = ("passport", "passport_card", "id_card", "residence", "visa")  # the kinds with a machine-readable zone
 LABELS = {"number": "Number", "issuer": "Issued by", "country": "Country", "issued_on": "Issued on", "expires_on": "Expires on",
           "kind": "Kind", "title": "Title", "people": "Whose"}
 EXTRA = (("holder", "Name"), ("birthDate", "Date of birth"), ("sex", "Sex"), ("nationality", "Nationality"),
@@ -582,5 +583,10 @@ def apply_found(u: dict, d: dict, found: dict) -> dict:
     if sets:
         db.ex(f"UPDATE doc_documents SET {', '.join(k + ' = %s' for k in sets)} WHERE id = %s", [*sets.values(), d["id"]])
     rewords(d["id"])
-    return {"filled": filled, "differs": differs}
+    # what a passport or an ID card should have given and did not (most often its issue date: it is only in the printed
+    # words, which a scan cannot always be sure of), for the person to type in from the page
+    unread = []
+    if found.get("source") == "mrz" or (found.get("checked") and kind in ZONE_KINDS):
+        unread = [LABELS[c] for c in ("number", "issued_on", "expires_on") if not d.get(c) and c not in sets]
+    return {"filled": filled, "differs": differs, "unread": unread}
 
