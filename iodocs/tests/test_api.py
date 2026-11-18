@@ -254,6 +254,61 @@ def test_a_scanned_us_passport_booklet():
     assert "names" not in f
 
 
+def test_reading_a_passport_from_several_readings():
+    exp = dt.date(2031, 4, 9)
+    # a seven-year passport: issued 10 04 2024; one reading misread it as 10 04 2026, which a five-year one would fit
+    assert ocr.issued_from_expiry("10 04 2024", exp) == dt.date(2024, 4, 10)
+    assert ocr.issued_from_expiry("10 04 2026\n09 04 2031", exp, 2) is None
+    assert ocr.issued_from_expiry("10 04 2024\n10 04 2024\n10 04 2026", exp, 2) == dt.date(2024, 4, 10)
+    assert ocr.issued_from_expiry("10 APR 2021", exp) == dt.date(2021, 4, 10)  # ten years
+    assert ocr.issued_from_expiry("09 04 2031", exp) is None                     # the expiry itself is no issue date
+    l2 = _us_passport_zone("X98765432", "900215", "310409", "")
+    reads = ["P<UTODOES<ROE<<JOHNN<<<<<<<<<<<<<<<<<<<<<<<<", "P<UTODOE<ROE<<JOHN<<<<<<<<<<<KK<<CCESS<<<<",
+             "P<UTODOE<ROES<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<"]
+    zones = [None] + [ocr.parse_mrz(r + "\n" + l2.replace("USA", "UTO") + "\n") for r in reads]
+    assert all(z and z["number"] == "X98765432" for z in zones[1:]), zones
+    m = ocr.vote_names(zones)
+    assert m["surname"] == "Doe Roe" and m["given"] == "John", m
+
+
+def _european_passport_booklet() -> bytes:
+    """A made-up seven-year passport, the open booklet scanned whole: a busy page of pictures and words above, the
+    photo page below on a pale pink pattern, dates as figures ("10 04 2024"), labels in two languages."""
+    sans = ImageFont.truetype("DejaVuSans.ttf", 22)
+    big = ImageFont.truetype("DejaVuSans.ttf", 30)
+    mono = ImageFont.truetype("DejaVuSansMono.ttf", 40)
+    im = Image.new("RGB", (1500, 2060), (246, 228, 230))
+    dr = ImageDraw.Draw(im)
+    for i in range(-2060, 1500, 26):
+        dr.line([(i, 0), (i + 2060, 2060)], fill=(236, 200, 210), width=1)
+    for y in range(80, 900, 34):  # the page above: a wall of small words
+        dr.text((60, y), "SOME SECURITY ELEMENTS THAT WE RECOMMEND YOU TO CHECK " * 2, font=ImageFont.truetype("DejaVuSans.ttf", 16), fill=(150, 150, 150))
+    dr.line([(0, 1030), (1500, 1030)], fill=(200, 190, 190), width=3)
+    dr.text((440, 1060), "UTOPIA  UTOPIE  UTOPIEN", font=big, fill=(120, 30, 80))
+    rows = [("Type/Type", "P"), ("1. Nom/Surname", "DOE ROE"), ("2. Prénoms/Given names", "JOHN"),
+            ("4. Date de naissance/Date of birth", "15 02 1990"), ("7. Date de délivrance/Date of issue", "10 04 2024"),
+            ("8. Date d'expiration/Date of expiry", "09 04 2031"), ("9. Autorité/Authority", "UTOPIA CITY")]
+    y = 1120
+    for label, value in rows:
+        dr.text((440, y), label, font=sans, fill=(140, 60, 100))
+        dr.text((450, y + 28), value, font=big, fill=(25, 25, 30))
+        y += 80
+    l2 = _us_passport_zone("X98765432", "900215", "310409", "").replace("USA", "UTO")
+    dr.text((60, 1880), ("P<UTODOE<ROE<<JOHN" + "<" * 44)[:44], font=mono, fill=(15, 15, 20))
+    dr.text((60, 1950), l2, font=mono, fill=(15, 15, 20))
+    out = io.BytesIO()
+    im.save(out, "JPEG", quality=88)
+    return out.getvalue()
+
+
+@pytest.mark.skipif(not ocr.tesseract() or not _font("DejaVuSans.ttf"), reason="needs tesseract and DejaVu fonts")
+def test_a_scanned_seven_year_passport_booklet():
+    f = ocr.read(_european_passport_booklet(), "image/jpeg")["found"]
+    assert f["number"] == "X98765432" and f["expiresOn"] == dt.date(2031, 4, 9), f
+    assert f["issuedOn"] == dt.date(2024, 4, 10) and f["holder"] == "John Doe Roe", f
+    assert "dates" not in f and "names" not in f
+
+
 AAMVA = ("@\n\x1e\rANSI 636029090002DL00410278ZO03190008DLDAQK1234567\nDCSCALLOWAY\nDACRILEY\nDADJANE\nDBD03142022\n"
          "DBB07211981\nDBA07212030\nDBC2\nDAG42 JUNIPER LANE\nDAIEUGENE\nDAJOR\nDAK974010000\nDCAC\nDCBNONE\nDCDNONE\nDCGUSA\n\r")
 
