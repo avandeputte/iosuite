@@ -19,7 +19,7 @@ GITHUB_SVG = ('<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 
               '.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 '
               '16 8c0-4.42-3.58-8-8-8Z"/></svg>')
 SHORT = {"iostart": "start page", "iopix": "photos", "ionote": "notes", "iocalendar": "calendar", "iotask": "tasks",
-         "iorecipe": "recipes", "iothings": "inventory", "iomoney": "finances", "iocontact": "contacts", "iohealth": "health"}
+         "iorecipe": "recipes", "iothings": "inventory", "iomoney": "finances", "iodocs": "papers", "iocontact": "contacts", "iohealth": "health"}
 
 
 def e(s):

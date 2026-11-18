@@ -76,6 +76,10 @@ def test_iothings_is_one_of_the_apps(tmp_path):
     assert e["env"]["IOTHINGS_ADMIN"].startswith("alex:")
     from iosuite_shared import suite
     assert suite.PORTS["iothings"] == 8700 and suite.FOLDERS["iothings"] == "things"
+    assert "iodocs" in install.parse_apps("all")
+    [d] = install.plan(["iodocs"], cfg, install.base_dir(app), admin="alex", service=True, from_app="iostart")
+    assert d["target"] == tmp_path / "opt" / "iodocs" / "app" and d["env"]["IODOCS_DB"] == "db.lan:3307/iodocs:suite:s3cret"
+    assert suite.PORTS["iodocs"] == 8720 and suite.FOLDERS["iodocs"] == "docs"
 
 
 def test_plan_without_an_app_database_lends_the_shared_one(tmp_path):

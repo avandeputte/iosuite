@@ -55,6 +55,7 @@ KINDS = [
     {"kind": "events", "app": "iocalendar", "label": "Event reminders", "hint": "The reminders set on events"},
     {"kind": "birthdays", "app": "iocontact", "label": "Birthdays", "hint": "In the morning, whose birthday or anniversary it is"},
     {"kind": "things", "app": "iothings", "label": "Upkeep and warranties", "hint": "In the morning, the upkeep that is due and the warranties about to end"},
+    {"kind": "docs", "app": "iodocs", "label": "Papers to renew", "hint": "In the morning, the passports, licenses and policies about to expire"},
     {"kind": "health", "app": "iohealth", "label": "Health goals", "hint": "When you reach one of your daily goals"},
     {"kind": "health_week", "app": "iohealth", "label": "Weekly health summary",
      "hint": "On Monday morning, last week’s steps, sleep and workouts next to the week before"},

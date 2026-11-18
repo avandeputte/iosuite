@@ -19,6 +19,7 @@ Small self-hosted apps for the family, each one a complete product on its own:
 | [ioRecipe](apps/iorecipe.md) | The family's recipes, with photos and import from the web | 8690 | [iorecipe](https://github.com/avandeputte/iosuite/tree/main/iorecipe) |
 | [ioThings](apps/iothings.md) | Everything you own: manuals, warranties, upkeep; imports Homebox | 8700 | [iothings](https://github.com/avandeputte/iosuite/tree/main/iothings) |
 | [ioMoney](apps/iomoney.md) | The household's finances: Monarch Money's accounts and transactions, the portfolio, the house and the cars | 8710 | [iomoney](https://github.com/avandeputte/iosuite/tree/main/iomoney) |
+| [ioDocs](apps/iodocs.md) | The family's papers: passports, licenses, policies, certificates; reads scans, reminds before they expire | 8720 | [iodocs](https://github.com/avandeputte/iosuite/tree/main/iodocs) |
 
 Two **admin tools** come with the suite, for the person who runs the servers. Only suite admins see them:
 
@@ -46,7 +47,7 @@ Every app is built the same way, so what you learn in one holds in the others:
 - **The same Settings**: Account and Display for everyone; Server (version, log, restart) for admins;
   Security and Global settings for suite admins.
 - **One version, one update**: a daily check, then one **Update** button for every app under Settings › Global settings › Updates. See [Updates](run/updates.md).
-- **An MCP server** at `/mcp` in ioPix, ioNote, ioCalendar, ioTask, ioRecipe, ioThings, ioMoney and ioContact, so an AI
+- **An MCP server** at `/mcp` in ioPix, ioNote, ioCalendar, ioTask, ioRecipe, ioThings, ioMoney, ioDocs and ioContact, so an AI
   assistant such as Claude can work with them as you, with an app password; ioStart's `/mcp` passes on every app's
   tools through one connection. See [AI assistants](run/assistants.md).
 - **Free and open source**, GPL-3.0-or-later.

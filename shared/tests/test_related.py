@@ -186,3 +186,18 @@ def test_a_transaction_in_iomoney_and_a_thing_with_its_warranty(suite_apps, monk
     assert related.having("transaction", [30, 31, 32]) == ["31"] and related.having("transaction", []) == []
     assert related.forget_many("transaction", related.having("transaction", [31])) == 1
     assert related.having("transaction", [31]) == []
+
+
+def test_a_passport_in_iodocs(suite_apps, monkeypatch):
+    suite.register("iodocs", name="iodocs", url="https://iodocs.example.com")
+    suite.invalidate()
+    doc = {"id": 9, "title": "Ava’s passport", "kindLabel": "Passport", "expiresOn": "2031-12-28", "cover": "api/documents/9/files/3",
+           "people": [{"id": 3, "displayName": "Ava Calloway"}]}
+    monkeypatch.setitem(SEEN, ("iodocs", "/api/documents/9"), doc)
+    monkeypatch.setitem(SEEN, ("iodocs", "/api/documents"), {"items": [doc]})
+    c = client()
+    got = c.post("/api/related/task/12", json={"kind": "document", "id": 9}).json()
+    assert got["title"] == "Ava’s passport" and got["text"] == "Passport · Ava Calloway · expires 2031-12-28"
+    assert got["url"] == "https://iodocs.example.com/#/doc/9"
+    found = c.get("/api/related/search", params={"q": "passport", "kinds": "document"}).json()["groups"]
+    assert found and found[0]["label"] == "Documents" and found[0]["items"][0]["id"] == "9"

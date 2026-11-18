@@ -20,7 +20,7 @@ what the app will show on the start page later (today's events, the newest photo
   the same machine, else at its LAN address, else its public one, with the suite's Cloudflare Access service token
   (Settings › Global settings › Keys and tokens) when one is set.
 - **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, what the apps find
-  for you (ioContact's people, ioCalendar's coming events, ioTask's open tasks, ioRecipe's recipes, ioThings' things, your ioNote notes,
+  for you (ioContact's people, ioCalendar's coming events, ioTask's open tasks, ioRecipe's recipes, ioThings' things, ioDocs' documents, your ioNote notes,
   ioMoney's payees and transactions ("plumber", or an amount: "$280"), ioPix's people, albums, folders and places; each asked
   with your own sign-in, so you see what you may see there), and a row per app that searches itself (each opens on
   its own results). Arrows
@@ -56,7 +56,8 @@ what the app will show on the start page later (today's events, the newest photo
   in the coming 60 days), in each calendar's colour; ioTask what is due today, the overdue tasks first, in each list's colour; ioHealth today's steps with the last seven days as bars, the
   move, exercise and stand rings, and last night's sleep; ioMoney the bills and subscriptions due in the coming
   seven days that are not paid yet (the soonest first, with what they come to), a warning when its forecast sees a cash
-  account go under its lowest balance in the next 30 days, and one when a bank link is behind. The
+  account go under its lowest balance in the next 30 days, and one when a bank link is behind; ioDocs the passports,
+  licenses and policies to renew (expired, or within their reminder), the soonest first. The
   server asks each app over its own API with the viewer's sign-in (the suite's session cookie, or the Basic / bearer
   credentials they came with), so everyone sees only what that app shows them; ioPix's thumbnails come through the
   start page too. An app that is down, or not open to that account, leaves its tile as it was. Nothing is kept.
@@ -179,7 +180,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/avandeputte/iosuite/main
 
 It asks for the ioStart database (host, port, database, user, password), the Shared ioSuite database, the web port
 (8630), the public address behind your reverse proxy (optional), the domain the sign-in is shared on (optional) and the
-admin account, and which other apps of the suite go in the same container (ioCalendar, ioTask, ioRecipe, ioThings, ioMoney, ioContact, ioNote, ioHealth:
+admin account, and which other apps of the suite go in the same container (ioCalendar, ioTask, ioRecipe, ioThings, ioMoney, ioDocs, ioContact, ioNote, ioHealth:
 they reuse those answers, each app with its own database on the same server, the same accounts and admin, each on its
 usual port); then the framework's own questions (resources, network). It creates a small Debian 13 container and runs the app's own `setup.sh` inside with
 those answers. The passwords reach `setup.sh` through its environment (a root-only file pushed in and removed again),
@@ -291,7 +292,7 @@ Covered: status and sign-in, the tiles and where they point (this host, the forw
 the environment), hiding an app, the weather (AccuWeather mocked: set-up, the place search, the server's copy and its
 age, a stale reading when AccuWeather is down), Home Assistant (its API mocked: set-up, the card's entities and
 their wording, the allowlist for switching, the search, the alerts), the tiles' glimpses (the apps' answers mocked: On this day and
-Rediscover, the rest of today and what's next, steps and rings, the week's bills, an app that refuses or is down), the search box's finds in ioMoney and ioPix, a task and a note from the search box, the bookmarks (groups, links, order, moves, the homepage import; Tidy up's check against a server made in the test, and its duplicates) and
+Rediscover, the rest of today and what's next, steps and rings, the week's bills, an app that refuses or is down), the search box's finds in ioMoney, ioDocs and ioPix, the ioDocs tile, a task and a note from the search box, the bookmarks (groups, links, order, moves, the homepage import; Tidy up's check against a server made in the test, and its duplicates) and
 what a viewer may not change. CI runs them against MariaDB.
 
 ## Layout
@@ -305,7 +306,7 @@ app/frontdoor.py   the suite on one address: passes /calendar/…, /notes/… on
 app/apps.py        the suite's apps as they registered (iosuite_shared.suite) and the order of their tiles
 app/status.py      is each app up (its /api/status) and does it have an update; is each bookmark reachable
 app/layout.py      each account's own layout: hidden tiles and cards, the tiles' order, the photo strip
-app/widgets.py     what the tiles and cards show, what the search box finds and adds: ioPix, ioCalendar, ioTask, ioHealth, ioMoney, ioNote and ioContact asked over their APIs with the viewer's sign-in
+app/widgets.py     what the tiles and cards show, what the search box finds and adds: ioPix, ioCalendar, ioTask, ioHealth, ioMoney, ioDocs, ioNote and ioContact asked over their APIs with the viewer's sign-in
 app/bookmarkcheck.py  Tidy up: the bookmarks whose address no longer answers, is gone or moved, and the same address kept twice
 app/weather.py     AccuWeather: the settings, the place search, the cached conditions and forecast
 app/homeassistant.py  Home Assistant: the settings, the chosen entities and their state, switching them, the search, the alerts

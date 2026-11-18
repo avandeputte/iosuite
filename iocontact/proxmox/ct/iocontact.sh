@@ -92,6 +92,7 @@ ask_app_settings() {
       iorecipe "ioRecipe  (8690)" OFF \
       iothings "ioThings  (8700)" OFF \
       iomoney "ioMoney  (8710)" OFF \
+      iodocs "ioDocs  (8720)" OFF \
       iodns "ioDNS  (8660, admin tool)" OFF \
       iobackup "ioBackup  (8680, admin tool)" OFF 3>&1 1>&2 2>&3) || exit 1
     IOCONTACT_ALSO=$(echo "$IOCONTACT_ALSO" | tr -d '"' | tr ' ' ',')
@@ -151,7 +152,7 @@ echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
 echo -e "${GATEWAY}${BGN}http://${IP}:${IOCONTACT_PORT:-8640}${CL}"
 for a in ${IOCONTACT_ALSO//,/ }; do
-  case "$a" in iostart) p=8630;; iocalendar) p=8620;; iocontact) p=8640;; ionote) p=8610;; iohealth) p=8650;; iotask) p=8670;; iorecipe) p=8690;; iothings) p=8700;; iomoney) p=8710;; iodns) p=8660;; iobackup) p=8680;; iopix) p=8600;; *) p="";; esac
+  case "$a" in iostart) p=8630;; iocalendar) p=8620;; iocontact) p=8640;; ionote) p=8610;; iohealth) p=8650;; iotask) p=8670;; iorecipe) p=8690;; iothings) p=8700;; iomoney) p=8710;; iodocs) p=8720;; iodns) p=8660;; iobackup) p=8680;; iopix) p=8600;; *) p="";; esac
   [[ -n "$p" ]] && echo -e "${INFO}${YW}$a:${CL} ${BGN}http://${IP}:$p${CL}"
 done
 echo -e "${INFO}${YW}CardDAV: http://${IP}:${IOCONTACT_PORT:-8640}/dav/   LDAP: ${IP}:${IOCONTACT_LDAP_PORT:-389} (base dc=iocontact)${CL}"

@@ -22,7 +22,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
-SIMPLE = ["iostart", "iocalendar", "iocontact", "iohealth", "iotask", "iodns", "iobackup", "iorecipe", "iothings", "iomoney"]
+SIMPLE = ["iostart", "iocalendar", "iocontact", "iohealth", "iotask", "iodns", "iobackup", "iorecipe", "iothings", "iomoney", "iodocs"]
 SETUP = SIMPLE + ["ionote"]
 EVERY = SETUP + ["iopix"]
 # template -> (the file it makes, relative to the repository, and the apps that have one made from it); ioPix keeps

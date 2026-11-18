@@ -1,4 +1,4 @@
-import { $, DOW, LOCAL_TZ, S, addDays, addMonths, api, calOf, colorOf, dayStart, dialog, fail, fmtDay, fmtTime, h, icon, memberBadge, memberOf, openTask, pad2, passesWho, sameDay, shownCals, span, startOfWeek, taskChip, taskOcc, taskTitle, tasksOn, tickBtn, billAmount, billChip, billOcc, billTitle, billsOn, openBill, toast, weekStart, whenText, ymd } from './core.js';
+import { $, DOW, LOCAL_TZ, S, addDays, addMonths, api, calOf, colorOf, dayStart, dialog, fail, fmtDay, fmtTime, h, icon, memberBadge, memberOf, openTask, pad2, passesWho, sameDay, shownCals, span, startOfWeek, taskChip, taskOcc, taskTitle, tasksOn, tickBtn, billAmount, billChip, billOcc, billTitle, billsOn, openBill, paperChip, paperOcc, paperTitle, papersOn, openPaper, toast, weekStart, whenText, ymd } from './core.js';
 import { drawNav } from './shell.js';
 import { openEvent } from './event.js';
 import { go } from './main.js';
@@ -54,7 +54,7 @@ export function byDay(days, items) {
 export const longEvent = (o) => { if (o.allDay) return true; const [a, b] = span(o); return b - a >= 864e5; };
 
 /** A day's entries in order: what takes the whole day (events, then the tasks without a time), then by time. */
-export const dayOrder = (x, y) => longEvent(y) - longEvent(x) || (longEvent(x) ? !!(x.task || x.bill) - !!(y.task || y.bill) : 0) || span(x)[0] - span(y)[0];
+export const dayOrder = (x, y) => longEvent(y) - longEvent(x) || (longEvent(x) ? !!(x.task || x.bill || x.paper) - !!(y.task || y.bill || y.paper) : 0) || span(x)[0] - span(y)[0];
 
 export let drawSeq = 0;
 export async function drawView() {
@@ -63,11 +63,12 @@ export async function drawView() {
   const [s, e] = viewRange();
   const seq = ++drawSeq;
   const ids = shownCals().map((c) => c.id);
-  const [occ, tasks, , bills] = await Promise.all([
+  const [occ, tasks, , bills, papers] = await Promise.all([
     ids.length ? api(`api/occurrences?start=${encodeURIComponent(s.toISOString())}&end=${encodeURIComponent(e.toISOString())}&calendars=${ids.join(',')}`) : { items: [] },
     tasksOn() ? api(`api/tasks?start=${ymd(s)}&end=${ymd(e)}&tz=${encodeURIComponent(LOCAL_TZ)}`).catch((x) => ({ available: false, reason: x.message, items: [] })) : null,
     loadWeather(),
-    billsOn() ? api(`api/bills?start=${ymd(s)}&end=${ymd(e)}`).catch((x) => ({ available: false, reason: x.message, items: [] })) : null]);
+    billsOn() ? api(`api/bills?start=${ymd(s)}&end=${ymd(e)}`).catch((x) => ({ available: false, reason: x.message, items: [] })) : null,
+    papersOn() ? api(`api/papers?start=${ymd(s)}&end=${ymd(e)}`).catch((x) => ({ available: false, reason: x.message, items: [] })) : null]);
   if (seq !== drawSeq) return;
   if (tasks) {
     const was = `${S.tasks.available}|${S.tasks.url}`;
@@ -79,7 +80,13 @@ export async function drawView() {
     S.bills = bills;
     if (was !== `${bills.available}|${bills.reason}`) drawNav();  // ioMoney's bills offered, or why they are not here
   }
-  S.occ = [...occ.items, ...(tasks ? tasks.items.map(taskOcc) : [])].filter(passesWho).concat(bills ? bills.items.map(billOcc) : []);
+  if (papers) {
+    const was = `${S.papers.available}|${S.papers.reason}`;
+    S.papers = papers;
+    if (was !== `${papers.available}|${papers.reason}`) drawNav();  // ioDocs' documents offered, or why they are not here
+  }
+  S.occ = [...occ.items, ...(tasks ? tasks.items.map(taskOcc) : []), ...(papers ? papers.items.map(paperOcc) : [])].filter(passesWho)
+    .concat(bills ? bills.items.map(billOcc) : []);
   const body = h('div', { class: 'calbody' });
   const key = `${S.view}|${ymd(s)}`;
   const keep = S.drawn === key ? main.querySelector('.calbody')?.scrollTop : undefined;
@@ -92,6 +99,7 @@ export const canChange = (o) => !!calOf(o.calendarId).writable;
 export function chip(o, day) {
   if (o.task) return taskChip(o);
   if (o.bill) return billChip(o);
+  if (o.paper) return paperChip(o);
   const [a] = span(o);
   const long = longEvent(o);
   const el = h('div', { class: ['chip-ev', long ? 'allday' : '', o.status === 'CANCELLED' ? 'cancelled' : '', o.status === 'TENTATIVE' ? 'tentative' : ''].join(' '),
@@ -275,7 +283,7 @@ export function drawAgenda(body, s, e) {
         h('div', { class: 'w' }, d.toLocaleDateString([], { weekday: 'short', month: 'short' })), dayWeather(d, true)),
       h('div', { class: 'evs' }, list.map((o) => agendaRow(o, d)))));
   }
-  if (!any) wrap.append(h('div', { class: 'empty' }, icon('agenda'), h('p', null, shownCals().length || tasksOn() || billsOn() ? 'Nothing planned in these weeks.' : 'Every calendar is hidden: tick one in the sidebar.')));
+  if (!any) wrap.append(h('div', { class: 'empty' }, icon('agenda'), h('p', null, shownCals().length || tasksOn() || billsOn() || papersOn() ? 'Nothing planned in these weeks.' : 'Every calendar is hidden: tick one in the sidebar.')));
   wrap.append(h('p', null, h('button', { class: 'pillbtn noic', onclick: () => { S.agendaDays = (S.agendaDays || 31) + 61; drawView(); } }, 'Show more')));
   body.append(wrap);
 }
@@ -286,6 +294,12 @@ export function agendaRow(o, d) {
       h('span', { class: 'bm' }, '$'), h('span', { class: 'tm' }, 'Bill'),
       h('div', { style: { minWidth: 0 } }, h('div', { class: 'nm' }, o.merchant, ' · ', billAmount(o)),
         h('div', { class: 'sub' }, [o.category, o.account, o.paid ? 'paid' : null].filter(Boolean).join(' · '))));
+  }
+  if (o.paper) {
+    return h('div', { class: 'arow paper', style: { '--c': '#a03a6a' }, title: paperTitle(o), onclick: () => openPaper(o) },
+      h('span', { class: 'bm' }, '!'), h('span', { class: 'tm' }, 'Expires'),
+      h('div', { style: { minWidth: 0 } }, h('div', { class: 'nm' }, o.title),
+        h('div', { class: 'sub' }, [o.kind, (o.members || []).map(memberOf).filter(Boolean).map((m) => m.displayName).join(', ')].filter(Boolean).join(' · '))));
   }
   if (o.task) {
     return h('div', { class: `arow task ${o.done ? 'done' : ''}`, style: { '--c': o.color || 'var(--brand)' }, title: taskTitle(o), onclick: () => openTask(o) },

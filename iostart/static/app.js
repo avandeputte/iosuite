@@ -7,6 +7,7 @@ const api = client(document.baseURI, { signIn: () => showSignIn() });
 // ------------------------------------------------------------------ helpers
 const $ = (s, el = document) => el.querySelector(s);
 const ICONS = {
+  doc: 'M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',
   box: 'M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V4c0-1.1-1-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4l16-.02V7z',
   add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
   person: 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
@@ -309,15 +310,15 @@ const cardOrder = (L) => [...(L.cards || []), ...CARDS.filter((k) => !(L.cards |
 
 // ------------------------------------------------------------------ the search box (⌘K / Ctrl-K)
 /* Type, and the box lists the bookmarks that match, what the apps find for this viewer (ioContact's people,
-   ioCalendar's events, ioTask's tasks, ioRecipe's recipes, ioNote's notes, ioThings' things, Home Assistant's things), and a row per app that searches
+   ioCalendar's events, ioTask's tasks, ioRecipe's recipes, ioNote's notes, ioThings' things, ioDocs' documents, Home Assistant's things), and a row per app that searches
    itself (each opens on its own results). Arrows pick a row, Enter opens it, Escape clears. */
 // Lower case without accents, so "celia" finds "Célia" (and "Celia" finds "célia"); a few letters NFD does not split.
 const FOLD = { ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', ł: 'l', đ: 'd', ð: 'd', þ: 'th', ı: 'i' };
 const fold = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[ßæœøłđðþı]/g, (c) => FOLD[c]);
 const APP_SEARCH = { iopix: (q) => `#/photos?q=${encodeURIComponent(q)}`, iocalendar: (q) => `#/search/${encodeURIComponent(q)}`, iotask: (q) => `#/search/${encodeURIComponent(q)}`,
-  iorecipe: (q) => `#/search/${encodeURIComponent(q)}`, ionote: (q) => `#/notes?q=${encodeURIComponent(q)}`, iothings: (q) => `#/search/${encodeURIComponent(q)}` };
+  iorecipe: (q) => `#/search/${encodeURIComponent(q)}`, ionote: (q) => `#/notes?q=${encodeURIComponent(q)}`, iothings: (q) => `#/search/${encodeURIComponent(q)}`, iodocs: (q) => `#/search/${encodeURIComponent(q)}` };
 // what the apps find, in the order their sections come under the bookmarks
-const FINDERS = ['iocontact', 'iocalendar', 'iotask', 'iorecipe', 'ionote', 'iothings', 'iomoney', 'iopix'];
+const FINDERS = ['iocontact', 'iocalendar', 'iotask', 'iorecipe', 'ionote', 'iothings', 'iodocs', 'iomoney', 'iopix'];
 /** "Today 19:00", "Tomorrow", "Fri 21 Nov", "12 Mar 2024": when a found event or task is, short. */
 function whenShort(iso, allDay) {
   if (!iso) return '';
@@ -327,6 +328,17 @@ function whenShort(iso, allDay) {
   const day = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday'
     : d.toLocaleDateString([], { weekday: n > 0 && n < 7 ? 'short' : undefined, day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
   return allDay ? day : `${day} ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+}
+/** "expired", "expires in 12 days", "until Mar 2028": how a document stands, short (the search box and the ioDocs tile). */
+function docWhen(x) {
+  if (!x.expiresOn) return '';
+  const d = new Date(`${x.expiresOn}T12:00:00`), n = x.days;
+  if (n == null) return '';
+  if (n < 0) return n === -1 ? 'expired yesterday' : `expired ${d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  if (n === 0) return 'expires today';
+  if (n === 1) return 'expires tomorrow';
+  if (n < 60) return `expires in ${n} days`;
+  return x.state === 'soon' ? `expires ${d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}` : `until ${d.toLocaleDateString([], { month: 'short', year: 'numeric' })}`;
 }
 /** A row of the search box for what an app found: events, tasks, recipes and notes (people have contactFace). */
 const FOUND = {
@@ -342,6 +354,9 @@ const FOUND = {
   iothings: { head: 'Things', href: (a, x) => `${a.url}/#/item/${x.id}`,
     kids: (x) => [x.photo ? h('span', { class: 'bmic pic' }, h('img', { src: `api/widgets/iothings/photo/${x.id}/${x.photo}`, alt: '', onerror: (e) => e.target.replaceWith(icon('box', 's')) })) : h('span', { class: 'bmic hit' }, icon('box', 's')),
       h('span', { class: 'qname' }, x.name), h('span', { class: 'muted small rest' }, x.where || '')] },
+  iodocs: { head: 'Documents', href: (a, x) => `${a.url}/#/doc/${x.id}`,
+    kids: (x) => [x.photo ? h('span', { class: 'bmic pic' }, h('img', { src: `api/widgets/iodocs/photo/${x.id}/${x.photo}`, alt: '', onerror: (e) => e.target.replaceWith(icon('doc', 's')) })) : h('span', { class: 'bmic hit' }, icon('doc', 's')),
+      h('span', { class: 'qname' }, x.title), h('span', { class: 'muted small rest' }, [x.kind, docWhen(x)].filter(Boolean).join(' · '))] },
   ionote: { head: 'Notes', href: (a, x) => `${a.url}/#/note/${x.id}`,
     kids: (x) => [h('span', { class: 'bmic hit' }, icon('note', 's')), h('span', { class: 'qname' }, x.title), h('span', { class: 'muted small rest' }, x.text || '')] },
   // ioMoney: a payee (all its transactions, with what they come to), then single transactions
@@ -849,7 +864,7 @@ function autoStrip(el, row, reshuffle) {
 /* Under an app's name, a glimpse of it: ioPix's photos from this day in earlier years (else a few at random),
    ioCalendar's rest of today (else what's next), ioHealth's steps and rings. The server asks each app with the
    viewer's own sign-in; an app that is down or not open to this account leaves its tile as it was. */
-const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iotask: drawTasksWidget, iohealth: drawHealthWidget, iomoney: drawMoneyWidget };
+const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iotask: drawTasksWidget, iohealth: drawHealthWidget, iomoney: drawMoneyWidget, iodocs: drawDocsWidget };
 /** ioPix opens one photo in its lightbox at #/photos?p=<id>. */
 const pixPhotoUrl = (pix, id) => `${pix.url}/#/photos?p=${id}`;
 const viewerTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
@@ -867,7 +882,7 @@ function drawWidgets(page, again = false) {
   }
 }
 
-const EMPTY = { iopix: 'No photos yet', iocalendar: 'Nothing planned', iotask: 'Nothing due today', iohealth: 'No steps, rings or sleep for today yet', iomoney: 'Nothing due this week' };
+const EMPTY = { iopix: 'No photos yet', iocalendar: 'Nothing planned', iotask: 'Nothing due today', iohealth: 'No steps, rings or sleep for today yet', iomoney: 'Nothing due this week', iodocs: 'Nothing to renew' };
 const wgHead = (t, extra) => h('div', { class: 'wghead' }, h('span', null, t), extra ? h('span', { class: 'muted' }, extra) : null);
 
 function drawPixWidget(d) {
@@ -946,6 +961,16 @@ function drawMoneyWidget(d) {
     shown.map((b) => h('div', { class: 'wgev', title: [b.name, long(b.day), b.account, b.approximate ? 'about this much' : null].filter(Boolean).join(' · ') },
       h('span', { class: 'wgwhen muted' }, short(b.day)), h('span', { class: 'wgtitle' }, b.name),
       h('span', { class: 'wgamt' }, `${b.approximate ? '~' : ''}${money(-b.amount, b.currency)}`)))];
+}
+
+/** ioDocs: the passports, licenses and policies that have expired or come within their reminder, the soonest first. */
+function drawDocsWidget(d) {
+  const items = d.items || [];
+  if (!items.length) return [wgHead('To renew'), h('div', { class: 'muted small' }, 'Nothing to renew')];
+  const head = wgHead('To renew', d.more ? `+${d.more} more` : null);
+  return [head, items.map((x) => h('div', { class: `wgev${x.state === 'expired' ? ' wgwarn' : ''}`, title: [x.title, x.kind, x.people.join(', '), docWhen(x)].filter(Boolean).join(' · ') },
+    x.state === 'expired' ? icon('warn', 's') : null, h('span', { class: 'wgtitle' }, x.title),
+    h('span', { class: 'wgamt muted' }, x.days < 0 ? 'expired' : x.days === 0 ? 'today' : x.days < 60 ? `${x.days}d` : new Date(`${x.expiresOn}T12:00:00`).toLocaleDateString([], { month: 'short', year: '2-digit' }))))];
 }
 
 /** Three rings, outside in: move, exercise, stand; each full at its goal (and past it, a second lap is not drawn). */

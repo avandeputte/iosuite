@@ -14,7 +14,7 @@ from iosuite_shared import chores, mcp as shared_mcp, pages
 from iosuite_shared import demo as suite_demo
 from iosuite_shared.updates import setup_log
 
-from app import __version__, api, bills, caldav, config, contacts, db, holiday, ical, mcp, model, notify, places, subscribe, tasks, users
+from app import __version__, api, bills, caldav, config, contacts, db, holiday, ical, mcp, model, notify, papers, places, subscribe, tasks, users
 from app.auth import auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -79,7 +79,7 @@ def _status_extra(request) -> dict:
     """ioCalendar's own fields of GET /api/status, beside the suite's."""
     u = request.state.user
     return {"timezone": ical.default_tz(), "iocontact": contacts.enabled() if u else None, "iotask": tasks.enabled() if u else None,
-            "iomoney": bills.enabled() if u else None, "mcp": mcp_enabled() if u else None,
+            "iomoney": bills.enabled() if u else None, "iodocs": papers.enabled() if u else None, "mcp": mcp_enabled() if u else None,
             "places": places.enabled() if u else None}
 
 
