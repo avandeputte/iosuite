@@ -1,6 +1,7 @@
-# Tests against a MariaDB service, then builds the container image and pushes it to ghcr.io on pushes to main
-# (pull requests only build). The image of a push to main is also tagged v<the suite's version>
-# (shared/iosuite_shared/__init__.py); the release itself is made once for the suite, by shared.yml.
+# Tests against a MariaDB service on pull requests and on main, when the app or the shared library changed; a pull
+# request also builds the container image. main's image is built and pushed to ghcr.io for every version of the suite
+# (tagged latest and v<version>, shared/iosuite_shared/__init__.py): version.yml sets the version, starts this
+# workflow for it and makes the suite's release.
 # Made from shared/templates/workflow.yml (shared/templates/render.py): only the "own:" blocks are this app's.
 name: ioHealth
 
@@ -26,6 +27,9 @@ env:
 
 jobs:
   tests:
+    # on a pull request and on main when the app (or the shared library) changed; not when version.yml starts the
+    # workflow for the image of a new version
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -68,6 +72,9 @@ jobs:
 
   image:
     needs: tests
+    # a pull request builds the image to see that it builds. main's images are built once the version is set:
+    # version.yml starts this workflow for every app (every app carries the suite's version), tests left out
+    if: ${{ always() && github.event_name != 'push' && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

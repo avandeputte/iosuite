@@ -353,8 +353,8 @@ server and the device (Apple's, Google's, Mozilla's) cannot read them. A device 
 ## Updates, restart and the server log
 
 The suite has one version: `iosuite_shared.__version__`, which every app reports as its own
-(`from iosuite_shared import __version__` in the app's `app/__init__.py`). Bump that one line with every change that
-reaches users, whichever app it is in. A newer version on GitHub is an update for every app, and the apps are updated
+(`from iosuite_shared import __version__` in the app's `app/__init__.py`). main raises that one line by itself after every
+merge that changes something an install has (`.github/workflows/version.yml`); a pull request leaves it alone. A newer version on GitHub is an update for every app, and the apps are updated
 together.
 
 Every app updates itself the same way, from `iosuite_shared.updates`: the installed commit, a daily check of GitHub
