@@ -125,7 +125,7 @@ and portfolio tracker for accounts you keep by hand.
 
 ## With the other apps
 
-- **ioStart**: a tile on the start page, and one sign-in for all the apps.
+- **ioStart**: the bills due this week on the tile, with a warning when a cash account is about to run low or a bank link is behind; the start page's search box finds payees and transactions; one sign-in for all the apps.
 - **ioCalendar**: the recurring bills and paychecks show on the day they are due (ticked once paid), to the people with a role in ioMoney.
 - **Linked items**: link the house or a car to the events, tasks, notes, contacts and photos about it.
 - **ioThings**: link a transaction to the thing it paid for. The transaction then shows the thing with its warranty,

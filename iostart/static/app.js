@@ -55,6 +55,12 @@ const ICONS = {
   more: 'M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
   left: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
   right: 'M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6z',
+  money: 'M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z',
+  receipt: 'M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z',
+  photo: 'M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z',
+  place: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z',
+  broom: 'M19.36 2.72 20.78 4.14 15.06 9.85c1.08 1.6 1.4 3.52.92 5.18L9.61 8.66c1.66-.48 3.58-.16 5.18.92l4.57-6.86zM5.93 17.57c-2.01-2.01-3.24-4.41-3.58-6.65l4.88-2.09 7.44 7.44-2.09 4.88c-2.24-.34-4.64-1.57-6.65-3.58z',
+  tabs: 'M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z',
   server: 'M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
 };
 const icon = (n, cls = '') => { const s = document.createElement('span'); s.className = 'ic ' + cls; s.innerHTML = `<svg viewBox="0 0 24 24"><path d="${ICONS[n] || ''}"/></svg>`; return s; };
@@ -311,7 +317,7 @@ const fold = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLo
 const APP_SEARCH = { iopix: (q) => `#/photos?q=${encodeURIComponent(q)}`, iocalendar: (q) => `#/search/${encodeURIComponent(q)}`, iotask: (q) => `#/search/${encodeURIComponent(q)}`,
   iorecipe: (q) => `#/search/${encodeURIComponent(q)}`, ionote: (q) => `#/notes?q=${encodeURIComponent(q)}`, iothings: (q) => `#/search/${encodeURIComponent(q)}` };
 // what the apps find, in the order their sections come under the bookmarks
-const FINDERS = ['iocontact', 'iocalendar', 'iotask', 'iorecipe', 'ionote', 'iothings'];
+const FINDERS = ['iocontact', 'iocalendar', 'iotask', 'iorecipe', 'ionote', 'iothings', 'iomoney', 'iopix'];
 /** "Today 19:00", "Tomorrow", "Fri 21 Nov", "12 Mar 2024": when a found event or task is, short. */
 function whenShort(iso, allDay) {
   if (!iso) return '';
@@ -338,9 +344,26 @@ const FOUND = {
       h('span', { class: 'qname' }, x.name), h('span', { class: 'muted small rest' }, x.where || '')] },
   ionote: { head: 'Notes', href: (a, x) => `${a.url}/#/note/${x.id}`,
     kids: (x) => [h('span', { class: 'bmic hit' }, icon('note', 's')), h('span', { class: 'qname' }, x.title), h('span', { class: 'muted small rest' }, x.text || '')] },
+  // ioMoney: a payee (all its transactions, with what they come to), then single transactions
+  iomoney: { head: 'Money', href: (a, x) => (x.kind === 'payee' ? `${a.url}/#/transactions?${new URLSearchParams({ q: x.name })}` : `${a.url}/#/transaction/${x.id}`),
+    kids: (x) => (x.kind === 'payee'
+      ? [h('span', { class: 'bmic hit' }, icon('money', 's')), h('span', { class: 'qname', title: [x.name, x.category].filter(Boolean).join(' · ') }, x.name), h('span', { class: 'muted small when' }, `all ${x.count}`), h('span', { class: 'small qamt' }, money(x.total, x.currency))]
+      : [h('span', { class: 'bmic hit' }, icon('receipt', 's')), h('span', { class: 'qname', title: [x.name, x.category, x.account].filter(Boolean).join(' · ') }, x.name), h('span', { class: 'muted small when' }, whenShort(x.day, true)),
+        h('span', { class: `small qamt${x.amount > 0 ? ' in' : ''}` }, money(x.amount, x.currency))]) },
+  // ioPix: a person, an album, a folder or a place, each opening its photos
+  iopix: { head: 'Photos', href: (a, x) => `${a.url}/#/photos?${new URLSearchParams(x.kind === 'person' ? { tag: x.id } : x.kind === 'album' ? { ualbum: x.id } : x.kind === 'folder' ? { album: x.id } : { place: x.name, ...(x.region ? { region: x.region } : {}) })}`,
+    kids: (x) => [x.cover ? h('span', { class: `bmic pic${x.kind === 'person' ? ' round' : ''}` }, h('img', { src: `api/widgets/iopix/thumb/${x.cover}`, alt: '', onerror: (e) => e.target.replaceWith(icon(PIX_KIND[x.kind].icon, 's')) })) : h('span', { class: 'bmic hit' }, icon(PIX_KIND[x.kind].icon, 's')),
+      h('span', { class: 'qname' }, x.kind === 'place' && x.region ? `${x.name}, ${x.region}` : x.name),
+      h('span', { class: 'muted small rest' }, `${PIX_KIND[x.kind].label} · ${(x.n || 0).toLocaleString()} photo${x.n === 1 ? '' : 's'}`)] },
 };
+const PIX_KIND = { person: { icon: 'person', label: 'Person' }, album: { icon: 'photo', label: 'Album' }, folder: { icon: 'folder', label: 'Folder' }, place: { icon: 'place', label: 'Place' } };
+/** An amount as the viewer's language writes money: "€42.50", "-$1,200.00"; without a currency, the number alone. */
+function money(v, cur, opts = {}) {
+  if (v == null || isNaN(v)) return '';
+  try { return new Intl.NumberFormat([], cur ? { style: 'currency', currency: cur, ...opts } : { minimumFractionDigits: 2, maximumFractionDigits: 2, ...opts }).format(v); } catch { return `${(+v).toFixed(2)}${cur ? ` ${cur}` : ''}`; }
+}
 function searchBox() {
-  const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search, or add an event', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, people, events, tasks, recipes, notes, things in the house and the web, or add an event' });
+  const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search, or add something', title: 'Search the suite and the web. Or add an event: “dinner fri 19:00”; a task: “t buy milk sat”; a note: “n the gate code is 4411”.', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, people, events, tasks, recipes, notes, things in the house, money, photos and the web, or add an event, a task (t …) or a note (n …)' });
   const list = h('div', { class: 'qlist', hidden: true });
   const box = h('div', { class: 'search' }, icon('search', 's'), inp, h('kbd', null, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'), list);
   let rows = [], sel = 0, timer = null, things = { q: '', items: [] };
@@ -353,11 +376,23 @@ function searchBox() {
     if (!q) return hide();
     const links = (S.bookmarks || []).filter((l) => fold(`${l.name} ${l.description || ''} ${l.href}`).includes(fold(q))).slice(0, 6);
     const finders = FINDERS.map((k) => [k, S.apps.find((a) => a.key === k), got[k]]).filter(([, a, g]) => a && g && g.q === ql && g.items.length);
-    const bang = webBang(q), site = bang ? null : looksLikeSite(q), cal = !bang && S.apps.find((a) => a.key === 'iocalendar') && parseEvent(q);
+    // "t buy milk fri": a task for ioTask; "n the gate code is 4411": a note for ioNote (the row comes first: Enter adds it)
+    const add = quickPrefix(q);
+    const bang = add ? null : webBang(q), site = bang || add ? null : looksLikeSite(q), cal = !bang && !add && S.apps.find((a) => a.key === 'iocalendar') && parseEvent(q);
     const eng = bang ? bang.engine : webEngine(), wq = bang ? bang.q : q;
     const webRow = () => row(eng.url(wq), [h('span', { class: 'bmic' }, icon('web', 's')), h('span', { class: 'qname' }, `“${wq}”`), h('span', { class: 'muted small' }, eng.name)], true);
     const found = links.length || finders.length || (things.q === ql && things.items.length);
+    const addRow = () => {
+      if (add.kind === 'task') {
+        const t = parseEvent(add.text) || { title: add.text[0].toUpperCase() + add.text.slice(1), date: null, start: null };
+        const a = row('#', [h('span', { class: 'bmic' }, icon('task', 's')), h('span', { class: 'qname' }, t.title), h('span', { class: 'muted small' }, t.date ? taskWhen(t) : 'No due date')]);
+        a.onclick = (e) => { e.preventDefault(); inp.blur(); quickTask(t); }; return a;
+      }
+      const a = row('#', [h('span', { class: 'bmic' }, icon('note', 's')), h('span', { class: 'qname' }, add.text), h('span', { class: 'muted small' }, 'New note')]);
+      a.onclick = (e) => { e.preventDefault(); inp.blur(); quickNote(add.text); }; return a;
+    };
     const kids = [
+      add ? [h('div', { class: 'qhead' }, add.kind === 'task' ? 'Add a task' : 'Add a note'), addRow()] : null,
       // a site typed in full, or a prefix (g, w, yt…): that first, Enter goes there
       site ? [h('div', { class: 'qhead' }, 'Open'), row(site, [h('span', { class: 'bmic' }, icon('link', 's')), h('span', { class: 'qname' }, site.replace(/^https?:\/\//, '')), h('span', { class: 'muted small' }, 'New tab')], true)] : null,
       bang ? [h('div', { class: 'qhead' }, eng.name), webRow()] : null,
@@ -375,9 +410,9 @@ function searchBox() {
       cal ? [h('div', { class: 'qhead' }, 'Add to the calendar'), (() => { const a = row('#', [h('span', { class: 'bmic' }, icon('event', 's')), h('span', { class: 'qname' }, cal.title || '(no title)'), h('span', { class: 'muted small' }, eventWhen(cal))]);
         a.onclick = (e) => { e.preventDefault(); inp.blur(); quickAdd(cal); }; return a; })()] : null,
       // nothing here matches: the web first, so Enter searches it
-      !bang && !site && !found ? [h('div', { class: 'qhead' }, 'Web'), webRow()] : null,
-      h('div', { class: 'qhead' }, 'Search in'),
-      S.allApps.filter((a) => APP_SEARCH[a.key]).map((a) => row(`${a.url}/${APP_SEARCH[a.key](q)}`, [h('img', { class: 'qapp', src: a.icon, alt: '' }), h('span', { class: 'qname' }, appName(a.name, a.color)), h('span', { class: 'muted small' }, `“${q}”`)])),
+      !bang && !site && !found && !add ? [h('div', { class: 'qhead' }, 'Web'), webRow()] : null,
+      add ? null : h('div', { class: 'qhead' }, 'Search in'),
+      add ? [] : S.allApps.filter((a) => APP_SEARCH[a.key]).map((a) => row(`${a.url}/${APP_SEARCH[a.key](q)}`, [h('img', { class: 'qapp', src: a.icon, alt: '' }), h('span', { class: 'qname' }, appName(a.name, a.color)), h('span', { class: 'muted small' }, `“${q}”`)])),
       !bang && !site && found ? webRow() : null,
     ];
     sel = Math.min(sel, rows.length - 1);
@@ -387,7 +422,7 @@ function searchBox() {
   // each app answers on its own: the box grows as they do, a slow or absent one holds up none of the others
   const askApps = () => {
     const q = inp.value.trim(), ql = q.toLowerCase();
-    if (q.length < 2) return;
+    if (q.length < 2 || quickPrefix(q)) return;  // "t buy milk" is something to add, not to look for
     for (const k of FINDERS) {
       if (!S.apps.some((a) => a.key === k)) continue;
       widget(k, { q }).then((d) => {
@@ -398,7 +433,7 @@ function searchBox() {
   };
   const askThings = async () => {
     const q = inp.value.trim(), ql = q.toLowerCase();
-    if (q.length < 2 || S.ha === false) return;
+    if (q.length < 2 || S.ha === false || quickPrefix(q)) return;
     let d = null;
     try { d = await api(`api/ha/search?${new URLSearchParams({ q, n: 5 })}`); } catch { d = null; }
     if (inp.value.trim().toLowerCase() !== ql) return;
@@ -577,6 +612,57 @@ async function quickAdd(ev) {
   } catch (e) { fail(e); }
 }
 
+// ------------------------------------------------------------------ quick add: a task for ioTask, a note for ioNote
+/* "t buy milk", "t call the plumber fri 9am", "todo renew the passport 12 jan": a new task, its due date read as an
+   event's day is (none said: no due date). "n the gate code is 4411", "note ideas for mum's birthday": a new note.
+   Each opens a small dialog with what was understood, to change before it is saved in the app, as the viewer. */
+const QUICK = { t: 'task', todo: 'task', task: 'task', n: 'note', note: 'note' };
+/** {kind: 'task' | 'note', text} for "t …" / "todo …" / "task …" / "n …" / "note …" when that app is on the page, else null. */
+function quickPrefix(q) {
+  const m = q.match(/^([a-z]{1,4})\s+(\S.*)$/i), kind = m && QUICK[m[1].toLowerCase()];
+  return kind && S.apps.some((a) => a.key === (kind === 'task' ? 'iotask' : 'ionote')) ? { kind, text: m[2].trim() } : null;
+}
+const taskWhen = (t) => eventWhen(t).replace(', all day', '');
+async function quickTask(t) {
+  const app = S.apps.find((a) => a.key === 'iotask');
+  let lists = [];
+  try { lists = (await api('api/widgets/iotask/lists')).items || []; } catch (e) { fail(e); return; }
+  if (!lists.length) { toast('ioTask has no list you may add tasks to'); return; }
+  const title = h('input', { class: 't', value: t.title });
+  const date = h('input', { class: 't', type: 'date', value: t.date ? ymdOf(t.date) : '' });
+  const time = h('input', { class: 't', type: 'time', value: t.start ? `${pad2(t.start[0])}:${pad2(t.start[1])}` : '' });
+  const last = localStorage.getItem('iostart.quickadd.list');
+  const which = h('select', { class: 't' }, lists.map((c) => h('option', { value: c.id, selected: String(c.id) === last ? true : null }, c.name)));
+  const body = h('div', null, h('div', { class: 'grid' }, fld('Task', title)), h('div', { class: 'qawhen two' }, fld('Due', date), fld('At', time)),
+    h('p', { class: 'muted small' }, 'No day: no due date.'), h('div', { class: 'grid' }, fld('List', which)));
+  const ok = await dialog('Add to ioTask', body, [{ label: 'Cancel', value: false }, { label: 'Add', value: true, primary: true }]);
+  if (!ok) return;
+  if (!title.value.trim()) { toast('A title, please'); return; }
+  if (time.value && !date.value) date.value = ymdOf(new Date());
+  const json = { title: title.value.trim(), listId: which.value, timezone: viewerTz(), ...(date.value ? { due: time.value ? `${date.value}T${time.value}` : date.value } : {}) };
+  try {
+    await api('api/widgets/iotask/tasks', { method: 'POST', json });
+    localStorage.setItem('iostart.quickadd.list', which.value);
+    toast(`Added to ${app ? app.name : 'ioTask'}: ${json.title}`);
+    $('.search .q') && ($('.search .q').value = '');
+    S.refreshedAt = 0; liveRefresh(true);  // the tile shows it when it is due today
+  } catch (e) { fail(e); }
+}
+async function quickNote(text) {
+  const app = S.apps.find((a) => a.key === 'ionote');
+  // one line: the note's text as typed, with room to go on; a title only when one is given
+  const title = h('input', { class: 't', placeholder: 'Title (none needed)' });
+  const note = h('textarea', { class: 't qanote', rows: 5 }); note.value = text;
+  const ok = await dialog('Add to ioNote', h('div', null, h('div', { class: 'grid' }, fld('Note', note), fld('Title', title))), [{ label: 'Cancel', value: false }, { label: 'Add', value: true, primary: true }]);
+  if (!ok) return;
+  if (!note.value.trim() && !title.value.trim()) { toast('Some text, please'); return; }
+  try {
+    await api('api/widgets/ionote/notes', { method: 'POST', json: { title: title.value.trim(), text: note.value.trim() } });
+    toast(`Added to ${app ? app.name : 'ioNote'}`);
+    $('.search .q') && ($('.search .q').value = '');
+  } catch (e) { fail(e); }
+}
+
 // ------------------------------------------------------------------ is each app up?
 /** A dot by each app's name (green: it answers; red: it does not). */
 async function drawAppStatus(page) {
@@ -632,7 +718,7 @@ async function customize() {
     h('h3', null, 'Tiles'), sortable(tiles), h('h3', null, 'Cards under the tiles'), sortable(cards),
     h('div', { class: 'grid' }, fld('Photo strip', strip), fld('Web search', engines)),
     h('div', { class: 'grid' }, fld('The photo strip changes to', moves), fld('How often', everies)),
-    h('p', { class: 'muted small' }, `In the search box, a prefix picks a site: ${BANG_HELP}.`));
+    h('p', { class: 'muted small' }, `In the search box, a prefix picks a site: ${BANG_HELP}. “t …” adds a task to ioTask and “n …” a note to ioNote; a line that says when (“dinner fri 19:00”) adds an event.`));
   const v = await dialog('Customize the page', body, [{ label: 'Back to the default', value: 'reset' }, { label: 'Cancel', value: null }, { label: 'Save', value: 'save', primary: true }]);
   if (!v) return;
   const json = v === 'reset' ? {} : { hidden: [...tiles, ...cards].filter((t) => !t.on).map((t) => t.key), order: tiles.map((t) => t.key), cards: cards.map((c) => c.key), strip: strip.value || null, search: engines.value || null,
@@ -763,7 +849,7 @@ function autoStrip(el, row, reshuffle) {
 /* Under an app's name, a glimpse of it: ioPix's photos from this day in earlier years (else a few at random),
    ioCalendar's rest of today (else what's next), ioHealth's steps and rings. The server asks each app with the
    viewer's own sign-in; an app that is down or not open to this account leaves its tile as it was. */
-const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iotask: drawTasksWidget, iohealth: drawHealthWidget };
+const WIDGETS = { iopix: drawPixWidget, iocalendar: drawCalendarWidget, iotask: drawTasksWidget, iohealth: drawHealthWidget, iomoney: drawMoneyWidget };
 /** ioPix opens one photo in its lightbox at #/photos?p=<id>. */
 const pixPhotoUrl = (pix, id) => `${pix.url}/#/photos?p=${id}`;
 const viewerTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
@@ -781,7 +867,7 @@ function drawWidgets(page, again = false) {
   }
 }
 
-const EMPTY = { iopix: 'No photos yet', iocalendar: 'Nothing planned', iotask: 'Nothing due today', iohealth: 'No steps, rings or sleep for today yet' };
+const EMPTY = { iopix: 'No photos yet', iocalendar: 'Nothing planned', iotask: 'Nothing due today', iohealth: 'No steps, rings or sleep for today yet', iomoney: 'Nothing due this week' };
 const wgHead = (t, extra) => h('div', { class: 'wghead' }, h('span', null, t), extra ? h('span', { class: 'muted' }, extra) : null);
 
 function drawPixWidget(d) {
@@ -828,6 +914,38 @@ function drawTasksWidget(d) {
   const when = (t) => { if (t.late) return 'Late'; if (t.allDay || !t.due) return ''; const s = new Date(t.due); return isNaN(s) ? '' : s.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
   return [wgHead('Due today', [d.overdue ? `${d.overdue} overdue` : null, d.more ? `+${d.more} more` : null].filter(Boolean).join(' · ') || null),
     today.map((t) => evRow(t, when(t)))];
+}
+
+/** ioMoney: what needs a look first (a cash account about to run low, bank links that are behind), then the bills and
+    subscriptions due in the coming week, the soonest first; three lines in all, as the other tiles. */
+function drawMoneyWidget(d) {
+  const bills = d.bills || [], low = d.low || [], behind = d.behind || [];
+  if (!bills.length && !low.length && !behind.length) return [wgHead('This week'), h('div', { class: 'muted small' }, 'Nothing due')];
+  const dayOf = (iso) => new Date(`${iso}T12:00:00`);
+  const short = (iso) => { const n = Math.round((dayOf(iso).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000);
+    return n <= 0 ? 'Today' : n === 1 ? 'Tmrw' : dayOf(iso).toLocaleDateString([], { weekday: 'short' }); };
+  const long = (iso) => dayOf(iso).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  const warn = (text, title) => h('div', { class: 'wgev wgwarn', title }, icon('warn', 's'), h('span', { class: 'wgtitle' }, text));
+  const notes = [];
+  if (low.length) {
+    const a = low[0];
+    const n = Math.round((dayOf(a.belowOn).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000);
+    const on = n <= 0 ? 'today' : n === 1 ? 'tomorrow' : n < 7 ? short(a.belowOn) : dayOf(a.belowOn).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    // the day first: on a narrow tile the account's name is what gets cut (the tooltip has it all)
+    notes.push(warn(low.length > 1 ? `${low.length} accounts run low` : `Low ${on}: ${a.name}`,
+      low.map((x) => `${x.name}: under ${x.floor ? money(x.floor, x.currency) : money(0, x.currency)} on ${long(x.belowOn)}, down to ${money(x.value, x.currency)}`).join('\n')));
+  }
+  if (behind.length) notes.push(warn(behind.length > 1 ? `${behind.length} bank links behind` : `Bank link behind: ${behind[0].name}`,
+    `Not updated from the bank lately: ${behind.map((x) => [x.name, x.institution].filter(Boolean).join(' at ')).join(', ')}`));
+  const shown = bills.slice(0, Math.max(1, 3 - notes.length)), more = (d.more || 0) + bills.length - shown.length;
+  const total = d.total != null && bills.length + (d.more || 0) > 1 ? money(-d.total, d.currency) : null;  // one bill: its own amount says it
+  const all = bills.length + (d.more || 0);
+  const head = wgHead('This week', total || (more ? `+${more} more` : null));
+  if (all) head.title = `${all} ${all === 1 ? 'payment' : 'payments'} due in the next 7 days${d.total != null ? `: ${money(-d.total, d.currency)}` : ''}`;
+  return [head, notes,
+    shown.map((b) => h('div', { class: 'wgev', title: [b.name, long(b.day), b.account, b.approximate ? 'about this much' : null].filter(Boolean).join(' · ') },
+      h('span', { class: 'wgwhen muted' }, short(b.day)), h('span', { class: 'wgtitle' }, b.name),
+      h('span', { class: 'wgamt' }, `${b.approximate ? '~' : ''}${money(-b.amount, b.currency)}`)))];
 }
 
 /** Three rings, outside in: move, exercise, stand; each full at its goal (and past it, a second lap is not drawn). */
@@ -1097,7 +1215,8 @@ async function drawBookmarks(el) {
   const canEdit = ['editor', 'admin'].includes(S.user.role);
   S.bookmarks = gs.flatMap((g) => g.links);  // the search box looks through them
   if (!gs.length) { el.replaceChildren(h('a', { class: 'lnk small', href: '#/bookmarks' }, canEdit ? 'Add bookmarks, or pick some for this page' : 'All bookmarks')); return; }
-  const groups = gs.filter((g) => g.links.length || canEdit).map((g) => h('div', { class: 'bmgroup' }, h('h2', null, g.name),
+  const groups = gs.filter((g) => g.links.length || canEdit).map((g) => h('div', { class: 'bmgroup' }, h('h2', null, g.name,
+    g.links.length > 1 ? h('button', { class: 'iconbtn bmopenall', title: `Open all ${g.links.length} in tabs`, 'aria-label': `Open all ${g.links.length} links of ${g.name} in tabs`, onclick: () => openAll(g.name, g.links) }, icon('tabs', 's')) : null),
     g.links.map((l) => {
       const src = bmIcon(l);
       return h('a', { class: 'bm', href: l.href, title: l.href, target: '_blank', rel: 'noreferrer', 'data-id': l.id },
@@ -1413,9 +1532,11 @@ async function showBookmarks(page) {
     BM_APP ? null : h('a', { class: 'iconbtn', href: '#/', title: 'Back to the start page', 'aria-label': 'Back to the start page' }, icon('left')),
     h('h1', null, 'Bookmarks'),
     canEdit ? h('button', { class: 'pillbtn primary bmaddtop', onclick: () => body.bmAdd && body.bmAdd() }, icon('add', 's'), 'Link') : null,
+    canEdit ? h('button', { class: 'pillbtn bmtidybtn', title: 'Links that no longer work, and the same address kept twice', 'aria-label': 'Tidy up the bookmarks', onclick: () => bmTidy(tidy, () => body.bmDraw && body.bmDraw()) }, icon('broom', 's'), h('span', null, 'Tidy up')) : null,
     h('a', { class: 'iconbtn', href: '#/settings/bookmarks', title: 'Sync with browsers, on a phone, import and export (Settings › Bookmarks)', 'aria-label': 'Bookmark settings' }, icon('settings', 's')),
     h('div', { class: 'bmsearch' }, icon('search', 's'), q)));
-  page.append(body);
+  const tidy = h('div', { class: 'bmtidyhost', hidden: true });
+  page.append(tidy, body);
   await setBookmarks(body);
   // back to the app (from a tab it opened, or the home screen): the tree as it is now, as the start page does
   S.refresh = () => body.bmDraw && body.bmDraw();
@@ -1529,6 +1650,7 @@ async function setBookmarks(el) {
     const folderActions = (f, n) => [
       { label: f.start ? 'Take it off the start page' : 'Show it on the start page', icon: 'home', run: () => call(`api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { start: !f.start } }) },
       shareAct(f, `api/bookmarks/groups/${f.id}`),
+      { label: `Open all ${f.items.filter((x) => x.type === 'bookmark' && x.linkable).length} in tabs`, icon: 'tabs', hidden: f.items.filter((x) => x.type === 'bookmark' && x.linkable).length < 2, run: () => openAll(f.name, f.items.filter((x) => x.type === 'bookmark' && x.linkable)) },
       { label: 'Add a link', icon: 'add', hidden: !canEdit, run: () => { bmOpen.add(f.id); bmOpen.delete(-f.id); editLink(f.id, null); } },
       { label: 'Add a folder inside', icon: 'folder', hidden: !canEdit, run: () => { bmOpen.delete(-f.id); newFolder(f.id); } },
       { label: 'Rename', icon: 'edit', hidden: !f.canChange, run: async () => { const i = h('input', { class: 't', value: f.name }); const v = await dialog('Rename the folder', i, [{ label: 'Cancel', value: null }, { label: 'Save', value: () => i.value, primary: true }]); if (v) call(`api/bookmarks/groups/${f.id}`, { method: 'PATCH', json: { name: v } }, 'Saved'); } },
@@ -1581,6 +1703,91 @@ async function setBookmarks(el) {
   };
   el.bmDraw = draw; el.bmPaint = paint;
   await draw();
+}
+
+/** Every link of a folder, each in a tab of its own. A browser lets a page open one tab per click and stops the rest
+    unless pop-ups are allowed for it: the ones it stopped are counted and said. */
+async function openAll(name, links) {
+  const web = links.filter((l) => /^https?:\/\//i.test(l.href));
+  if (!web.length) { toast('No web address to open'); return; }
+  if (web.length > 8 && !await confirmDialog('Open all', `Open the ${web.length} links of “${name}”, each in a tab of its own?`, 'Open')) return;
+  let stopped = 0;
+  for (const l of web) {
+    const w = window.open(l.href, '_blank');
+    if (w) { try { w.opener = null; } catch { /* another site already */ } } else stopped += 1;
+  }
+  if (stopped) toast(`The browser stopped ${stopped} of ${web.length}: allow pop-ups for this page to open them all`);
+}
+
+/* Tidy up (the broom on the Bookmarks page): the links that no longer work and the same address kept more than once,
+   in a box above the tree. The server asks every address in the background (app/bookmarkcheck.py); the box follows
+   it and lists what it found: nothing answering, a page that is gone, a page that moved for good (its new address
+   one click away). Nothing is deleted or changed without a click here. */
+function bmTidy(el, changed) {
+  if (!el.hidden) { el.hidden = true; el.replaceChildren(); clearTimeout(el.bmTimer); return; }  // the broom again: away
+  el.hidden = false;
+  let check = null, dup = null, busy = false;
+  const STATE = { dead: 'No answer', gone: 'Page gone', moved: 'Moved' };
+  const later = (ms) => { clearTimeout(el.bmTimer); el.bmTimer = setTimeout(load, ms); };
+  const load = async () => {
+    if (!el.isConnected || el.hidden) return;
+    try { [check, dup] = await Promise.all([api('api/bookmarks/check'), api('api/bookmarks/duplicates')]); } catch (e) { fail(e); return; }
+    paint();
+    if (check.running) later(1500);
+  };
+  const run = async () => { try { check = await api('api/bookmarks/check', { method: 'POST' }); } catch (e) { fail(e); return; } paint(); later(1000); };
+  // one after another: each is its own change to the tree, which the browsers that sync then follow
+  const each = async (items, call, done) => {
+    if (busy) return;
+    busy = true; paint();
+    let n = 0;
+    for (const x of items) { try { await call(x); n += 1; } catch (e) { fail(e); break; } }
+    busy = false;
+    if (n) toast(done(n));
+    await load(); changed();
+  };
+  const remove = (items) => each(items, (x) => api(`api/bookmarks/links/${x.id}`, { method: 'DELETE' }), (n) => (n === 1 ? 'Deleted' : `Deleted ${n} links`));
+  const follow = (items) => each(items, (x) => api(`api/bookmarks/links/${x.id}`, { method: 'PATCH', json: { href: x.to } }), (n) => (n === 1 ? 'Address updated' : `Updated ${n} addresses`));
+  const plural = (n, one, many) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
+  const row = (x, lead, tools) => h('div', { class: 'bmrow tidyrow' }, lead,
+    h('a', { class: 'bmname', href: x.href, target: '_blank', rel: 'noreferrer', title: x.href }, x.name || x.href),
+    h('span', { class: 'muted small bmdesc' }, x.path || 'Top level'),
+    x.shared ? h('span', { class: 'bmsharedtag', title: 'Shared with everyone' }, icon('people', 's')) : null, h('span', { class: 'bmtools' }, tools));
+  const del = (x) => (x.canChange ? h('button', { class: 'iconbtn', title: 'Delete this link', 'aria-label': `Delete ${x.name || x.href}`, disabled: busy ? true : null, onclick: () => remove([x]) }, icon('delete', 's')) : null);
+  const paint = () => {
+    const found = check.items || [], broken = found.filter((x) => x.state !== 'moved'), moved = found.filter((x) => x.state === 'moved');
+    const mine = (list) => list.filter((x) => x.canChange);
+    const when = check.checkedAt ? new Date(check.checkedAt * 1000).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+    const links = h('div', { class: 'tidysec' }, h('h3', null, 'Links that no longer work'),
+      check.running ? h('div', { class: 'tidyrun' }, h('progress', { max: Math.max(1, check.total), value: check.done }), h('span', { class: 'muted small' }, `Asked ${check.done.toLocaleString()} of ${plural(check.total, 'address', 'addresses')}…`))
+        : h('div', { class: 'multi' },
+          h('span', { class: 'muted' }, check.checkedAt ? (found.length ? `${plural(check.total, 'address', 'addresses')} asked ${when}: ${plural(found.length, 'link needs', 'links need')} a look.` : `${plural(check.total, 'address', 'addresses')} asked ${when}: every one of them answers.`)
+            : 'The server asks every address whether it still answers: a minute or two for a few hundred links. Nothing is changed until you say so.'),
+          h('button', { class: `pillbtn${check.checkedAt ? '' : ' primary'}`, disabled: busy ? true : null, onclick: run }, icon('update', 's'), check.checkedAt ? 'Check again' : 'Check the links')),
+      broken.length ? [broken.map((x) => row(x, h('span', { class: `tidystate ${x.state}`, title: x.state === 'dead' ? (x.status ? `The server answered with an error (${x.status})` : 'Nothing answered at this address') : `The site says this page is not there (${x.status})` }, STATE[x.state]), del(x))),
+        check.offline ? h('p', { class: 'warn' }, 'Most addresses gave no answer at all. That usually means this server cannot reach the internet right now, not that the links are dead: check its connection and its DNS, then check again.') : null,
+        mine(broken).length > 1 && !check.offline ? h('div', { class: 'multi tidyall' }, h('button', { class: 'pillbtn danger', disabled: busy ? true : null, onclick: async () => {
+          if (await confirmDialog('Delete the links that no longer work', `Delete these ${mine(broken).length} links? A site that is only down today would be lost too: open the ones you are not sure of first. Browsers that sync lose them as well.`, 'Delete', true)) remove(mine(broken)); } }, icon('delete', 's'), `Delete all ${mine(broken).length}`)) : null] : null,
+      moved.length ? [h('h4', null, 'Moved to a new address'), moved.map((x) => row(x, h('span', { class: 'tidystate moved', title: `The site says this page moved for good (${x.status})` }, STATE.moved),
+        [h('span', { class: 'muted small tidyto', title: x.to }, `→ ${x.to.replace(/^https?:\/\//, '')}`),
+          x.canChange ? h('button', { class: 'iconbtn', title: 'Keep the new address', 'aria-label': `Keep the new address of ${x.name || x.href}`, disabled: busy ? true : null, onclick: async (e) => {
+            // on a phone the row has no room for the new address: it is shown before it is kept
+            const to = e.currentTarget.parentNode.querySelector('.tidyto');
+            if (to && to.offsetParent === null && !await confirmDialog('Keep the new address', `“${x.name || x.href}” moved to ${x.to}`, 'Keep it')) return;
+            follow([x]); } }, icon('check', 's')) : null, del(x)])),
+        mine(moved).length > 1 ? h('div', { class: 'multi tidyall' }, h('button', { class: 'pillbtn', disabled: busy ? true : null, onclick: () => follow(mine(moved)) }, icon('check', 's'), `Keep all ${mine(moved).length} new addresses`)) : null] : null);
+    const extra = dup.groups.flatMap((g) => g.links.slice(1)).filter((x) => x.canChange);
+    const twice = h('div', { class: 'tidysec' }, h('h3', null, 'The same address more than once'),
+      dup.groups.length ? [h('p', { class: 'muted' }, `${plural(dup.groups.length, 'address is', 'addresses are')} kept more than once. The first of each stays (the one on the start page, or the shared one); delete the copies you do not need.`),
+        dup.groups.map((g) => h('div', { class: 'tidydup' }, h('div', { class: 'muted small tidyhref', title: g.href }, g.href.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')), g.links.map((x, i) => row(x, h('span', { class: `tidystate ${i ? 'copy' : 'keep'}` }, i ? 'Copy' : 'Keep'), del(x))))),
+        extra.length > 1 ? h('div', { class: 'multi tidyall' }, h('button', { class: 'pillbtn danger', disabled: busy ? true : null, onclick: async () => {
+          if (await confirmDialog('Delete the copies', `Delete the ${extra.length} extra copies and keep the first of each address? Browsers that sync lose them too.`, 'Delete', true)) remove(extra); } }, icon('delete', 's'), `Delete the ${extra.length} copies`)) : null]
+        : h('p', { class: 'muted' }, 'No address is kept twice.'));
+    el.replaceChildren(h('div', { class: 'box bmtidy' },
+      h('h2', null, icon('broom'), 'Tidy up', h('button', { class: 'iconbtn tidyclose', title: 'Close', 'aria-label': 'Close', onclick: () => bmTidy(el, changed) }, icon('close', 's'))), links, twice));
+  };
+  el.replaceChildren(h('div', { class: 'box bmtidy' }, h('h2', null, icon('broom'), 'Tidy up'), h('p', { class: 'muted' }, 'Looking…')));
+  load();
 }
 
 /** Settings › Bookmarks: syncing with browsers (the extension, other sync apps), the Bookmarks app on a phone, and

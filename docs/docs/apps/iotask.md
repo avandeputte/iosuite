@@ -51,7 +51,7 @@ done keeps doing so when it is ticked off in Reminders: ioTask brings it back wi
 
 ## With the other apps
 
-- **ioStart**: the tasks due today on the tile, the overdue ones first.
+- **ioStart**: the tasks due today on the tile, the overdue ones first; "t buy milk sat" in the start page's search box adds a task.
 - **ioCalendar**: the tasks that are due show on their day in the calendar, beside the events, and are ticked off there.
 
 ## Install

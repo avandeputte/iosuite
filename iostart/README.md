@@ -20,7 +20,8 @@ what the app will show on the start page later (today's events, the newest photo
   the same machine, else at its LAN address, else its public one, with the suite's Cloudflare Access service token
   (Settings › Global settings › Keys and tokens) when one is set.
 - **A search box** at the top (⌘K / Ctrl-K): as you type it lists the bookmarks that match, what the apps find
-  for you (ioContact's people, ioCalendar's coming events, ioTask's open tasks, ioRecipe's recipes, ioThings' things, your ioNote notes; each asked
+  for you (ioContact's people, ioCalendar's coming events, ioTask's open tasks, ioRecipe's recipes, ioThings' things, your ioNote notes,
+  ioMoney's payees and transactions ("plumber", or an amount: "$280"), ioPix's people, albums, folders and places; each asked
   with your own sign-in, so you see what you may see there), and a row per app that searches itself (each opens on
   its own results). Arrows
   pick a row, Enter opens it. When nothing of the suite matches, Enter searches the web (DuckDuckGo, or the engine
@@ -28,7 +29,10 @@ what the app will show on the start page later (today's events, the newest photo
   GitHub…, also as `!g`), and an address typed in full (`github.com`) opens.
 - **Quick add**: type an event in the search box ("dinner fri 19:00", "dentist tomorrow 9am", "trip 24 dec",
   "call mum 14:30-15:00") and pick "Add to the calendar": a dialog shows the title, day and times it understood, and
-  the calendar, then makes the event in ioCalendar with the viewer's own sign-in.
+  the calendar, then makes the event in ioCalendar with the viewer's own sign-in. A line that starts with `t` (or
+  `todo`, `task`) is a task for ioTask ("t call the plumber fri 9am": the day it names is its due date, none named is
+  no due date, and the dialog asks which list); one that starts with `n` (or `note`) is a note for ioNote ("n the gate
+  code is 4411"). Both are made with the viewer's own sign-in, like the event.
 - **Live**: every five minutes, and when the tab is shown again, the page brings the tiles, the cards, the weather
   and the dots up to date in place; at midnight it is drawn anew for the new day.
 - **A wall display** (the gear › Wall display, or `#/wall` as a tablet's home address): full screen, ioPix photos one
@@ -50,7 +54,9 @@ what the app will show on the start page later (today's events, the newest photo
 - **A glimpse of each app on its tile**: ioPix shows photos taken on this day in earlier years (one per year, "3 years
   ago"), or a few picked at random (Rediscover) on a day without any; ioCalendar the rest of today (else the next event
   in the coming 60 days), in each calendar's colour; ioTask what is due today, the overdue tasks first, in each list's colour; ioHealth today's steps with the last seven days as bars, the
-  move, exercise and stand rings, and last night's sleep. The
+  move, exercise and stand rings, and last night's sleep; ioMoney the bills and subscriptions due in the coming
+  seven days that are not paid yet (the soonest first, with what they come to), a warning when its forecast sees a cash
+  account go under its lowest balance in the next 30 days, and one when a bank link is behind. The
   server asks each app over its own API with the viewer's sign-in (the suite's session cookie, or the Basic / bearer
   credentials they came with), so everyone sees only what that app shows them; ioPix's thumbnails come through the
   start page too. An app that is down, or not open to that account, leaves its tile as it was. Nothing is kept.
@@ -83,7 +89,16 @@ what the app will show on the start page later (today's events, the newest photo
   nothing; a site without one shows a two-letter badge. An icon you give a link wins: an image address, a file name
   from the dashboard-icons collection (`github.png`), or a file of your own uploaded for the link (an SVG, which stays sharp at any size, or a PNG). The groups pack into columns (as many 250 px columns as
   fit). Editors and admins add, change, reorder and move folders and links (drag by the handle, with a mouse or a
-  finger), import a bookmarks file a browser exported (HTML) or an XBEL file, and export either.
+  finger), import a bookmarks file a browser exported (HTML) or an XBEL file, and export either. A folder's "Open all"
+  (on the Bookmarks page, and on a group's name on the start page) opens its links, each in a tab of its own.
+- **Tidy up** (the Bookmarks page): the links that no longer work and the same address kept more than once, for your
+  own bookmarks and the shared ones. The server asks every web address once, in the background (a HEAD request, a GET
+  where the site dislikes HEAD; never this server itself, never following a redirect), and lists the ones where nothing
+  answered or the server failed, the ones whose page is gone (404, 410) and the ones that moved for good (301, 308),
+  whose new address is one click away. A page behind a sign-in, a temporary redirect or a certificate the server
+  cannot vouch for is fine. When most addresses give no answer the page says the server probably cannot reach the
+  internet, and does not offer to delete them all. Nothing is deleted or changed without a click; the answers are
+  kept in memory until the next check.
 - **The Bookmarks app** at `<address>/bookmarks`: the Bookmarks page as an app of its own, with its own name, icon
   and manifest (`static/bookmarks.webmanifest`), opening straight on the bookmarks. On an iPhone or iPad open that
   address (Safari, or Vivaldi, Chrome, Edge, Firefox) and choose Share › Add to Home Screen; on Android or a desktop,
@@ -276,7 +291,7 @@ Covered: status and sign-in, the tiles and where they point (this host, the forw
 the environment), hiding an app, the weather (AccuWeather mocked: set-up, the place search, the server's copy and its
 age, a stale reading when AccuWeather is down), Home Assistant (its API mocked: set-up, the card's entities and
 their wording, the allowlist for switching, the search, the alerts), the tiles' glimpses (the apps' answers mocked: On this day and
-Rediscover, the rest of today and what's next, steps and rings, an app that refuses or is down), the bookmarks (groups, links, order, moves, the homepage import) and
+Rediscover, the rest of today and what's next, steps and rings, the week's bills, an app that refuses or is down), the search box's finds in ioMoney and ioPix, a task and a note from the search box, the bookmarks (groups, links, order, moves, the homepage import; Tidy up's check against a server made in the test, and its duplicates) and
 what a viewer may not change. CI runs them against MariaDB.
 
 ## Layout
@@ -290,7 +305,8 @@ app/frontdoor.py   the suite on one address: passes /calendar/…, /notes/… on
 app/apps.py        the suite's apps as they registered (iosuite_shared.suite) and the order of their tiles
 app/status.py      is each app up (its /api/status) and does it have an update; is each bookmark reachable
 app/layout.py      each account's own layout: hidden tiles and cards, the tiles' order, the photo strip
-app/widgets.py     what the tiles and cards show: ioPix, ioCalendar, ioTask, ioHealth and ioContact asked over their APIs with the viewer's sign-in
+app/widgets.py     what the tiles and cards show, what the search box finds and adds: ioPix, ioCalendar, ioTask, ioHealth, ioMoney, ioNote and ioContact asked over their APIs with the viewer's sign-in
+app/bookmarkcheck.py  Tidy up: the bookmarks whose address no longer answers, is gone or moved, and the same address kept twice
 app/weather.py     AccuWeather: the settings, the place search, the cached conditions and forecast
 app/homeassistant.py  Home Assistant: the settings, the chosen entities and their state, switching them, the search, the alerts
 app/ha_feed.py     Home Assistant's websocket: state changes folded into the copy, streamed to the pages

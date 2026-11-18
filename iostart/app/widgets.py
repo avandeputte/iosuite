@@ -1,9 +1,11 @@
 """What the tiles show under their name: a glimpse of each app (ioPix's On this day, ioCalendar's today, ioHealth's
-steps and rings), asked of the app over its own API.
+steps and rings, ioMoney's bills of the week), what the search box finds in them, and what it adds to them (an event,
+a task, a note), asked of the app over its own API.
 
 The start page asks on the viewer's behalf: the request goes out from this server with the viewer's own credentials
 (the suite's shared session cookie, or the Authorization header they came with), so each app answers with what that
-person may see there and nothing more. Nothing is kept here. The browser never talks to the apps itself (the page's
+person may see there and nothing more. Nothing is kept here (but, for two minutes and per person, the names of
+ioPix's people, places and albums that the search box looks through as someone types). The browser never talks to the apps itself (the page's
 Content-Security-Policy allows only this origin), so ioPix's thumbnails come through here too.
 
 The app is found in the suite's list of apps and asked on the viewer's behalf (iosuite_shared.links.as_viewer): on
@@ -17,22 +19,26 @@ addresses is left alone for links.BREAK_S seconds (the tile says so at once, no 
 that answered last is tried first, and a tile that needs several answers asks for them at the same time.
 """
 import datetime as dt
+import hashlib
 import json
 import random
 import re
+import threading
+import time
+import unicodedata
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Request
-from iosuite_shared import links
+from iosuite_shared import links, sessions
 
 from app import apps
 
 TIMEOUT = 4  # seconds, per request to an app
 _pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="widgets")
 UA = "ioStart page"
-WIDGETS = ("iopix", "iocalendar", "iotask", "iohealth", "iocontact", "iorecipe", "ionote", "iothings")
+WIDGETS = ("iopix", "iocalendar", "iotask", "iohealth", "iomoney", "iocontact", "iorecipe", "ionote", "iothings")
 
 
 class Unavailable(Exception):
@@ -51,6 +57,8 @@ def _host(request: Request) -> str:
 def forget() -> None:
     """Every app may be asked again, from its first address on (the tests; an admin changed the addresses)."""
     links.ask_again()
+    with _names_lock:
+        _names.clear()
 
 
 def _together(*calls) -> list:
@@ -270,6 +278,53 @@ def iocalendar_add(request: Request, b: dict) -> dict:
     got = fetch(request, "iocalendar", "/api/events", body=ev)
     eid = got.get("id") if isinstance(got, dict) else None
     return {"id": eid, "url": f"{apps.url_for('iocalendar')}/#/event/{eid}" if eid is not None else None}
+
+
+# ------------------------------------------------------------------ ioTask and ioNote: a new task, a new note from the search box
+
+def iotask_lists(request: Request) -> dict:
+    """{items: [{id, name, color}]}: the lists this viewer may add tasks to, in ioTask's own order (the first is where
+    ioTask itself would put a new task)."""
+    got = fetch(request, "iotask", "/api/lists")
+    return {"items": [{"id": c.get("id"), "name": c.get("name"), "color": c.get("color")} for c in got.get("items", []) if c.get("writable")]}
+
+
+def iotask_add(request: Request, b: dict) -> dict:
+    """A new task in ioTask, from {title, due?, listId?, timezone?}: due is a date (2026-11-21) or a date and time
+    (2026-11-21T17:00, in timezone). {id, url}: the task and where it opens in ioTask."""
+    if not isinstance(b, dict):
+        raise Unavailable(400, "An object, please")
+    title = str(b.get("title") or "").strip()[:500]
+    if not title:
+        raise Unavailable(400, "A title, please")
+    task = {"title": title}
+    due = str(b.get("due") or "").strip()
+    if due:
+        try:
+            (dt.date.fromisoformat if len(due) == 10 else dt.datetime.fromisoformat)(due)
+        except ValueError:
+            raise Unavailable(400, "due: a date (2026-11-21) or a date and time (2026-11-21T17:00)")
+        task["due"] = due
+    tz = str(b.get("timezone") or "")
+    if tz and re.fullmatch(r"[A-Za-z0-9_+\-/]{1,64}", tz):
+        task["timezone"] = tz
+    if b.get("listId") not in (None, ""):
+        task["listId"] = b["listId"]
+    got = fetch(request, "iotask", "/api/tasks", body=task)
+    tid = got.get("id") if isinstance(got, dict) else None
+    return {"id": tid, "url": f"{apps.url_for('iotask')}/#/task/{tid}" if tid is not None else None}
+
+
+def ionote_add(request: Request, b: dict) -> dict:
+    """A new note in ioNote, the viewer's own, from {title?, text?} (one of the two at least). {id, url}."""
+    if not isinstance(b, dict):
+        raise Unavailable(400, "An object, please")
+    title, text = str(b.get("title") or "").strip()[:500], str(b.get("text") or "").strip()[:20000]
+    if not title and not text:
+        raise Unavailable(400, "A title or some text, please")
+    got = fetch(request, "ionote", "/api/notes", body={"title": title, "body": text, "sourceApp": "ioStart"})
+    nid = got.get("id") if isinstance(got, dict) else None
+    return {"id": nid, "url": f"{apps.url_for('ionote')}/#/note/{nid}" if nid is not None else None}
 
 
 # ------------------------------------------------------------------ the search box: events, tasks, recipes and notes
@@ -507,17 +562,144 @@ def iotask(request: Request, tz: str = "", n: int = 3) -> dict:
             "more": max(0, len(items) - n), "overdue": len(late_ids)}
 
 
+# ------------------------------------------------------------------ ioMoney: the week's bills, and what the search box finds
+
+def _money_bills(request: Request, today: dt.date, days: int) -> dict:
+    return fetch(request, "iomoney", "/api/bills", {"start": today.isoformat(), "end": (today + dt.timedelta(days=days)).isoformat()})
+
+
+def iomoney(request: Request, tz: str = "", n: int = 3, days: int = 7) -> dict:
+    """{currency, bills: [{day, name, amount, currency, approximate, account, subscription}], more, total, low:
+    [{name, currency, floor, belowOn, value}], behind: [{name, institution}]}: the recurring payments not paid yet
+    that fall due from the viewer's today through the next `days` days (the soonest first, up to n; more: how many are
+    left out; total: what they all come to, when they are in one currency), the cash accounts ioMoney's forecast sees
+    going under their lowest balance in the coming 30 days, and the accounts whose link to the bank is behind. Only
+    what this person sees in ioMoney: their own accounts and the household's."""
+    today = dt.datetime.now(_zone(tz)).date()
+    bills, low, summary = _together(lambda: _money_bills(request, today, days),
+                                    lambda: fetch(request, "iomoney", "/api/forecast", {"days": 30}),
+                                    lambda: fetch(request, "iomoney", "/api/summary"))
+    if isinstance(bills, Exception):
+        raise bills
+    due = [b for b in bills.get("items", []) if not b.get("paid") and (b.get("amount") or 0) < 0]
+    monies = {b.get("currency") for b in due}
+    out = {"currency": bills.get("currency"),
+           "bills": [{"day": b.get("day"), "name": b.get("merchant") or "(no name)", "amount": b.get("amount"), "currency": b.get("currency"),
+                      "approximate": bool(b.get("approximate")), "account": b.get("account"), "subscription": bool(b.get("subscription"))} for b in due[:n]],
+           "more": max(0, len(due) - n),
+           "total": round(sum(b.get("amount") or 0 for b in due), 2) if len(monies) == 1 else None,
+           "low": [], "behind": []}
+    if len(monies) == 1:
+        out["currency"] = monies.pop() or out["currency"]
+    if not isinstance(low, Exception):  # the forecast or the summary not answering leaves the bills as they are
+        out["low"] = [{"name": a.get("name"), "currency": a.get("currency"), "floor": a.get("floor"), "belowOn": a.get("belowOn"),
+                       "value": (a.get("low") or {}).get("value")} for a in low.get("items", [])]
+    if not isinstance(summary, Exception):
+        stale = ((summary.get("monarch") or {}).get("stale")) or []
+        out["behind"] = [{"name": a.get("name"), "institution": a.get("institution")} for a in stale]
+    return out
+
+
+def iomoney_search(request: Request, q: str, n: int = 5) -> dict:
+    """{items: [{kind: 'payee', name, count, total, currency, last, category} | {kind: 'transaction', id, name, day, amount,
+    currency, account, category}], more, currency}: the payees whose name has every word of q (the two most used), then the
+    transactions ioMoney finds for q (its own search: the payee, the bank's text, the category, the notes; "$280" or
+    "100-200" are amounts), the newest first, n rows in all."""
+    payees, found = _together(lambda: fetch(request, "iomoney", "/api/payees", {"q": q[:80], "limit": 2}),
+                              lambda: fetch(request, "iomoney", "/api/transactions", {"q": q[:80], "limit": n}))
+    if isinstance(found, Exception):
+        raise found
+    who = [] if isinstance(payees, Exception) else [
+        {"kind": "payee", "name": p.get("payee"), "count": p.get("count"), "total": p.get("total"), "last": p.get("last"), "category": p.get("category")}
+        for p in payees.get("items", [])[:2] if p.get("payee") and (p.get("count") or 0) > 1]
+    rows = [{"kind": "transaction", "id": t.get("id"), "name": t.get("merchant") or t.get("description") or "(no name)", "day": t.get("day"),
+             "amount": t.get("amount"), "currency": t.get("currency"), "account": t.get("account"), "category": t.get("category")}
+            for t in found.get("items", [])]
+    for p in who:  # a payee's total is in the money of its transactions
+        p["currency"] = next((t["currency"] for t in rows if t["name"] == p["name"] and t.get("currency")), rows[0].get("currency") if rows else None)
+    items = (who + rows)[:n]
+    return {"items": items, "more": int(found.get("total") or 0) > len([x for x in items if x["kind"] == "transaction"])}
+
+
+# ------------------------------------------------------------------ ioPix: people, places and albums in the search box
+
+NAMES_TTL = 120    # seconds the names of one person's ioPix are kept for the search box
+_names: dict = {}  # who -> (until, [{kind, id, name, n, cover, …}])
+_names_lock = threading.Lock()
+
+
+def _fold(s) -> str:
+    """Lower case without accents, as the page's own search folds the bookmarks."""
+    return "".join(c for c in unicodedata.normalize("NFD", str(s or "")) if not unicodedata.combining(c)).lower()
+
+
+def _iopix_names(request: Request) -> list[dict]:
+    """What the search box may find in ioPix, for this viewer: the people, the albums (the viewer's and the shared
+    ones), the folders and the places, each with how many photos and one to show. Read once from ioPix's /api/meta
+    and /api/state and kept NAMES_TTL seconds for this viewer (their session), not for anyone else."""
+    tok = request.cookies.get(sessions.COOKIE) or request.headers.get("authorization") or ""
+    who = (hashlib.blake2b(tok.encode(), digest_size=16).hexdigest(), _host(request)) if tok else None
+    now = time.monotonic()
+    with _names_lock:
+        hit = _names.get(who) if who else None
+        if hit and hit[0] > now:
+            return hit[1]
+    meta, state = _together(lambda: fetch(request, "iopix", "/api/meta"), lambda: fetch(request, "iopix", "/api/state"))
+    if isinstance(meta, Exception):
+        raise meta
+    out = []
+    for t in meta.get("tags") or []:
+        if t.get("person") and t.get("nAll"):
+            out.append({"kind": "person", "id": t.get("id"), "name": t.get("name"), "n": t.get("nAll"), "cover": t.get("cover")})
+    for a in ([] if isinstance(state, Exception) else state.get("albums") or []):
+        out.append({"kind": "album", "id": a.get("id"), "name": a.get("name"), "n": a.get("n") or 0, "cover": a.get("cover")})
+    for a in meta.get("albums") or []:
+        if a.get("name") and a.get("nAll"):
+            out.append({"kind": "folder", "id": a.get("id"), "name": a.get("name"), "n": a.get("nAll"), "cover": a.get("cover")})
+    for p in meta.get("places") or []:
+        if len(p) >= 5 and p[0]:
+            out.append({"kind": "place", "id": None, "name": p[0], "region": p[1] or "", "country": p[2] or "", "n": p[3], "cover": p[4]})
+    for x in out:
+        x["_f"] = _fold(" ".join(str(x.get(k) or "") for k in ("name", "region", "country")))
+        x["_n"] = _fold(x["name"])
+    with _names_lock:
+        if len(_names) > 200:
+            _names.clear()
+        if who:
+            _names[who] = (now + NAMES_TTL, out)
+    return out
+
+
+def iopix_search(request: Request, q: str, n: int = 6) -> dict:
+    """{items: [{kind: person | album | folder | place, id, name, region, country, n, cover}]}: the people, albums,
+    folders and places of ioPix whose name has every word of q (a place: its town, region or country), the ones that
+    start with it first, then the ones with the most photos; up to three of a kind, n in all. cover: a photo to show."""
+    words = _fold(q[:80]).split()
+    if not words:
+        return {"items": []}
+    found = [x for x in _iopix_names(request) if all(w in x["_f"] for w in words)]
+    found.sort(key=lambda x: (not x["_n"].startswith(words[0]), -(x.get("n") or 0)))
+    out, per = [], {}
+    for kind in ("person", "album", "folder", "place"):
+        for x in found:
+            if x["kind"] == kind and per.get(kind, 0) < 3:
+                per[kind] = per.get(kind, 0) + 1
+                out.append({k: v for k, v in x.items() if not k.startswith("_")})
+    return {"items": out[:n]}
+
+
 def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q: str = "") -> dict:
     if key not in WIDGETS:
         raise Unavailable(404, f"{key} has nothing to show here")
     if tz and not re.fullmatch(r"[A-Za-z0-9_+\-/]{1,64}", tz):
         tz = ""
-    if key == "iopix":
-        return iopix(request, tz, min(max(int(n or 0), 1), 24) if n else 4, kind if kind in ("onthisday", "rediscover") else "")
-    if q.strip() and key in ("iocalendar", "iotask", "iorecipe", "ionote", "iothings"):
+    if q.strip() and key in ("iocalendar", "iotask", "iorecipe", "ionote", "iothings", "iomoney", "iopix"):
         return {"iocalendar": lambda: iocalendar_search(request, q.strip(), tz), "iotask": lambda: iotask_search(request, q.strip(), tz),
                 "iorecipe": lambda: iorecipe_search(request, q.strip()), "ionote": lambda: ionote_search(request, q.strip()),
-                "iothings": lambda: iothings_search(request, q.strip())}[key]()
+                "iothings": lambda: iothings_search(request, q.strip()), "iomoney": lambda: iomoney_search(request, q.strip()),
+                "iopix": lambda: iopix_search(request, q.strip())}[key]()
+    if key == "iopix":
+        return iopix(request, tz, min(max(int(n or 0), 1), 24) if n else 4, kind if kind in ("onthisday", "rediscover") else "")
     if key in ("iorecipe", "ionote", "iothings"):
         raise Unavailable(404, f"{apps.name_of(key)} shows only in the search box")
     if key == "iocalendar" and kind == "week":
@@ -528,4 +710,6 @@ def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q:
         return iocalendar(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
     if key == "iotask":
         return iotask(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
+    if key == "iomoney":
+        return iomoney(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
     return iohealth(request, tz)
