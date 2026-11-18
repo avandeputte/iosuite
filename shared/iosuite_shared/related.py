@@ -2,7 +2,7 @@
 
 A link joins two items of the suite, each named by its kind and its id in its app (KINDS: event, task, note, contact,
 recipe, photo, item: a thing in ioThings, asset: a house, a car or another thing of value in ioMoney, transaction:
-one of ioMoney's, what a thing was paid with, say). It is one row of ios_related in the Shared ioSuite database and
+one of ioMoney's, what a thing was paid with, say; document: a paper kept in ioDocs, a passport or a policy). It is one row of ios_related in the Shared ioSuite database and
 works both ways: the task shows the recipe and the recipe shows the task. Nothing about the items is kept with it; what a link shows (the title, the date,
 the small picture) is asked of the item's own app every time, with the viewer's own sign-in, so a link shows only to
 someone who may see both of its items, and always as the item is now. A note is its owner's alone: an event linked to
@@ -260,6 +260,15 @@ def _thing(x: dict) -> dict:
                  image=m.group(1) if m else None)
 
 
+def _document(x: dict) -> dict:
+    """A paper of ioDocs: what kind it is, whose, and until when it runs."""
+    m = re.search(r"/files/(\d+)$", str(x.get("cover") or ""))
+    whose = ", ".join(p.get("displayName") or "" for p in x.get("people") or [] if isinstance(p, dict))
+    until = f"expires {x['expiresOn']}" if x.get("expiresOn") else ""
+    return _item("document", x.get("id"), x.get("title"), " · ".join(p for p in (x.get("kindLabel") or "", whose, until) if p),
+                 image=m.group(1) if m else None)
+
+
 def _soon_first(items: list[dict]) -> list[dict]:
     """Events: those still to come soonest first, then the ones that are over, the latest first."""
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None).isoformat(timespec="minutes")
@@ -295,6 +304,8 @@ def find(request: Request, kind: str, q: str, n: int = 6) -> list[dict]:
         return [_thing(x) for x in ask(request, app, "/api/items", {"q": q, "limit": n}).get("items", [])[:n]]
     if kind == "asset":
         return [_asset(x) for x in ask(request, app, "/api/accounts", {"things": "true", "q": q}).get("items", [])[:n]]
+    if kind == "document":
+        return [_document(x) for x in ask(request, app, "/api/documents", {"q": q, "limit": n}).get("items", [])[:n]]
     if kind == "transaction":
         return [_transaction(x) for x in ask(request, app, "/api/transactions", {"q": q, "limit": n}).get("items", [])[:n]]
     if kind == "photo":
@@ -329,6 +340,8 @@ def get(request: Request, kind: str, item_id: str) -> dict:
         return _asset(ask(request, app, f"/api/accounts/{q}"))
     if kind == "transaction":
         return _transaction(ask(request, app, f"/api/transactions/{q}"))
+    if kind == "document":
+        return _document(ask(request, app, f"/api/documents/{q}"))
     raise Unavailable(404, "No such kind of item")
 
 
@@ -338,7 +351,8 @@ def image(request: Request, kind: str, item_id: str, p: str = "") -> tuple[bytes
     path, params = {"note": (f"/api/notes/{q}/thumb", None), "contact": (f"/api/contacts/{q}/photo", None),
                     "photo": (f"/thumb/{q}", {"fit": "square"}),
                     "recipe": (f"/api/recipes/{q}/photos/{p}", {"size": "small"}) if _NUM.fullmatch(p or "") else (None, None),
-                    "item": (f"/api/items/{q}/files/{p}", {"size": "small"}) if _NUM.fullmatch(p or "") else (None, None)}.get(kind, (None, None))
+                    "item": (f"/api/items/{q}/files/{p}", {"size": "small"}) if _NUM.fullmatch(p or "") else (None, None),
+                    "document": (f"/api/documents/{q}/files/{p}", {"size": "small"}) if _NUM.fullmatch(p or "") else (None, None)}.get(kind, (None, None))
     if not path:
         raise Unavailable(404, "No picture")
     return ask(request, app, path, params, image=True, timeout=15)

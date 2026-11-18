@@ -18,7 +18,7 @@ every app works without it. It earns its place once you run two or more apps.
   An app that isn't installed has no tile.
 - **A glimpse of each app**: ioPix's photos from this day in earlier years, ioCalendar's rest of today, ioTask's tasks due today, ioHealth's
   steps, rings and sleep, ioMoney's bills due this week (with a warning when an account is about to run low or a bank
-  link is behind); each person sees only what that app shows them.
+  link is behind), ioDocs' documents to renew; each person sees only what that app shows them.
 - **The week ahead**: a Birthdays card (ioContact) and a This week card (ioCalendar).
 - **A search box** (⌘K / Ctrl-K) across the apps and bookmarks (people, events, tasks, recipes, notes, things,
   payees and transactions, the people, albums and places of your photos), the web as a fallback, and **Quick add**:

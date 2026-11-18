@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ioThing suite — self-hosted photos, notes, calendar, tasks, recipes, finances and more</title>
-<meta name="description" content="Small self-hosted apps for the family: ioPix for photos, ioNote, ioCalendar, ioTask, ioRecipe, ioThings, ioMoney, ioContact, ioHealth and the ioStart start page. Install just the one you need, or all of them; they share one sign-in.">
+<meta name="description" content="Small self-hosted apps for the family: ioPix for photos, ioNote, ioCalendar, ioTask, ioRecipe, ioThings, ioMoney, ioDocs, ioContact, ioHealth and the ioStart start page. Install just the one you need, or all of them; they share one sign-in.">
 <link rel="canonical" href="https://iosuite.iothing.net/">
 <link rel="icon" type="image/svg+xml" href="img/icon.svg">
 <meta property="og:type" content="website">
@@ -46,7 +46,7 @@
       <div>
         <span class="eyebrow">self-hosted · free &amp; open source</span>
         <h1>Take the app you need.<br>Leave the rest.</h1>
-        <p class="lede">Small self-hosted apps for the family: photos, notes, a calendar, tasks, recipes, an inventory of what you own, the household's finances, contacts and health data, on your own server. <strong>Each one installs and runs on its own</strong>: if all you want is a photo app, install ioPix and you're done. Add another whenever you like, and it signs in with the same accounts.</p>
+        <p class="lede">Small self-hosted apps for the family: photos, notes, a calendar, tasks, recipes, an inventory of what you own, the household's finances, the family's papers, contacts and health data, on your own server. <strong>Each one installs and runs on its own</strong>: if all you want is a photo app, install ioPix and you're done. Add another whenever you like, and it signs in with the same accounts.</p>
         <div class="meta">GPL-3.0 · Proxmox VE · Docker (amd64 / arm64) · any Linux or Mac · MariaDB / MySQL</div>
         <div class="cta">
           <a class="btn btn-primary" href="#install">
@@ -66,6 +66,7 @@
           <div class="mix-app" data-app="iorecipe"><img src="img/iorecipe.svg" alt="" width="46" height="46"><b>ioRecipe</b><small>recipes</small></div>
           <div class="mix-app" data-app="iothings"><img src="img/iothings.svg" alt="" width="46" height="46"><b>ioThings</b><small>inventory</small></div>
           <div class="mix-app" data-app="iomoney"><img src="img/iomoney.svg" alt="" width="46" height="46"><b>ioMoney</b><small>finances</small></div>
+          <div class="mix-app" data-app="iodocs"><img src="img/iodocs.svg" alt="" width="46" height="46"><b>ioDocs</b><small>papers</small></div>
           <div class="mix-app" data-app="iocontact"><img src="img/iocontact.svg" alt="" width="46" height="46"><b>ioContact</b><small>contacts</small></div>
           <div class="mix-app" data-app="iohealth"><img src="img/iohealth.svg" alt="" width="46" height="46"><b>ioHealth</b><small>health</small></div>
           <div class="mix-app" data-app="iostart"><img src="img/iostart.svg" alt="" width="46" height="46"><b>ioStart</b><small>start page</small></div>
@@ -150,7 +151,7 @@
           <div class="links"><a class="more-link" href="/ioContact/">More about ioContact</a><a href="/docs/apps/iocontact/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iocontact" rel="noopener">GitHub</a><span class="port">:8640</span></div>
         </article>
       </div>
-      <div class="agroup"><h3>The household</h3><p>What you own, what it is worth, and how everyone is doing.</p></div>
+      <div class="agroup"><h3>The household</h3><p>What you own, what it is worth, the papers that prove it, and how everyone is doing.</p></div>
       <div class="agrid">
         <article class="app" style="--c:#2a6f97">
           <div class="app-top"><img src="img/iothings.svg" alt="" width="44" height="44"><h3>ioThings<span class="tag">Everything you own</span></h3></div>
@@ -171,6 +172,16 @@
           </ul>
           <p class="alone"><b>On its own:</b> the net worth, the spending and the portfolio, on your own server.</p>
           <div class="links"><a class="more-link" href="/ioMoney/">More about ioMoney</a><a href="/docs/apps/iomoney/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iomoney" rel="noopener">GitHub</a><span class="port">:8710</span></div>
+        </article>
+        <article class="app" style="--c:#a03a6a">
+          <div class="app-top"><img src="img/iodocs.svg" alt="" width="44" height="44"><h3>ioDocs<span class="tag">The family's papers</span></h3></div>
+          <ul>
+            <li>Passports, licenses, policies and certificates, with their scans</li>
+            <li>Reads a passport's lines and a license's barcode off a photo</li>
+            <li>A reminder months before a passport expires, weeks before a policy</li>
+          </ul>
+          <p class="alone"><b>On its own:</b> every family paper in one place, and nobody caught with an expired passport.</p>
+          <div class="links"><a class="more-link" href="/ioDocs/">More about ioDocs</a><a href="/docs/apps/iodocs/">Docs</a><a href="https://github.com/avandeputte/iosuite/tree/main/iodocs" rel="noopener">GitHub</a><span class="port">:8720</span></div>
         </article>
         <article class="app" style="--c:#e8445a">
           <div class="app-top"><img src="img/iohealth.svg" alt="" width="44" height="44"><h3>ioHealth<span class="tag">Apple Health, on your own server</span></h3></div>
