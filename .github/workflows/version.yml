@@ -1,0 +1,60 @@
+# The suite's version, set on main by itself: no pull request touches the version line, so two of them never meet on
+# it. After every push to main, .github/scripts/version.py raises the version (shared/iosuite_shared/__init__.py) in a
+# commit of its own when the push changed something an install has; by the last number, or the middle one when a merged
+# pull request carries the label `feature` (the first with `major`). A version that has no release yet then gets one
+# (tag v<version>, ioPix's Linux installer and the demo data attached), and every app's image is built from it: the
+# apps' workflows are started here, because a commit made by a workflow starts none by itself.
+# One run at a time; a run looks at everything main got since the version last changed, so none is missed.
+name: Version
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: version
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # the version commit, the release
+  actions: write    # starting the image builds
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0  # what main got since the version last changed
+      - name: Set the version
+        id: v
+        run: python3 .github/scripts/version.py
+      - name: Build every app's image of this version
+        if: steps.v.outputs.released == 'false'
+        run: |
+          # every app carries the suite's version, so each gets an image of it; their tests ran on the pull request
+          for f in .github/workflows/io*.yml; do
+            w="$(basename "$f")"
+            [ "$w" = iopix-site.yml ] && continue
+            gh workflow run "$w" --ref main
+          done
+      - name: Build the website for this version
+        if: steps.v.outputs.bumped == 'true'
+        run: gh workflow run iopix-site.yml --ref main
+      - name: Release the version
+        # last, so a run that fails before here is made good by the next one: no release yet means not done yet
+        if: steps.v.outputs.released == 'false'
+        env:
+          V: ${{ steps.v.outputs.version }}
+          TITLE: ${{ steps.v.outputs.title }}
+          SHA: ${{ steps.v.outputs.sha }}
+        run: |
+          iopix/installer/make-installer.sh
+          printf '\n\nImages: `ghcr.io/avandeputte/iosuite/<app>:v%s` (also `latest`).\n' "$V" >> notes.md
+          # the demo data (demo/, never part of an install): what an app fetches when the suite's demo switch is on (iosuite_shared.demo)
+          (cd demo && zip -qr ../iosuite-demo.zip iosuite_demo -x '*__pycache__*')
+          gh release create "v$V" iopix/dist/iopix-install.sh iosuite-demo.zip --target "$SHA" --title "ioSuite $V: $TITLE" --notes-file notes.md
