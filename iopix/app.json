@@ -26,6 +26,15 @@
     "photos": true,
     "launchd": "com.iopix"
   },
+  "start": {
+    "rank": 10,
+    "tile": true,
+    "find": {
+      "head": "Photos",
+      "rank": 80
+    },
+    "searchUrl": "#/photos?q={q}"
+  },
   "items": [
     {
       "kind": "photo",

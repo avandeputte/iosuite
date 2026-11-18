@@ -25,5 +25,14 @@
       "label": "Papers to renew",
       "hint": "In the morning, the passports, licenses and policies about to expire"
     }
-  ]
+  ],
+  "start": {
+    "rank": 55,
+    "tile": true,
+    "find": {
+      "head": "Documents",
+      "rank": 65
+    },
+    "searchUrl": "#/search/{q}"
+  }
 }

@@ -1,11 +1,15 @@
 """What the tiles show under their name: a glimpse of each app (ioPix's On this day, ioCalendar's today, ioHealth's
 steps and rings, ioMoney's bills of the week), what the search box finds in them, and what it adds to them (an event,
-a task, a note), asked of the app over its own API.
+a task, a note).
+
+The tile, the search and the pictures are asked at the suite's standard endpoints, which every app answers in one
+shape (iosuite_shared.suiteitems: /api/suite/tile, /api/suite/search, /api/suite/items/{kind}/{id}/image), so
+nothing here knows an app's own API; the app's manifest (app.json "start") says whether it has a tile and a search.
+Adding an event, a task or a note goes to that app's own API (quick add).
 
 The start page asks on the viewer's behalf: the request goes out from this server with the viewer's own credentials
 (the suite's shared session cookie, or the Authorization header they came with), so each app answers with what that
-person may see there and nothing more. Nothing is kept here (but, for two minutes and per person, the names of
-ioPix's people, places and albums that the search box looks through as someone types). The browser never talks to the apps itself (the page's
+person may see there and nothing more. Nothing is kept here. The browser never talks to the apps itself (the page's
 Content-Security-Policy allows only this origin), so ioPix's thumbnails come through here too.
 
 The app is found in the suite's list of apps and asked on the viewer's behalf (iosuite_shared.links.as_viewer): on
@@ -19,26 +23,17 @@ addresses is left alone for links.BREAK_S seconds (the tile says so at once, no 
 that answered last is tried first, and a tile that needs several answers asks for them at the same time.
 """
 import datetime as dt
-import hashlib
 import json
-import random
 import re
-import threading
-import time
-import unicodedata
 import urllib.error
-from concurrent.futures import ThreadPoolExecutor
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Request
-from iosuite_shared import links, sessions
+from iosuite_shared import catalog, links
 
 from app import apps
 
 TIMEOUT = 4  # seconds, per request to an app
-_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="widgets")
 UA = "ioStart page"
-WIDGETS = ("iopix", "iocalendar", "iotask", "iohealth", "iomoney", "iodocs", "iocontact", "iorecipe", "ionote", "iothings")
 
 
 class Unavailable(Exception):
@@ -57,28 +52,6 @@ def _host(request: Request) -> str:
 def forget() -> None:
     """Every app may be asked again, from its first address on (the tests; an admin changed the addresses)."""
     links.ask_again()
-    with _names_lock:
-        _names.clear()
-
-
-def _together(*calls) -> list:
-    """Run these at the same time; for each its result, or the exception it raised."""
-    out = []
-    for f in [_pool.submit(c) for c in calls]:
-        try:
-            out.append(f.result())
-        except Exception as e:  # noqa: BLE001 - handed to the caller, who knows which ones matter
-            out.append(e)
-    return out
-
-
-def _both(*calls) -> list:
-    """Run these at the same time; their results, or the first exception one of them raised."""
-    out = _together(*calls)
-    for r in out:
-        if isinstance(r, Exception):
-            raise r
-    return out
 
 
 def fetch(request: Request, key: str, path: str, params: dict | None = None, raw: bool = False, body: dict | None = None, timeout: float = TIMEOUT):
@@ -105,137 +78,6 @@ def fetch(request: Request, key: str, path: str, params: dict | None = None, raw
         raise Unavailable(502, f"{name} answered {e.code}")
     except links.Unreachable as e:
         raise Unavailable(502, f"{name} is not reachable at {e.at or '(no address)'} ({type(e.why or e).__name__})")
-
-
-def _zone(tz: str):
-    try:
-        return ZoneInfo(tz) if tz else dt.timezone.utc
-    except (ZoneInfoNotFoundError, ValueError):
-        return dt.timezone.utc
-
-
-# ------------------------------------------------------------------ ioPix: On this day, else Rediscover
-
-def iopix(request: Request, tz: str = "", n: int = 4, kind: str = "") -> dict:
-    """{kind: onthisday | rediscover, items: [{id, year, yearsAgo}], count}: up to n photos taken on this day in
-    earlier years, one from each year first (the most recent years first), then the rest of those years; count is
-    how many there are in all. On a day without any, n photos picked at random from the library. kind asks for one
-    of the two (onthisday still falls back to rediscover on a day without photos)."""
-    today = dt.datetime.now(_zone(tz)).date()
-    by_year: dict[int, list[int]] = {}
-    if kind != "rediscover":
-        got = fetch(request, "iopix", "/api/photos", {"md": today.strftime("%m-%d"), "type": "photo"})
-        for pid, ts in zip(got.get("id") or [], got.get("ts") or []):
-            if ts is None:
-                continue
-            y = dt.datetime.fromtimestamp(ts, dt.timezone.utc).year  # ioPix keeps the camera's wall time as if it were UTC
-            if y < today.year:
-                by_year.setdefault(y, []).append(pid)
-    if by_year:
-        years = sorted(by_year, reverse=True)
-        for y in years:
-            random.shuffle(by_year[y])
-        items: list[dict] = []
-        for i in range(max(len(v) for v in by_year.values())):  # round i: the i-th photo of each year
-            items += [{"id": by_year[y][i], "year": y, "yearsAgo": today.year - y} for y in years if i < len(by_year[y])]
-        return {"kind": "onthisday", "items": items[:n], "count": sum(len(v) for v in by_year.values())}
-    got = fetch(request, "iopix", "/api/random", {"n": n})
-    ws, hs = got.get("w") or [], got.get("h") or []
-    items = [{"id": pid, "year": dt.datetime.fromtimestamp(ts, dt.timezone.utc).year if ts else None,
-              **({"w": ws[i], "h": hs[i]} if i < len(ws) and i < len(hs) and ws[i] and hs[i] else {})}  # the wall display prefers landscape ones
-             for i, (pid, ts) in enumerate(zip(got.get("id") or [], got.get("ts") or []))]
-    return {"kind": "rediscover", "items": items}
-
-
-def iopix_thumb(request: Request, photo_id: int) -> tuple[bytes, str]:
-    return fetch(request, "iopix", f"/thumb/{int(photo_id)}", {"fit": "square"}, raw=True)
-
-
-def iopix_preview(request: Request, photo_id: int) -> tuple[bytes, str]:
-    """ioPix's screen-size copy (the wall display's slideshow); ioPix may have to make it first, so a longer wait."""
-    return fetch(request, "iopix", f"/preview/{int(photo_id)}", raw=True, timeout=20)
-
-
-# ------------------------------------------------------------------ ioCalendar: the rest of today, else what's next
-
-def _covers(o: dict, day: dt.date) -> bool:
-    """Whether an all-day occurrence (dates, end exclusive) falls on `day`. ioCalendar picks whole days by the dates in
-    the calendar's own zone; the page's day is the viewer's, which may be another: this keeps only what is on it."""
-    try:
-        s = dt.date.fromisoformat(str(o.get("start"))[:10])
-        e = dt.date.fromisoformat(str(o.get("end") or o.get("start"))[:10])
-    except ValueError:
-        return True
-    return s <= day < max(e, s + dt.timedelta(days=1))
-
-
-def iocalendar(request: Request, tz: str = "", n: int = 3) -> dict:
-    """{today: [occurrence], next: occurrence | null}: today's events that have not ended yet (all-day ones first, as
-    ioCalendar sorts them), up to n; when there are none left, the next one in the coming 60 days. Each with its
-    calendar's colour."""
-    zone = _zone(tz)
-    now = dt.datetime.now(zone)
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = start + dt.timedelta(days=1)
-    cals, occ = _both(lambda: fetch(request, "iocalendar", "/api/calendars"),
-                      lambda: fetch(request, "iocalendar", "/api/occurrences", {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds")}))
-    colors = {c["id"]: c.get("color") for c in cals.get("items", [])}
-
-    def pick(o: dict) -> dict:
-        return {"title": o.get("title") or "(no title)", "start": o.get("start"), "end": o.get("end"), "allDay": bool(o.get("allDay")),
-                "location": o.get("location"), "color": colors.get(o.get("calendarId"))}
-
-    def ends_after(o: dict, t: dt.datetime) -> bool:
-        if o.get("allDay"):
-            return True
-        try:
-            e = dt.datetime.fromisoformat(o["end"])
-        except (KeyError, TypeError, ValueError):
-            return True
-        return (e if e.tzinfo else e.replace(tzinfo=zone)) > t
-
-    def cancelled(o: dict) -> bool:
-        return (o.get("status") or "").upper() == "CANCELLED"
-
-    today = [pick(o) for o in occ.get("items", []) if not cancelled(o) and ends_after(o, now) and (not o.get("allDay") or _covers(o, now.date()))]
-    out = {"today": today[:n], "more": max(0, len(today) - n), "next": None}
-    if not today:
-        later = fetch(request, "iocalendar", "/api/occurrences", {"start": end.isoformat(timespec="seconds"),
-                                                                  "end": (end + dt.timedelta(days=60)).isoformat(timespec="seconds")})
-        nxt = next((o for o in later.get("items", []) if not cancelled(o) and (not o.get("allDay") or _covers(o, end.date()) or dt.date.fromisoformat(str(o["start"])[:10]) >= end.date())), None)
-        out["next"] = pick(nxt) if nxt else None
-    return out
-
-
-def iocalendar_week(request: Request, tz: str = "", days: int = 7, n: int = 12) -> dict:
-    """{days: [{date, items: [occurrence]}]}: the coming `days` days after today, each with its events (cancelled ones
-    left out), up to n events in all; days without any are left out."""
-    zone = _zone(tz)
-    start = (dt.datetime.now(zone) + dt.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    end = start + dt.timedelta(days=days)
-    cals, occ = _both(lambda: fetch(request, "iocalendar", "/api/calendars"),
-                      lambda: fetch(request, "iocalendar", "/api/occurrences", {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds")}))
-    colors = {c["id"]: c.get("color") for c in cals.get("items", [])}
-    by_day: dict[str, list] = {}
-    total = 0
-    first, last = start.date(), (end - dt.timedelta(days=1)).date()
-    for o in occ.get("items", []):
-        if (o.get("status") or "").upper() == "CANCELLED":
-            continue
-        day = str(o.get("start") or "")[:10]
-        if not day:
-            continue
-        if o.get("allDay"):
-            # an all-day event from before the window (ioCalendar pads its answer) goes on its first day in the window, or out
-            if day < first.isoformat():
-                day = first.isoformat() if _covers(o, first) else ""
-            if not day or day > last.isoformat():
-                continue
-        if total < n:
-            by_day.setdefault(day, []).append({"title": o.get("title") or "(no title)", "start": o.get("start"), "end": o.get("end"),
-                                               "allDay": bool(o.get("allDay")), "location": o.get("location"), "color": colors.get(o.get("calendarId"))})
-        total += 1
-    return {"days": [{"date": d, "items": by_day[d]} for d in sorted(by_day)], "more": max(0, total - n)}
 
 
 # ------------------------------------------------------------------ ioCalendar: a new event from the search box
@@ -327,425 +169,30 @@ def ionote_add(request: Request, b: dict) -> dict:
     return {"id": nid, "url": f"{apps.url_for('ionote')}/#/note/{nid}" if nid is not None else None}
 
 
-# ------------------------------------------------------------------ the search box: events, tasks, recipes and notes
+# ------------------------------------------------------------------ the tiles, the search box, the pictures: /api/suite/*
 
-def _soon_first(items: list[dict], tz: str) -> list[dict]:
-    """The events still to come (or going on), soonest first; the ones that are over are left out. An all-day event
-    is still to come until its day is over in the viewer's zone."""
-    zone = _zone(tz)
-    now = dt.datetime.now(zone)
-    today = now.date().isoformat()
-
-    def moment(s: str) -> dt.datetime:
-        t = dt.datetime.fromisoformat(s)
-        return t if t.tzinfo else t.replace(tzinfo=zone)  # a floating time: the viewer's
-
-    def at(x: dict):
-        s = (x.get("next") or {}).get("start")
-        if not s:
-            return None
-        try:
-            return dt.datetime.combine(dt.date.fromisoformat(s[:10]), dt.time(), zone) if x.get("allDay") else moment(s)
-        except ValueError:
-            return None
-
-    def ahead(x: dict) -> bool:
-        n = x.get("next") or {}
-        if not n.get("start"):
-            return False
-        if x.get("allDay"):
-            end = str(n.get("end") or n["start"])[:10]
-            return end > today or str(n["start"])[:10] >= today
-        try:
-            return moment(n.get("end") or n["start"]) >= now
-        except ValueError:
-            return False
-
-    def when(x: dict) -> float:
-        a = at(x)
-        return a.timestamp() if a else float("-inf")
-    return sorted((x for x in items if ahead(x) and at(x)), key=when)
+def _start(key: str) -> dict:
+    return (catalog.APPS.get(key) or {}).get("start") or {}
 
 
-def iocalendar_search(request: Request, q: str, tz: str = "", n: int = 5) -> dict:
-    """{items: [{id, title, start, end, allDay, recurring, recurrenceId, location, color}], more}: the events
-    still to come whose title, place, notes or people match q (the search box), soonest first, each at its next
-    occurrence, with its calendar's colour. Events that are over are not listed (ioCalendar's own search has them)."""
-    cals, got = _both(lambda: fetch(request, "iocalendar", "/api/calendars"),
-                      lambda: fetch(request, "iocalendar", "/api/events", {"q": q[:80], "limit": 200}))
-    colors = {c["id"]: c.get("color") for c in cals.get("items", [])}
-    ordered = _soon_first(got.get("items", []), tz)
-    out = []
-    for x in ordered[:n]:
-        nx = x.get("next") or {}
-        out.append({"id": x.get("id"), "title": x.get("title") or "(no title)", "start": nx.get("start"), "end": nx.get("end"),
-                    "allDay": bool(x.get("allDay")), "recurring": bool(x.get("recurring")), "recurrenceId": nx.get("recurrenceId"),
-                    "location": x.get("location"), "color": colors.get(x.get("calendarId"))})
-    return {"items": out, "more": len(ordered) > n}
-
-
-def iotask_search(request: Request, q: str, tz: str = "", n: int = 5) -> dict:
-    """{items: [{id, title, due, allDay, color}], more}: the open tasks whose title or notes match q (the search box),
-    soonest due first, as ioTask sorts them, up to n. Done tasks are not listed (ioTask's own search has them)."""
-    p = {"q": q[:80], "limit": n + 1}
-    if tz:
-        p["tz"] = tz
-    lists, open_ = _both(lambda: fetch(request, "iotask", "/api/lists"),
-                         lambda: fetch(request, "iotask", "/api/tasks", {**p, "status": "open"}))
-    colors = {c["id"]: c.get("color") for c in lists.get("items", [])}
-    rows = [t for t in open_.get("items", []) if not t.get("done")]
-    return {"items": [{"id": t.get("id"), "title": t.get("title") or "(no title)", "due": t.get("due"), "allDay": bool(t.get("dueAllDay")),
-                       "color": colors.get(t.get("listId"))} for t in rows[:n]],
-            "more": len(rows) > n}
-
-
-def iorecipe_search(request: Request, q: str, n: int = 5) -> dict:
-    """{items: [{id, title, photo, minutes, tags, favourite}], more}: the recipes with every word of q in their title,
-    ingredients, steps or tags (the search box), by title. photo: the id of its first picture, if any."""
-    got = fetch(request, "iorecipe", "/api/recipes", {"q": q[:80], "limit": n + 1})
-    rows = got.get("items", [])
-    out = []
-    for r in rows[:n]:
-        m = re.search(r"/photos/(\d+)$", str(r.get("photo") or ""))
-        out.append({"id": r.get("id"), "title": r.get("title") or "(no title)", "photo": int(m.group(1)) if m else None,
-                    "minutes": r.get("totalMinutes"), "tags": (r.get("tags") or [])[:3], "favourite": bool(r.get("favourite"))})
-    return {"items": out, "more": len(rows) > n}
-
-
-def iothings_search(request: Request, q: str, n: int = 5) -> dict:
-    """{items: [{id, name, photo, where}], more}: the things you own (ioThings) with every word of q in their name,
-    maker, model or serial number, notes, place, labels or own fields (the search box), by name. photo: the id of its
-    first picture, if any; where: the place it is in."""
-    got = fetch(request, "iothings", "/api/items", {"q": q[:80], "limit": n + 1})
-    rows = got.get("items", [])
-    out = []
-    for r in rows[:n]:
-        m = re.search(r"/files/(\d+)$", str(r.get("photo") or ""))
-        loc = r.get("location") if isinstance(r.get("location"), dict) else {}
-        out.append({"id": r.get("id"), "name": r.get("name") or "(no name)", "photo": int(m.group(1)) if m else None,
-                    "where": loc.get("path") or ""})
-    return {"items": out, "more": len(rows) > n}
-
-
-def iothings_photo(request: Request, item_id: int, file_id: int) -> tuple[bytes, str]:
-    """A thing's small picture (the card's), from ioThings."""
-    return fetch(request, "iothings", f"/api/items/{int(item_id)}/files/{int(file_id)}", {"size": "small"}, raw=True)
-
-
-# ------------------------------------------------------------------ ioDocs: the papers to renew, and what the search box finds
-
-def _doc_row(r: dict) -> dict:
-    m = re.search(r"/files/(\d+)$", str(r.get("cover") or ""))
-    e = r.get("expiry") if isinstance(r.get("expiry"), dict) else {}
-    return {"id": r.get("id"), "title": r.get("title") or "(no title)", "kind": r.get("kindLabel") or "", "photo": int(m.group(1)) if m else None,
-            "expiresOn": r.get("expiresOn"), "days": e.get("days"), "state": e.get("state"),
-            "people": [p.get("displayName") for p in (r.get("people") or []) if isinstance(p, dict) and p.get("displayName")]}
-
-
-def iodocs(request: Request, n: int = 3) -> dict:
-    """{items: [{id, title, kind, expiresOn, days, state, people}], more, expired}: the documents this person sees in
-    ioDocs that have expired or come within their reminder (the soonest first, up to n; more: how many are left out;
-    expired: how many of them have)."""
-    got = fetch(request, "iodocs", "/api/documents", {"status": "expiring", "sort": "expires", "limit": 100})
-    rows = [_doc_row(r) for r in got.get("items", [])]
-    return {"items": rows[:n], "more": max(0, len(rows) - n), "expired": sum(1 for r in rows if r["state"] == "expired")}
-
-
-def iodocs_search(request: Request, q: str, n: int = 5) -> dict:
-    """{items: [{id, title, kind, photo, expiresOn, days, state, people}], more}: the documents (ioDocs) with every word
-    of q in their title, kind, number, issuer, notes, own fields, people or the text read off their scans. photo: the id
-    of the file whose small picture is the cover, if any."""
-    got = fetch(request, "iodocs", "/api/documents", {"q": q[:80], "limit": n + 1})
-    rows = got.get("items", [])
-    return {"items": [_doc_row(r) for r in rows[:n]], "more": len(rows) > n}
-
-
-def iodocs_photo(request: Request, doc_id: int, file_id: int) -> tuple[bytes, str]:
-    """A document's small picture (its cover), from ioDocs."""
-    return fetch(request, "iodocs", f"/api/documents/{int(doc_id)}/files/{int(file_id)}", {"size": "small"}, raw=True)
-
-
-def _lines(text) -> list[str]:
-    return [ln.strip().lstrip("#>*- ").strip() for ln in str(text or "").splitlines() if ln.strip().lstrip("#>*- ").strip()]
-
-
-def ionote_search(request: Request, q: str, n: int = 5) -> dict:
-    """{items: [{id, title, text, pinned, updated}], more}: the viewer's own notes with every word of q in their title,
-    text, tags, or the text of a picture or attachment (the search box), pinned first, then the last changed first.
-    title: as ioNote shows it (the title, else the first line); text: the line after it."""
-    got = fetch(request, "ionote", "/api/notes", {"q": q[:80], "limit": n})
-    out = []
-    for x in got.get("notes", [])[:n]:
-        body = _lines(x.get("body")) or _lines(x.get("ocrText"))
-        title = str(x.get("title") or "").strip()
-        if not title:
-            title, body = (body[0], body[1:]) if body else ("Image" if x.get("hasImage") else "Untitled", [])
-        out.append({"id": x.get("id"), "title": title[:80], "text": (body[0] if body else "")[:120], "pinned": bool(x.get("pinned")),
-                    "updated": x.get("updatedAt")})
-    return {"items": out, "more": int(got.get("total") or 0) > n}
-
-
-def iorecipe_photo(request: Request, recipe_id: int, photo_id: int) -> tuple[bytes, str]:
-    """A recipe's small picture (the card's), from ioRecipe."""
-    return fetch(request, "iorecipe", f"/api/recipes/{int(recipe_id)}/photos/{int(photo_id)}", {"size": "small"}, raw=True)
-
-
-# ------------------------------------------------------------------ ioContact: birthdays and anniversaries ahead
-
-def iocontact(request: Request, days: int = 30, n: int = 8) -> dict:
-    """{items: [{id, name, hasPhoto, iopixPersonId, label, turns, in, date}]}: the family's birthdays and other dates in
-    the next `days` days, soonest first, up to n. A contact without a photo of its own may still have a face in ioPix
-    (iopixPersonId), which ioContact shows in its place; so does the card. A birthday whose "Remind me" box is unchecked
-    in ioContact (remind false) is left out; other dates carry no such box (remind null) and always show."""
-    got = fetch(request, "iocontact", "/api/upcoming", {"days": max(1, min(days, 366))})
-    items = []
-    for x in got.get("items", []):
-        if x.get("remind") is False:
-            continue
-        items.append({"id": x.get("contactId"), "name": x.get("fn"), "hasPhoto": bool(x.get("hasPhoto")),
-                      "iopixPersonId": x.get("iopixPersonId"), "label": x.get("label") or "birthday",
-                      "turns": x.get("turns"), "in": x.get("inDays"), "date": x.get("date")})
-    return {"items": items[:n], "more": max(0, len(items) - n)}
-
-
-def iocontact_search(request: Request, q: str, n: int = 5) -> dict:
-    """{items: [{id, name, hasPhoto, iopixPersonId, org}]}: the contacts whose name, email, phone, address… match q (the
-    search box)."""
-    got = fetch(request, "iocontact", "/api/contacts", {"q": q[:80], "limit": n})
-    return {"items": [{"id": x.get("id"), "name": x.get("fn"), "hasPhoto": bool(x.get("hasPhoto")),
-                       "iopixPersonId": x.get("iopixPersonId"), "org": x.get("org")} for x in got.get("items", [])],
-            "total": got.get("total")}
-
-
-def iocontact_photo(request: Request, contact_id: int) -> tuple[bytes, str]:
-    return fetch(request, "iocontact", f"/api/contacts/{int(contact_id)}/photo", raw=True)
-
-
-def iocontact_face(request: Request, person_id: int) -> tuple[bytes, str]:
-    """A person's face from ioPix, as ioContact hands it out (for contacts linked to an ioPix person, no photo of their own)."""
-    return fetch(request, "iocontact", f"/api/iopix/face/{int(person_id)}", raw=True)
-
-
-# ------------------------------------------------------------------ ioHealth: today's steps and activity rings
-
-def iohealth(request: Request, tz: str = "") -> dict:
-    """{steps, rings: {move, moveGoal, exercise, exerciseGoal, stand, standGoal} | null, sleep: {date, asleep, inBed, start,
-    end} | null, week: [{date, steps}]} for the viewer: today's steps and rings, last night's sleep (minutes), and the
-    steps of the last seven days."""
-    day = dt.datetime.now(_zone(tz)).date().isoformat()
-    q = {"from": day, "to": day}
-    if tz:
-        q["tz"] = tz
-    steps = rings = sleep = None
-    week: list = []
-    failed = []
-    # a day per point, the last seven days: today's number, and the trend behind it
-    since = (dt.datetime.now(_zone(tz)).date() - dt.timedelta(days=6)).isoformat()
-    # the three answers are asked for at the same time: the tile waits for the slowest, not for their sum
-    series, nights, activity = _together(
-        lambda: fetch(request, "iohealth", "/api/series", {**q, "from": since, "type": "step_count", "bucket": "day"}),
-        # last night: the night that ended this morning (ioHealth names a night by the day it ends on)
-        lambda: fetch(request, "iohealth", "/api/sleep", {**q, "from": (dt.date.fromisoformat(day) - dt.timedelta(days=1)).isoformat()}),
-        lambda: fetch(request, "iohealth", "/api/activity", q))
-    for r in (series, nights, activity):
-        if isinstance(r, Exception) and not isinstance(r, Unavailable):
-            raise r
-    if isinstance(series, Unavailable):
-        failed.append(series)
-    else:
-        pts = series.get("points") or []
-        by_day = {dt.datetime.fromtimestamp(p["t"], _zone(tz)).date().isoformat(): p.get("v") for p in pts if p.get("t") is not None}
-        week = [{"date": d, "steps": round(by_day[d]) if by_day.get(d) is not None else None}
-                for d in ((dt.date.fromisoformat(since) + dt.timedelta(days=i)).isoformat() for i in range(7))]
-        steps = week[-1]["steps"] if week and week[-1]["date"] == day else None
-        if steps is None and by_day.get(day) is not None:
-            steps = round(by_day[day])
-    if not isinstance(nights, Unavailable):  # sleep is a bonus: the tile shows without it
-        nights = nights if isinstance(nights, list) else nights.get("items", [])
-        last = next((x for x in reversed(nights) if x.get("asleep")), None)
-        if last:
-            sleep = {"date": last.get("date"), "asleep": round(last["asleep"]), "inBed": round(last.get("inBed") or 0),
-                     "start": last.get("start"), "end": last.get("end")}
-    if isinstance(activity, Unavailable):
-        failed.append(activity)
-    else:
-        rows = activity if isinstance(activity, list) else activity.get("items", [])
-        if rows:
-            rings = {k: rows[-1].get(k) for k in ("move", "moveGoal", "exercise", "exerciseGoal", "stand", "standGoal")}
-    if len(failed) == 2:  # one of the two missing still shows the other
-        raise failed[0]
-    return {"steps": steps, "rings": rings, "sleep": sleep, "week": week}
-
-
-def iotask(request: Request, tz: str = "", n: int = 3) -> dict:
-    """{today: [task], more, overdue}: the open tasks due today or before (the viewer's today), the overdue ones first
-    as ioTask sorts them, up to n, each with its list's colour; overdue is how many of them all are late."""
-    q = {"due": "today", "status": "open", "limit": 200}
-    late = {"due": "overdue", "status": "open", "limit": 200}
-    if tz:
-        q["tz"] = late["tz"] = tz
-    lists, due, over = _together(lambda: fetch(request, "iotask", "/api/lists"),
-                                 lambda: fetch(request, "iotask", "/api/tasks", q),
-                                 lambda: fetch(request, "iotask", "/api/tasks", late))
-    colors = {c["id"]: c.get("color") for c in lists.get("items", [])}
-    late_ids = {t.get("id") for t in over.get("items", [])}
-    items = due.get("items", [])
-    return {"today": [{"id": t.get("id"), "title": t.get("title") or "(no title)", "due": t.get("due"), "allDay": bool(t.get("dueAllDay")),
-                       "late": t.get("id") in late_ids, "color": colors.get(t.get("listId"))} for t in items[:n]],
-            "more": max(0, len(items) - n), "overdue": len(late_ids)}
-
-
-# ------------------------------------------------------------------ ioMoney: the week's bills, and what the search box finds
-
-def _money_bills(request: Request, today: dt.date, days: int) -> dict:
-    return fetch(request, "iomoney", "/api/bills", {"start": today.isoformat(), "end": (today + dt.timedelta(days=days)).isoformat()})
-
-
-def iomoney(request: Request, tz: str = "", n: int = 3, days: int = 7) -> dict:
-    """{currency, bills: [{day, name, amount, currency, approximate, account, subscription}], more, total, low:
-    [{name, currency, floor, belowOn, value}], behind: [{name, institution}]}: the recurring payments not paid yet
-    that fall due from the viewer's today through the next `days` days (the soonest first, up to n; more: how many are
-    left out; total: what they all come to, when they are in one currency), the cash accounts ioMoney's forecast sees
-    going under their lowest balance in the coming 30 days, and the accounts whose link to the bank is behind. Only
-    what this person sees in ioMoney: their own accounts and the household's."""
-    today = dt.datetime.now(_zone(tz)).date()
-    bills, low, summary = _together(lambda: _money_bills(request, today, days),
-                                    lambda: fetch(request, "iomoney", "/api/forecast", {"days": 30}),
-                                    lambda: fetch(request, "iomoney", "/api/summary"))
-    if isinstance(bills, Exception):
-        raise bills
-    due = [b for b in bills.get("items", []) if not b.get("paid") and (b.get("amount") or 0) < 0]
-    monies = {b.get("currency") for b in due}
-    out = {"currency": bills.get("currency"),
-           "bills": [{"day": b.get("day"), "name": b.get("merchant") or "(no name)", "amount": b.get("amount"), "currency": b.get("currency"),
-                      "approximate": bool(b.get("approximate")), "account": b.get("account"), "subscription": bool(b.get("subscription"))} for b in due[:n]],
-           "more": max(0, len(due) - n),
-           "total": round(sum(b.get("amount") or 0 for b in due), 2) if len(monies) == 1 else None,
-           "low": [], "behind": []}
-    if len(monies) == 1:
-        out["currency"] = monies.pop() or out["currency"]
-    if not isinstance(low, Exception):  # the forecast or the summary not answering leaves the bills as they are
-        out["low"] = [{"name": a.get("name"), "currency": a.get("currency"), "floor": a.get("floor"), "belowOn": a.get("belowOn"),
-                       "value": (a.get("low") or {}).get("value")} for a in low.get("items", [])]
-    if not isinstance(summary, Exception):
-        stale = ((summary.get("monarch") or {}).get("stale")) or []
-        out["behind"] = [{"name": a.get("name"), "institution": a.get("institution")} for a in stale]
-    return out
-
-
-def iomoney_search(request: Request, q: str, n: int = 5) -> dict:
-    """{items: [{kind: 'payee', name, count, total, currency, last, category} | {kind: 'transaction', id, name, day, amount,
-    currency, account, category}], more, currency}: the payees whose name has every word of q (the two most used), then the
-    transactions ioMoney finds for q (its own search: the payee, the bank's text, the category, the notes; "$280" or
-    "100-200" are amounts), the newest first, n rows in all."""
-    payees, found = _together(lambda: fetch(request, "iomoney", "/api/payees", {"q": q[:80], "limit": 2}),
-                              lambda: fetch(request, "iomoney", "/api/transactions", {"q": q[:80], "limit": n}))
-    if isinstance(found, Exception):
-        raise found
-    who = [] if isinstance(payees, Exception) else [
-        {"kind": "payee", "name": p.get("payee"), "count": p.get("count"), "total": p.get("total"), "last": p.get("last"), "category": p.get("category")}
-        for p in payees.get("items", [])[:2] if p.get("payee") and (p.get("count") or 0) > 1]
-    rows = [{"kind": "transaction", "id": t.get("id"), "name": t.get("merchant") or t.get("description") or "(no name)", "day": t.get("day"),
-             "amount": t.get("amount"), "currency": t.get("currency"), "account": t.get("account"), "category": t.get("category")}
-            for t in found.get("items", [])]
-    for p in who:  # a payee's total is in the money of its transactions
-        p["currency"] = next((t["currency"] for t in rows if t["name"] == p["name"] and t.get("currency")), rows[0].get("currency") if rows else None)
-    items = (who + rows)[:n]
-    return {"items": items, "more": int(found.get("total") or 0) > len([x for x in items if x["kind"] == "transaction"])}
-
-
-# ------------------------------------------------------------------ ioPix: people, places and albums in the search box
-
-NAMES_TTL = 120    # seconds the names of one person's ioPix are kept for the search box
-_names: dict = {}  # who -> (until, [{kind, id, name, n, cover, …}])
-_names_lock = threading.Lock()
-
-
-def _fold(s) -> str:
-    """Lower case without accents, as the page's own search folds the bookmarks."""
-    return "".join(c for c in unicodedata.normalize("NFD", str(s or "")) if not unicodedata.combining(c)).lower()
-
-
-def _iopix_names(request: Request) -> list[dict]:
-    """What the search box may find in ioPix, for this viewer: the people, the albums (the viewer's and the shared
-    ones), the folders and the places, each with how many photos and one to show. Read once from ioPix's /api/meta
-    and /api/state and kept NAMES_TTL seconds for this viewer (their session), not for anyone else."""
-    tok = request.cookies.get(sessions.COOKIE) or request.headers.get("authorization") or ""
-    who = (hashlib.blake2b(tok.encode(), digest_size=16).hexdigest(), _host(request)) if tok else None
-    now = time.monotonic()
-    with _names_lock:
-        hit = _names.get(who) if who else None
-        if hit and hit[0] > now:
-            return hit[1]
-    meta, state = _together(lambda: fetch(request, "iopix", "/api/meta"), lambda: fetch(request, "iopix", "/api/state"))
-    if isinstance(meta, Exception):
-        raise meta
-    out = []
-    for t in meta.get("tags") or []:
-        if t.get("person") and t.get("nAll"):
-            out.append({"kind": "person", "id": t.get("id"), "name": t.get("name"), "n": t.get("nAll"), "cover": t.get("cover")})
-    for a in ([] if isinstance(state, Exception) else state.get("albums") or []):
-        out.append({"kind": "album", "id": a.get("id"), "name": a.get("name"), "n": a.get("n") or 0, "cover": a.get("cover")})
-    for a in meta.get("albums") or []:
-        if a.get("name") and a.get("nAll"):
-            out.append({"kind": "folder", "id": a.get("id"), "name": a.get("name"), "n": a.get("nAll"), "cover": a.get("cover")})
-    for p in meta.get("places") or []:
-        if len(p) >= 5 and p[0]:
-            out.append({"kind": "place", "id": None, "name": p[0], "region": p[1] or "", "country": p[2] or "", "n": p[3], "cover": p[4]})
-    for x in out:
-        x["_f"] = _fold(" ".join(str(x.get(k) or "") for k in ("name", "region", "country")))
-        x["_n"] = _fold(x["name"])
-    with _names_lock:
-        if len(_names) > 200:
-            _names.clear()
-        if who:
-            _names[who] = (now + NAMES_TTL, out)
-    return out
-
-
-def iopix_search(request: Request, q: str, n: int = 6) -> dict:
-    """{items: [{kind: person | album | folder | place, id, name, region, country, n, cover}]}: the people, albums,
-    folders and places of ioPix whose name has every word of q (a place: its town, region or country), the ones that
-    start with it first, then the ones with the most photos; up to three of a kind, n in all. cover: a photo to show."""
-    words = _fold(q[:80]).split()
-    if not words:
-        return {"items": []}
-    found = [x for x in _iopix_names(request) if all(w in x["_f"] for w in words)]
-    found.sort(key=lambda x: (not x["_n"].startswith(words[0]), -(x.get("n") or 0)))
-    out, per = [], {}
-    for kind in ("person", "album", "folder", "place"):
-        for x in found:
-            if x["kind"] == kind and per.get(kind, 0) < 3:
-                per[kind] = per.get(kind, 0) + 1
-                out.append({k: v for k, v in x.items() if not k.startswith("_")})
-    return {"items": out[:n]}
+def image(request: Request, key: str, kind: str, item_id: str, p: str = "") -> tuple[bytes, str]:
+    """An item's picture, from its app (a photo, a contact's face, a recipe's or a thing's picture)."""
+    if not re.fullmatch(r"[a-z_]{2,30}", kind or "") or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", item_id or ""):
+        raise Unavailable(404, "No such item")
+    return fetch(request, key, f"/api/suite/items/{kind}/{item_id}/image", {"p": p[:40]} if p else None, raw=True,
+                 timeout=20 if p == "preview" else TIMEOUT)
 
 
 def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q: str = "") -> dict:
-    if key not in WIDGETS:
-        raise Unavailable(404, f"{key} has nothing to show here")
+    """The app's tile (kind and n as the app takes them), or with q what it finds for the search box."""
+    st = _start(key)
     if tz and not re.fullmatch(r"[A-Za-z0-9_+\-/]{1,64}", tz):
         tz = ""
-    if q.strip() and key in ("iocalendar", "iotask", "iorecipe", "ionote", "iothings", "iomoney", "iodocs", "iopix"):
-        return {"iocalendar": lambda: iocalendar_search(request, q.strip(), tz), "iotask": lambda: iotask_search(request, q.strip(), tz),
-                "iorecipe": lambda: iorecipe_search(request, q.strip()), "ionote": lambda: ionote_search(request, q.strip()),
-                "iothings": lambda: iothings_search(request, q.strip()), "iomoney": lambda: iomoney_search(request, q.strip()),
-                "iodocs": lambda: iodocs_search(request, q.strip()),
-                "iopix": lambda: iopix_search(request, q.strip())}[key]()
-    if key == "iopix":
-        return iopix(request, tz, min(max(int(n or 0), 1), 24) if n else 4, kind if kind in ("onthisday", "rediscover") else "")
-    if key in ("iorecipe", "ionote", "iothings"):
-        raise Unavailable(404, f"{apps.name_of(key)} shows only in the search box")
-    if key == "iocalendar" and kind == "week":
-        return iocalendar_week(request, tz)
-    if key == "iocontact":
-        return iocontact_search(request, q.strip()) if q.strip() else iocontact(request)
-    if key == "iocalendar":
-        return iocalendar(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
-    if key == "iotask":
-        return iotask(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
-    if key == "iomoney":
-        return iomoney(request, tz, min(max(int(n or 0), 1), 12) if n else 3)
-    if key == "iodocs":
-        return iodocs(request, min(max(int(n or 0), 1), 12) if n else 3)
-    return iohealth(request, tz)
+    if q.strip():
+        if not st.get("find"):
+            raise Unavailable(404, f"{apps.name_of(key)} has nothing to search here")
+        return fetch(request, key, "/api/suite/search", {"q": q.strip()[:80], "n": 5, "tz": tz} if tz else {"q": q.strip()[:80], "n": 5})
+    if not st.get("tile"):
+        raise Unavailable(404, f"{apps.name_of(key)} shows only in the search box" if st.get("find") else f"{key} has nothing to show here")
+    params = {k: v for k, v in (("tz", tz), ("kind", re.sub(r"[^a-z]", "", kind)[:20]), ("n", max(0, min(int(n or 0), 24)))) if v}
+    return fetch(request, key, "/api/suite/tile", params)

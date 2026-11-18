@@ -4,7 +4,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from iosuite_shared import suiteitems
+
 from app import widgets
+from conftest import via_providers
 
 
 def _ts(y, m, d):
@@ -15,14 +18,7 @@ def _ts(y, m, d):
 def apps_answer(monkeypatch):
     """Replace the request to an app with a table of answers: {(key, path): reply or callable(params)}."""
     table, asked = {}, []
-
-    def fake(request, key, path, params=None, raw=False):
-        asked.append((key, path, dict(params or {}), request.cookies.get("iothing_session")))
-        r = table.get((key, path))
-        if r is None:
-            raise widgets.Unavailable(502, f"{key} is not reachable")
-        return r(params or {}) if callable(r) else r
-    monkeypatch.setattr(widgets, "fetch", fake)
+    monkeypatch.setattr(widgets, "fetch", via_providers(table, asked))
     return table, asked
 
 
@@ -48,7 +44,7 @@ def test_iopix_on_this_day_one_per_year(client, apps_answer):
     d = client.get("/api/widgets/iopix").json()
     assert d["count"] == 5 and len(d["items"]) == 4 and all(i["yearsAgo"] == 14 for i in d["items"])  # four of one year's five
     key, path, params, cookie = asked[0]
-    assert params["md"] == dt.datetime.now(widgets._zone("Europe/Brussels")).strftime("%m-%d") and cookie  # the viewer's own session goes along
+    assert params["md"] == dt.datetime.now(ZoneInfo("Europe/Brussels")).strftime("%m-%d") and cookie  # the viewer's own session goes along
 
 
 def test_iopix_rediscover_when_nothing_today(client, apps_answer):
@@ -96,7 +92,7 @@ def test_iocalendar_rest_of_today_then_next(client, apps_answer):
 
 def test_iohealth_steps_rings_sleep_and_week(client, apps_answer):
     table, asked = apps_answer
-    zone = widgets._zone("Europe/Brussels")
+    zone = ZoneInfo("Europe/Brussels")
     today = dt.datetime.now(zone).date()
     at = lambda d: int(dt.datetime.combine(d, dt.time(12), zone).timestamp())  # noqa: E731
     table[("iohealth", "/api/series")] = {"points": [{"t": at(today), "v": 8421.4, "n": 30}, {"t": at(today - dt.timedelta(days=2)), "v": 12000, "n": 40}]}
@@ -178,11 +174,17 @@ def test_iocontact_birthdays_and_photo(client, apps_answer):
     assert all(x["id"] != 6 for x in d["items"])  # "Remind me" unchecked in ioContact: not on the start page
     assert asked[-1][2] == {"days": 30}
     table[("iocontact", "/api/contacts/5/photo")] = (b"\xff\xd8jpeg", "image/jpeg")
-    r = client.get("/api/widgets/iocontact/photo/5")
+    r = client.get("/api/widgets/iocontact/image/contact/5")
     assert r.status_code == 200 and r.content == b"\xff\xd8jpeg" and r.headers["content-type"] == "image/jpeg"
-    assert client.get("/api/widgets/iocontact/photo/6").status_code == 502
+    assert client.get("/api/widgets/iocontact/image/contact/6").status_code == 502
+    # no photo of its own: its face in ioPix, which ioContact hands out too
+
+    def no_photo(p):
+        raise suiteitems.Unavailable(404, "no photo")
+    table[("iocontact", "/api/contacts/7/photo")] = no_photo
+    table[("iocontact", "/api/contacts/7")] = {"id": 7, "fn": "Grace", "iopixPersonId": 77}
     table[("iocontact", "/api/iopix/face/77")] = (b"\xff\xd8face", "image/jpeg")
-    r = client.get("/api/widgets/iocontact/face/77")
+    r = client.get("/api/widgets/iocontact/image/contact/7")
     assert r.status_code == 200 and r.content == b"\xff\xd8face" and r.headers["content-type"] == "image/jpeg"
 
 
@@ -194,7 +196,7 @@ def test_app_refusal_is_not_a_sign_out(client, monkeypatch):
         raise urllib.error.HTTPError("http://x", 401, "no", {}, None)
     monkeypatch.setattr(widgets.links, "call", refuse)
     assert client.get("/api/widgets/iohealth").status_code == 403
-    assert client.get("/api/widgets/iopix/thumb/5").status_code == 403
+    assert client.get("/api/widgets/iopix/image/photo/5").status_code == 403
 
 
 def test_quick_add_event(client, apps_answer):

@@ -232,3 +232,61 @@ def add_account(client, body: dict):
     if role:
         body["roles"] = {**body.get("roles", {}), client.get("/api/auth/me").json()["app"]: role}
     return client.post("/api/suite-admin/users", json=body)
+
+
+# ------------------------------------------------------------------ the suite's standard endpoints, without the apps
+
+def suite_provider(root, app: str):
+    """The app's provider for /api/suite/* (its app/suiteitems.py, PROVIDER), loaded from the repository at root by
+    path: every app's package is called `app`, so another app's cannot be imported by name."""
+    import importlib.util
+    from pathlib import Path
+    p = Path(root) / app / "app" / "suiteitems.py"
+    spec = importlib.util.spec_from_file_location(f"_suiteitems_{app}", p)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.PROVIDER
+
+
+class FakeLocal:
+    """Stands in for suiteitems.Local: answer(path, params, raw) gives the app's own API's answers (and raises
+    suiteitems.Unavailable for the ones it would not give)."""
+
+    def __init__(self, answer, scope=None):
+        from iosuite_shared.suiteitems import Local
+        self.answer, self.scope = answer, scope or {"headers": [(b"cookie", b"iothing_session=test")]}
+        self.together, self.both = Local.together, Local.both
+
+    def get(self, path, params=None):
+        return self.answer(path, {k: v for k, v in (params or {}).items() if v is not None}, False)
+
+    def raw(self, path, params=None):
+        return self.answer(path, {k: v for k, v in (params or {}).items() if v is not None}, True)
+
+
+def suite_answer(provider, path: str, params: dict, answer, scope=None):
+    """What the app at /api/suite/<path> would answer, its provider run over FakeLocal(answer). None for a path that
+    is not one of them (the caller answers it itself)."""
+    import re
+    from iosuite_shared.suiteitems import Unavailable
+    local, params = FakeLocal(answer, scope), dict(params or {})
+    if path == "/api/suite/tile" and provider.tile:
+        return provider.tile(local, params.get("tz", ""), int(params.get("n") or 0), params.get("kind", ""))
+    if path == "/api/suite/search" and provider.search:
+        kinds = [k for k in str(params.get("kinds") or "").split(",") if k] or None
+        got = provider.search(local, params.get("q", ""), int(params.get("n") or 6), params.get("tz", ""), kinds)
+        return got if isinstance(got, dict) else {"items": got, "more": False}
+    m = re.fullmatch(r"/api/suite/items/([^/]+)/([^/]+)(/image)?", path)
+    if m and m.group(3) and provider.image:
+        got = provider.image(local, m.group(1), m.group(2), params.get("p", ""))
+        if not got:
+            raise Unavailable(404, "No picture")
+        return got
+    if m and provider.get:
+        got = provider.get(local, m.group(1), m.group(2))
+        if not got:
+            raise Unavailable(404, "No such item")
+        return got
+    if path.startswith("/api/suite/"):
+        raise Unavailable(404, "Not Found")
+    return None

@@ -11,6 +11,13 @@
     "name": "things",
     "what": "inventory"
   },
+  "start": {
+    "find": {
+      "head": "Things",
+      "rank": 60
+    },
+    "searchUrl": "#/search/{q}"
+  },
   "items": [
     {
       "kind": "item",

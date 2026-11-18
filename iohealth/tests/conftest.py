@@ -4,6 +4,7 @@ recreated per session, never a live one. Without a test server the suite is skip
 every test begins with empty tables."""
 import os
 import re
+import threading
 
 import pytest
 
@@ -41,6 +42,9 @@ def _client(app):
 def clean(_client):
     from app import webapi
     from app.auth import auth
+    for t in threading.enumerate():  # the last test's finished sync may still be sending its notifications: its writes
+        if t.name == "after-sync":     # would deadlock with the deletes below
+            t.join(10)
     with db.pool.auto() as con, con.cursor() as cur:
         for t in HEALTH_TABLES:
             cur.execute(f"DELETE FROM {t}")

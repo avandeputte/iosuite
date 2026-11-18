@@ -431,6 +431,16 @@ install" lists, the Docker Compose builder. CI runs it with `--check`. The libra
 `suite.PORTS`, `suite.FOLDERS`, `install.APPS`, `push.KINDS`, `related.KINDS`, and `Auth` takes the name, description,
 colour and admin-tool flag from it. A new app: its folder, its `app.json` (copy one), then `render.py`.
 
+### What the start page and the linked-items panel ask: the suite's standard endpoints
+
+Every app with items answers `/api/suite/search`, `/api/suite/items/{kind}/{id}` (and its `/image`) and, when it has a
+start page tile, `/api/suite/tile`, all in one shape (`iosuite_shared.suiteitems`): the start page's tiles and search
+box and the linked-items panel ask those and know no app's own API. They are called as the viewer, like any route of
+the app. The app writes them as a `Provider` in its `app/suiteitems.py` and mounts `auth.suite_router(PROVIDER)`; the
+provider reads the app's own API through `Local`, which passes the request through the app again with the same
+sign-in, so the viewer's rights are exactly the ones they have there. Its manifest's `start` says what the start page
+may ask it (`tile`, `find`, `searchUrl`).
+
 The manifest says what an app is, not that it is there: which apps a person sees is the list below, which each app
 writes itself when it runs.
 

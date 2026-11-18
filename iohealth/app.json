@@ -11,6 +11,10 @@
     "name": "health",
     "what": "health"
   },
+  "start": {
+    "rank": 20,
+    "tile": true
+  },
   "notifications": [
     {
       "kind": "health",

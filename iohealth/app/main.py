@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from iosuite_shared import chores, demo as suite_demo, pages, users as shared
 from iosuite_shared.updates import setup_log
 
-from app import __version__, config, db, notify, upload, webapi
+from app import __version__, config, db, notify, suiteitems, upload, webapi
 from app.auth import APP, auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -71,6 +71,7 @@ def _status_extra(request) -> dict:
 
 
 app.include_router(auth.router())        # /api/auth/*: login, accounts, logout, me, settings, password, setup, sessions, app-passwords, proxy
+app.include_router(auth.suite_router(suiteitems.PROVIDER))  # /api/suite/tile: the start page's tile (app.json)
 app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settings › Security panel): the whole suite (suite admins)
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
 app.include_router(upload.router)

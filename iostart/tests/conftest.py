@@ -61,3 +61,42 @@ def client(_client):
     r = _client.post("/api/auth/setup", json={"name": "alex", "password": "secret123"})
     assert r.status_code == 200, r.text
     return _client
+
+
+_PROVIDERS = {}
+
+
+def via_providers(table: dict, asked: list, sent: list = None, cookie: bool = True):
+    """A stand-in for widgets.fetch: the suite's standard endpoints (/api/suite/*) answered by each app's own provider
+    (its app/suiteitems.py, run here), which reads the app's own API from table {(key, path): reply or
+    callable(params)}; a path of the app's own API (quick add) straight from the table. asked: (key, path, params[,
+    cookie]) of every request to an app's own API."""
+    from pathlib import Path
+    from iosuite_shared import suiteitems, testing as _t
+    from app import widgets
+    root = Path(__file__).resolve().parents[2]
+
+    def fake(request, key, path, params=None, raw=False, body=None, timeout=None):
+        def inner(p, prm, raw_):
+            asked.append((key, p, dict(prm or {}), request.cookies.get("iothing_session")) if cookie else (key, p, dict(prm or {})))
+            r = table.get((key, p))
+            if r is None:
+                raise suiteitems.Unavailable(502, f"{key} is not reachable")
+            return r(prm or {}) if callable(r) else r
+        if body is not None and sent is not None:
+            sent.append((key, path, body))
+        if not path.startswith("/api/suite/"):
+            try:
+                return inner(path, params, raw)
+            except suiteitems.Unavailable as e:
+                raise widgets.Unavailable(e.status, str(e))
+        if key not in _PROVIDERS:
+            if not (root / key / "app" / "suiteitems.py").exists():
+                raise widgets.Unavailable(404, f"{key} has no {path}")
+            _PROVIDERS[key] = _t.suite_provider(root, key)
+        try:
+            got = _t.suite_answer(_PROVIDERS[key], path, params, inner, {"headers": [(b"cookie", (request.headers.get("cookie") or "").encode())]})
+        except suiteitems.Unavailable as e:
+            raise widgets.Unavailable(403 if e.status == 401 else e.status, str(e))
+        return got
+    return fake

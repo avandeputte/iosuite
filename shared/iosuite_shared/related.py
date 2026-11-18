@@ -19,12 +19,15 @@ and the open tasks first. Adding or removing a link needs a role of member or mo
 is done there (an app answers 403 for another app's kind), and both items must be ones the viewer sees. An app that
 deletes an item for good calls forget(kind, id); one that gives an item a new id calls move(kind, old, new).
 
+What an item looks like (its title, its line, its picture) is asked of its app at the suite's standard endpoints
+(iosuite_shared.suiteitems: /api/suite/search with kinds=, /api/suite/items/{kind}/{id} and its /image), so nothing
+here knows any app's own API: an app's manifest names its kinds of items, its provider answers for them.
+
 The other app is asked on the viewer's behalf (iosuite_shared.links.as_viewer): on localhost when it runs on this
 machine, then at its address inside the network, then at its public one, with the suite's Cloudflare Access service
 token when one is set, and with the viewer's own credentials (the shared session cookie, or the Authorization header
 the request came with), so each app answers with what that person may see there.
 """
-import datetime as dt
 import logging
 import re
 import time
@@ -174,188 +177,37 @@ def ask(request: Request, app: str, path: str, params: dict = None, image: bool 
         raise Unavailable(502, str(getattr(e, "reason", "")) or f"{app} does not answer") from None
 
 
-# ------------------------------------------------------------------ what an item looks like: one function per kind
+# ------------------------------------------------------------------ what an item looks like: its app says (/api/suite/*)
 
-def _iso_epoch(ts) -> str | None:
-    """ioPix keeps the camera's wall time as if it were UTC: the same wall time, without a zone."""
-    try:
-        return dt.datetime.fromtimestamp(float(ts), dt.timezone.utc).replace(tzinfo=None).isoformat(timespec="minutes")
-    except (TypeError, ValueError, OverflowError, OSError):
-        return None
-
-
-def _lines(text) -> list[str]:
-    return [s for s in (ln.strip().lstrip("#>*- ").strip() for ln in str(text or "").splitlines()) if s]
-
-
-def _item(kind: str, item_id, title: str, text: str = "", when: str = None, all_day: bool = False, done: bool = False,
-          image: str = None) -> dict:
-    """An item as the panel shows it. image: the part of /api/related/image/<kind>/<id>?p= that names the picture
-    ('' for the item's only one), None without one."""
+def _shown(kind: str, x: dict) -> dict:
+    """An item as its app answers it (iosuite_shared.suiteitems), as the panel shows it: its address in its app, and
+    money said in its line."""
     app = KINDS[kind]["app"]
     base = links.url(app) or ""
-    href = KINDS[kind]["href"].replace("{id}", urllib.parse.quote(str(item_id)))
-    return {"kind": kind, "id": str(item_id), "app": app, "appName": catalog.name_of(app), "title": (title or "").strip()[:120] or "(no title)",
-            "text": (text or "").strip()[:140], "when": when, "allDay": bool(all_day), "done": bool(done),
-            "image": image, "url": f"{base}/{href}" if base else None}
-
-
-def _event(x: dict) -> dict:
-    nx = x.get("next") or {}
-    return _item("event", x.get("id"), x.get("title"), x.get("location") or "", nx.get("start") or x.get("start"), x.get("allDay"))
-
-
-def _task(t: dict) -> dict:
-    return _item("task", t.get("id"), t.get("summary") or t.get("title"), "", t.get("due"), t.get("dueAllDay"),
-                 done=bool(t.get("done") or t.get("completed")))
-
-
-def _note(n: dict) -> dict:
-    body = _lines(n.get("body")) or _lines(n.get("ocrText"))
-    title = str(n.get("title") or "").strip()
-    if not title:
-        title, body = (body[0], body[1:]) if body else ("Picture" if n.get("hasImage") else "Untitled", [])
-    when = dt.datetime.fromtimestamp(float(n["updatedAt"]), dt.timezone.utc).isoformat(timespec="minutes") if n.get("updatedAt") else None
-    return _item("note", n.get("id"), title, body[0] if body else "", when, image="" if n.get("hasImage") else None)
-
-
-def _contact(c: dict) -> dict:
-    return _item("contact", c.get("id"), c.get("fn"), " · ".join(x for x in (c.get("title"), c.get("org")) if x),
-                 image="" if c.get("hasPhoto") else None)
-
-
-def _recipe(r: dict) -> dict:
-    m = re.search(r"/photos/(\d+)$", str(r.get("photo") or ""))
-    mins = r.get("totalMinutes")
-    return _item("recipe", r.get("id"), r.get("title"), f"{mins} min" if mins else "", image=m.group(1) if m else None)
-
-
-def _asset(a: dict) -> dict:
-    """A house, a car or another thing of value (an account of ioMoney): its kind and what it is worth."""
-    v = a.get("estimate") if a.get("estimate") is not None else a.get("balance")
-    worth = f"{a.get('currency') or ''} {float(v):,.0f}".strip() if isinstance(v, (int, float)) else ""
-    return _item("asset", a.get("id"), a.get("name"), " · ".join(x for x in (a.get("kindLabel"), worth) if x))
-
-
-def _transaction(t: dict) -> dict:
-    """A transaction of ioMoney: the payee, its day, and the amount, the category and the account."""
-    v = t.get("amount")
-    amount = f"{t.get('currency') or ''} {float(v):,.2f}".strip() if isinstance(v, (int, float)) else ""
-    return _item("transaction", t.get("id"), t.get("merchant") or t.get("description") or "Transaction",
-                 " · ".join(x for x in (amount, t.get("category"), t.get("account")) if x), t.get("day"), all_day=True)
-
-
-def _photo(p: dict) -> dict:
-    album = (p.get("album") or {}).get("name") if isinstance(p.get("album"), dict) else None
-    title = p.get("title") or p.get("caption") or album or p.get("name") or "Photo"
-    return _item("photo", p.get("id"), title, album if album and album != title else "", _iso_epoch(p.get("ts")), image="")
-
-
-def _thing(x: dict) -> dict:
-    """A thing of ioThings: where it is (or who made it) and how long its warranty runs."""
-    m = re.search(r"/files/(\d+)$", str(x.get("photo") or ""))
-    where = (x.get("location") or {}).get("path") if isinstance(x.get("location"), dict) else None
-    warranty = "lifetime warranty" if x.get("lifetimeWarranty") else f"warranty to {x['warrantyExpires']}" if x.get("warrantyExpires") else ""
-    return _item("item", x.get("id"), x.get("name"), " · ".join(p for p in (where or x.get("manufacturer") or "", warranty) if p),
-                 image=m.group(1) if m else None)
-
-
-def _document(x: dict) -> dict:
-    """A paper of ioDocs: what kind it is, whose, and until when it runs."""
-    m = re.search(r"/files/(\d+)$", str(x.get("cover") or ""))
-    whose = ", ".join(p.get("displayName") or "" for p in x.get("people") or [] if isinstance(p, dict))
-    until = f"expires {x['expiresOn']}" if x.get("expiresOn") else ""
-    return _item("document", x.get("id"), x.get("title"), " · ".join(p for p in (x.get("kindLabel") or "", whose, until) if p),
-                 image=m.group(1) if m else None)
-
-
-def _soon_first(items: list[dict]) -> list[dict]:
-    """Events: those still to come soonest first, then the ones that are over, the latest first."""
-    now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None).isoformat(timespec="minutes")
-
-    def key(x):
-        return (x.get("when") or "")[:16]
-    soon = sorted((x for x in items if key(x) >= now[:16 if not x.get("allDay") else 10]), key=key)
-    past = sorted((x for x in items if key(x) < now[:16 if not x.get("allDay") else 10]), key=key, reverse=True)
-    return soon + past
+    text = str(x.get("text") or "")
+    if isinstance(x.get("amount"), (int, float)):
+        text = " · ".join(t for t in (f"{x.get('currency') or ''} {float(x['amount']):,.2f}".strip(), text) if t)
+    return {"kind": kind, "id": str(x.get("id")), "app": app, "appName": catalog.name_of(app), "title": x.get("title") or "(no title)",
+            "text": text[:140], "when": x.get("when"), "allDay": bool(x.get("allDay")), "done": bool(x.get("done")),
+            "image": x.get("image"), "url": f"{base}/{x['href']}" if base and x.get("href") else None}
 
 
 def find(request: Request, kind: str, q: str, n: int = 6) -> list[dict]:
-    """The viewer's items of this kind that match q, as the panel shows them."""
-    app, q = KINDS[kind]["app"], q.strip()[:80]
-    if kind == "event":
-        got = ask(request, app, "/api/events", {"q": q, "limit": 60})
-        return _soon_first([_event(x) for x in got.get("items", [])])[:n]
-    if kind == "task":
-        open_, done = _together(lambda: ask(request, app, "/api/tasks", {"q": q, "status": "open", "limit": n}),
-                                lambda: ask(request, app, "/api/tasks", {"q": q, "status": "done", "limit": n}))
-        rows = [] if isinstance(open_, Exception) else open_.get("items", [])
-        rows += [] if isinstance(done, Exception) else done.get("items", [])
-        if isinstance(open_, Exception) and isinstance(done, Exception):
-            raise open_
-        return [_task(t) for t in rows[:n]]
-    if kind == "note":
-        return [_note(x) for x in ask(request, app, "/api/notes", {"q": q, "limit": n}).get("notes", [])[:n]]
-    if kind == "contact":
-        return [_contact(x) for x in ask(request, app, "/api/contacts", {"q": q, "limit": n}).get("items", [])[:n]]
-    if kind == "recipe":
-        return [_recipe(x) for x in ask(request, app, "/api/recipes", {"q": q, "limit": n}).get("items", [])[:n]]
-    if kind == "item":
-        return [_thing(x) for x in ask(request, app, "/api/items", {"q": q, "limit": n}).get("items", [])[:n]]
-    if kind == "asset":
-        return [_asset(x) for x in ask(request, app, "/api/accounts", {"things": "true", "q": q}).get("items", [])[:n]]
-    if kind == "document":
-        return [_document(x) for x in ask(request, app, "/api/documents", {"q": q, "limit": n}).get("items", [])[:n]]
-    if kind == "transaction":
-        return [_transaction(x) for x in ask(request, app, "/api/transactions", {"q": q, "limit": n}).get("items", [])[:n]]
-    if kind == "photo":
-        got = ask(request, app, "/api/photos", {"q": q, "type": "photo"})
-        return [_photo({"id": pid, "ts": ts}) for pid, ts in list(zip(got.get("id") or [], got.get("ts") or []))[:max(n, 12)]]
-    return []
+    """The viewer's items of this kind that match q, as the panel shows them (the coming ones first)."""
+    got = ask(request, KINDS[kind]["app"], "/api/suite/search", {"q": q.strip()[:80], "n": n, "kinds": kind})
+    rows = got.get("items", []) if isinstance(got, dict) else []
+    return [_shown(kind, x) for x in rows if x.get("kind") == kind]
 
 
 def get(request: Request, kind: str, item_id: str) -> dict:
     """One item as the panel shows it; Unavailable when the viewer may not see it (or it is gone, or in the trash)."""
-    app = KINDS[kind]["app"]
-    q = urllib.parse.quote(item_id)
-    if kind == "event":
-        x = ask(request, app, f"/api/events/{q}")
-        return _item("event", item_id, x.get("title"), x.get("location") or "", x.get("start"), x.get("allDay"))
-    if kind == "task":
-        return _task({**ask(request, app, f"/api/tasks/{q}"), "id": item_id})
-    if kind == "note":
-        n = ask(request, app, f"/api/notes/{q}")
-        if n.get("deleted"):
-            raise Unavailable(404, "That note is in the trash")
-        return _note(n)
-    if kind == "contact":
-        return _contact(ask(request, app, f"/api/contacts/{q}"))
-    if kind == "recipe":
-        return _recipe(ask(request, app, f"/api/recipes/{q}"))
-    if kind == "photo":
-        return _photo(ask(request, app, f"/api/photo/{q}"))
-    if kind == "item":
-        return _thing(ask(request, app, f"/api/items/{q}"))
-    if kind == "asset":
-        return _asset(ask(request, app, f"/api/accounts/{q}"))
-    if kind == "transaction":
-        return _transaction(ask(request, app, f"/api/transactions/{q}"))
-    if kind == "document":
-        return _document(ask(request, app, f"/api/documents/{q}"))
-    raise Unavailable(404, "No such kind of item")
+    return _shown(kind, ask(request, KINDS[kind]["app"], f"/api/suite/items/{kind}/{urllib.parse.quote(item_id)}"))
 
 
 def image(request: Request, kind: str, item_id: str, p: str = "") -> tuple[bytes, str]:
     """The item's small picture, from its app."""
-    app, q = KINDS[kind]["app"], urllib.parse.quote(item_id)
-    path, params = {"note": (f"/api/notes/{q}/thumb", None), "contact": (f"/api/contacts/{q}/photo", None),
-                    "photo": (f"/thumb/{q}", {"fit": "square"}),
-                    "recipe": (f"/api/recipes/{q}/photos/{p}", {"size": "small"}) if _NUM.fullmatch(p or "") else (None, None),
-                    "item": (f"/api/items/{q}/files/{p}", {"size": "small"}) if _NUM.fullmatch(p or "") else (None, None),
-                    "document": (f"/api/documents/{q}/files/{p}", {"size": "small"}) if _NUM.fullmatch(p or "") else (None, None)}.get(kind, (None, None))
-    if not path:
-        raise Unavailable(404, "No picture")
-    return ask(request, app, path, params, image=True, timeout=15)
+    return ask(request, KINDS[kind]["app"], f"/api/suite/items/{kind}/{urllib.parse.quote(item_id)}/image", {"p": p[:40]} if p else None,
+               image=True, timeout=15)
 
 
 def _together(*calls) -> list:

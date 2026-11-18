@@ -17,6 +17,14 @@
   "install": {
     "data": true
   },
+  "start": {
+    "rank": 70,
+    "find": {
+      "head": "Notes",
+      "rank": 50
+    },
+    "searchUrl": "#/notes?q={q}"
+  },
   "items": [
     {
       "kind": "note",

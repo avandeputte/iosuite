@@ -441,14 +441,12 @@ def bookmarks_extension():
 
 @router.get("/api/widgets/{key}", dependencies=[access.signed_in])
 def widget(key: str, request: Request, tz: str = "", kind: str = "", n: int = 0, q: str = ""):
-    """A glimpse of one app for its tile, asked of the app with the viewer's own sign-in. tz: the viewer's time zone
-    (IANA, e.g. Europe/Brussels), for what "today" is. For iopix, kind (onthisday | rediscover; empty: on this day
-    when there are photos, else rediscover) and n (how many, up to 24) pick what the photo strip shows; for iocalendar,
-    kind=week gives the coming week instead of today; for iocontact, q searches the contacts (the search box) instead
-    of listing the birthdays ahead, and so does it for iocalendar (events), iotask (tasks), iorecipe (recipes), ionote
-    (notes), iothings (the things you own), iomoney (payees and transactions), iodocs (documents) and iopix (people, albums, folders and
-    places). iomoney without q: the bills due this week, the cash accounts about to run low and the bank links that are behind; iodocs without q: the documents to renew (n of them). 404 for an app without one; 401/403 when the app refuses this account; 502 when it does not answer. The page leaves the
-    tile as it is on any of these."""
+    """A glimpse of one app for its tile (the app's /api/suite/tile), asked of the app with the viewer's own sign-in;
+    with q, what the app finds for the search box instead (its /api/suite/search: {items, more}, items in the suite's
+    shape). tz: the viewer's time zone (IANA, e.g. Europe/Brussels), for what "today" is; kind and n: what the app's
+    tile takes (ioPix: onthisday | rediscover and how many; ioCalendar: week). 404 for an app without one (its
+    manifest says which have a tile, and which a search); 401/403 when the app refuses this account; 502 when it does
+    not answer. The page leaves the tile as it is on any of these."""
     try:
         return widgets.get(request, key, tz, kind, n, q)
     except widgets.Unavailable as e:
@@ -505,77 +503,13 @@ async def widget_add_note(request: Request):
         raise HTTPException(e.status, str(e))
 
 
-@router.get("/api/widgets/iocontact/photo/{contact_id}", dependencies=[access.signed_in])
-def widget_contact_photo(contact_id: int, request: Request):
-    """A contact's photo from ioContact, passed through (for the birthdays card)."""
+@router.get("/api/widgets/{key}/image/{kind}/{item_id}", dependencies=[access.signed_in])
+def widget_image(key: str, kind: str, item_id: str, request: Request, p: str = ""):
+    """An item's picture from its app (the suite's /api/suite/items/{kind}/{id}/image), passed through: the page shows
+    images from here only. A photo, a contact's face, a recipe's or a thing's picture; p names one of several
+    ("preview": an ioPix photo at screen size, for the wall display)."""
     try:
-        body, ctype = widgets.iocontact_photo(request, contact_id)
-    except widgets.Unavailable as e:
-        raise HTTPException(e.status, str(e))
-    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
-                    headers={"Cache-Control": "private, max-age=86400"})
-
-
-@router.get("/api/widgets/iocontact/face/{person_id}", dependencies=[access.signed_in])
-def widget_contact_face(person_id: int, request: Request):
-    """A contact's ioPix face, through ioContact (a contact linked to an ioPix person, without a photo of its own)."""
-    try:
-        body, ctype = widgets.iocontact_face(request, person_id)
-    except widgets.Unavailable as e:
-        raise HTTPException(e.status, str(e))
-    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
-                    headers={"Cache-Control": "private, max-age=86400"})
-
-
-@router.get("/api/widgets/iothings/photo/{item_id}/{file_id}", dependencies=[access.signed_in])
-def widget_home_photo(item_id: int, file_id: int, request: Request):
-    """A thing's small picture from ioThings, passed through (the search box)."""
-    try:
-        body, ctype = widgets.iothings_photo(request, item_id, file_id)
-    except widgets.Unavailable as e:
-        raise HTTPException(e.status, str(e))
-    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
-                    headers={"Cache-Control": "private, max-age=86400"})
-
-@router.get("/api/widgets/iodocs/photo/{doc_id}/{file_id}", dependencies=[access.signed_in])
-def widget_docs_photo(doc_id: int, file_id: int, request: Request):
-    """A document's small picture from ioDocs, passed through (the search box)."""
-    try:
-        body, ctype = widgets.iodocs_photo(request, doc_id, file_id)
-    except widgets.Unavailable as e:
-        raise HTTPException(e.status, str(e))
-    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
-                    headers={"Cache-Control": "private, max-age=86400"})
-
-
-
-@router.get("/api/widgets/iorecipe/photo/{recipe_id}/{photo_id}", dependencies=[access.signed_in])
-def widget_recipe_photo(recipe_id: int, photo_id: int, request: Request):
-    """A recipe's small picture from ioRecipe, passed through (the search box)."""
-    try:
-        body, ctype = widgets.iorecipe_photo(request, recipe_id, photo_id)
-    except widgets.Unavailable as e:
-        raise HTTPException(e.status, str(e))
-    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
-                    headers={"Cache-Control": "private, max-age=86400"})
-
-
-@router.get("/api/widgets/iopix/thumb/{photo_id}", dependencies=[access.signed_in])
-def widget_thumb(photo_id: int, request: Request):
-    """An ioPix thumbnail (square, cropped around its subject), passed through: the page shows images from here only."""
-    try:
-        body, ctype = widgets.iopix_thumb(request, photo_id)
-    except widgets.Unavailable as e:
-        raise HTTPException(e.status, str(e))
-    return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
-                    headers={"Cache-Control": "private, max-age=86400"})
-
-
-@router.get("/api/widgets/iopix/preview/{photo_id}", dependencies=[access.signed_in])
-def widget_preview(photo_id: int, request: Request):
-    """An ioPix photo at screen size, passed through (the wall display's slideshow)."""
-    try:
-        body, ctype = widgets.iopix_preview(request, photo_id)
+        body, ctype = widgets.image(request, key, kind, item_id, p)
     except widgets.Unavailable as e:
         raise HTTPException(e.status, str(e))
     return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
