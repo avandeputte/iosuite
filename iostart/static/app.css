@@ -143,6 +143,11 @@ body.home #main { top: env(safe-area-inset-top); }
 /* a tile shows the app's name alone (no tagline); one with a widget has a smaller icon so its head stays low */
 .app:not(.small) > img { width: 32px; height: 32px; }
 .app.small .more { display: none; }
+/* a low tile's one line under the name (ioDocs: what is to renew) */
+.app.small .who > .line { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app.small .who > .line:empty { display: none; }
+.app.small .who > .line .ic { width: 13px; height: 13px; flex: none; }
+.stack.dense .app.small .who { gap: 0; }
 /* a card the width of the page with a row of ioPix photos (drawStrip), scrolling sideways when there are more */
 .strip { margin-top: 16px; padding: 14px 16px 16px; border-radius: var(--r-l); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
 .strip .row { display: grid; grid-auto-flow: column; grid-auto-columns: 128px; gap: 8px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; scrollbar-width: thin; }
