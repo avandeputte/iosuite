@@ -462,7 +462,7 @@ const sendFile = (id, file, read = true) => api(`api/documents/${id}/files?${new
   { method: 'POST', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } });
 /** Send the files to the document, each read on the way; what was read, together. */
 async function sendScans(id, picked, note) {
-  const got = { filled: new Set(), differs: [], read: 0, errors: [] };
+  const got = { filled: new Set(), differs: [], read: 0, errors: [], unread: new Set() };
   let n = 0;
   for (const f of picked) {
     n += 1;
@@ -470,11 +470,13 @@ async function sendScans(id, picked, note) {
     try {
       const r = await sendFile(id, f);
       (r.filled || []).forEach((x) => got.filled.add(x));
+      (r.unread || []).forEach((x) => got.unread.add(x));
       got.differs.push(...(r.differs || []));
       if (r.found && Object.keys(r.found).length) got.read += 1;
       if (r.error) got.errors.push(r.error);
     } catch (e) { got.errors.push(e.message || String(e)); }
   }
+  got.unread = [...got.unread].filter((x) => !got.filled.has(x));
   return got;
 }
 async function showScan(page) {
@@ -488,7 +490,7 @@ async function showScan(page) {
       const d = await api('api/documents', { method: 'POST', json: {} });
       const got = await sendScans(d.id, picked, (t) => { status.textContent = t; });
       await refreshAround();
-      store.set(`read.${d.id}`, JSON.stringify({ filled: [...got.filled], differs: got.differs, read: got.read, errors: got.errors }));
+      store.set(`read.${d.id}`, JSON.stringify({ filled: [...got.filled], differs: got.differs, read: got.read, errors: got.errors, unread: got.unread }));
       location.hash = `#/doc/${d.id}/edit`;
     } catch (e) { status.textContent = ''; fail(e); }
   };
@@ -500,7 +502,7 @@ async function showScan(page) {
   put(page, h('div', { class: 'pagehead' }, h('h1', null, 'Add from a scan or photo')), drop, status,
     h('div', { class: 'box' }, h('h2', null, icon('ai'), 'What ioDocs reads'),
       h('ul', { class: 'reads' },
-        h('li', null, h('b', null, 'Passports, ID cards and visas: '), 'the two or three lines of ‹‹‹ at the bottom of the photo page give the number, the name, the nationality, the birth date and the expiry date, each checked.'),
+        h('li', null, h('b', null, 'Passports, ID cards and visas: '), 'the two or three lines of ‹‹‹ at the bottom of the photo page give the number, the name, the nationality, the birth date and the expiry date, each checked. The issue date is only in the printed words: it is filled in when every reading agrees on it, else left for you to type in.'),
         h('li', null, h('b', null, 'US and Canadian driver’s licenses and state IDs: '), 'the barcode on the back holds every field exactly. Add a photo of the back as well as the front.'),
         h('li', null, h('b', null, 'Anything else: '), 'the words on it, searched for its number and dates (“Policy number…”, “Policy period 01/01/2026 to 01/01/2027”, “Expires…”), and they are found by the search.')),
       h('p', { class: 'muted small' }, 'It is all read on your server: no scan leaves it. ',
@@ -509,7 +511,7 @@ async function showScan(page) {
 }
 /** What a scan said: the fields it filled in, and what it says otherwise, to take or leave. */
 function readBox(x, got, onDone) {
-  if (!got || (!got.filled.length && !got.differs.length && !got.errors?.length && got.read === undefined)) return null;
+  if (!got || (!got.filled.length && !got.differs.length && !got.errors?.length && !got.unread?.length && got.read === undefined)) return null;
   const rows = got.differs.filter((d, i, a) => a.findIndex((y) => y.field === d.field && String(y.value) === String(d.value)) === i);
   const use = async (d, btn) => {
     try { await api(`api/documents/${x.id}`, { method: 'PATCH', json: { [d.field]: d.value } }); btn.replaceWith(h('span', { class: 'badge ok' }, icon('check', 'xs'), 'Used')); if (onDone) onDone(); } catch (e) { fail(e); }
@@ -519,6 +521,8 @@ function readBox(x, got, onDone) {
     got.filled.length ? h('p', null, 'Filled in: ', h('b', null, got.filled.join(', ').replace(/,([^,]*)$/, ' and$1')), '. Check them before saving.')
       : got.read ? h('p', { class: 'muted' }, 'Nothing new to fill in.')
         : h('p', { class: 'muted' }, 'Nothing could be read off it. A sharper, straighter photo in good light helps; for a license, add the back with its barcode.'),
+    got.unread?.length ? h('p', { class: 'note' }, 'Not read for sure: ', h('b', null, got.unread.map((u) => ({ Number: 'the number', 'Issued on': 'the issue date', 'Expires on': 'the expiry date' }[u] || u)).join(', ').replace(/,([^,]*)$/, ' and$1')),
+      '. Type ', got.unread.length > 1 ? 'them' : 'it', ' in from the page: rather than guess, ioDocs leaves ', got.unread.length > 1 ? 'them' : 'it', ' empty.') : null,
     rows.length ? [h('p', { class: 'muted small' }, 'The scan says otherwise here:'),
       rows.map((d) => h('div', { class: 'differ' }, h('span', { class: 'k' }, d.label), h('span', { class: 'v' }, h('b', null, shown(d)), h('span', { class: 'muted' }, ` instead of ${d.field.endsWith('On') ? fmtDay(d.current) : d.current}`)),
         h('button', { type: 'button', class: 'pillbtn noic', onclick: (e) => use(d, e.currentTarget) }, 'Use it')))] : null,
@@ -610,7 +614,7 @@ async function addScans(x, given) {
   if (!picked.length) return;
   toast(picked.length > 1 ? `Reading ${picked.length} files…` : 'Reading the scan…');
   const got = await sendScans(x.id, picked);
-  store.set(`read.${x.id}`, JSON.stringify({ filled: [...got.filled], differs: got.differs, read: got.read, errors: got.errors }));
+  store.set(`read.${x.id}`, JSON.stringify({ filled: [...got.filled], differs: got.differs, read: got.read, errors: got.errors, unread: got.unread }));
   await refreshAround(); onRoute();
 }
 function filesBox(x) {
@@ -627,7 +631,7 @@ function filesBox(x) {
         toast('Reading…');
         try {
           const got = await api(`api/documents/${x.id}/files/${f.id}/read`, { method: 'POST' });
-          store.set(`read.${x.id}`, JSON.stringify({ filled: got.filled || [], differs: got.differs || [], read: got.found && Object.keys(got.found).length ? 1 : 0 }));
+          store.set(`read.${x.id}`, JSON.stringify({ filled: got.filled || [], differs: got.differs || [], read: got.found && Object.keys(got.found).length ? 1 : 0, unread: got.unread || [] }));
           await refreshAround(); onRoute();
         } catch (err) { fail(err); }
       }] : null,

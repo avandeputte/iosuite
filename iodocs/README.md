@@ -22,7 +22,12 @@ suite's shared library (`iosuite-shared`, in [shared](https://github.com/avandep
   it is for, whoever added it, and the editors and admins; the usual), or *private* (only its people and whoever added
   it: a will). New accounts have no role here (as in ioMoney): an admin gives one in Settings › Security.
 - **Reading scans** (Tesseract on the server, `app/ocr.py`): a passport's or ID card's machine-readable zone (TD1, TD2
-  and TD3, with their check digits) gives the kind, number, country, name, birth date, sex and the expiry; the PDF417
+  and TD3, with their check digits) gives the kind, number, country, name, birth date, sex and the expiry. The zone is
+  found by reading each band of the picture (turned too, for a photo taken sideways or upside down) with a Tesseract
+  model trained on its font, `app/tessdata/mrz.traineddata` (from DoubangoTelecom/tesseractMRZ, BSD licence, see
+  `app/tessdata/NOTICE`), until one gives a zone whose check digits hold. The issue date is only in the printed words:
+  it is filled in when every reading of the page gives the same day that fits the expiry (10, 7, 5, 6 or 3 years), else
+  left empty and the person is told to type it in; the PDF417
   barcode on the back of a North American license (AAMVA) gives the number, the state, the dates, the address and the
   class; anything else is read as text, for its dates (the policy period, "EXP", "4b"), its number and its kind. A PDF's
   own text is used when it has some, else its pages are read. What is read fills in the fields still empty, never

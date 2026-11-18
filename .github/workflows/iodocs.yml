@@ -48,8 +48,8 @@ jobs:
         with:
           node-version: "22"
       # >>> own: setup
-      - name: Tesseract and Poppler (the scans are read with them)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-eng poppler-utils
+      - name: Tesseract and Poppler (the scans are read with them), and OCR-B for the made-up passports of the tests
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-eng poppler-utils fonts-ocr-b
       # <<< own: setup
       - name: Syntax checks
         run: |

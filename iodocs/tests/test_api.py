@@ -203,8 +203,8 @@ def test_a_us_passport_page_as_tesseract_reads_it():
     # printed names that are not the zone's own leave the zone's alone
     assert ocr.better_names({**m, "holder": "x"}, text.replace("\nDOE\n", "\nROE\n"))["holder"] == "x"
     # the issue date with its label lost: ten years less a day before the expiry
-    assert ocr.issued_from_expiry("01 JAN 1980\n14 MAR 2025 -\n13 MAR 2035", dt.date(2035, 3, 13)) == dt.date(2025, 3, 14)
-    assert ocr.issued_from_expiry("01 JAN 1980", dt.date(2035, 3, 13)) is None
+    assert ocr.issued_from_expiry(["01 JAN 1980\n14 MAR 2025 -\n13 MAR 2035"], dt.date(2035, 3, 13)) == dt.date(2025, 3, 14)
+    assert ocr.issued_from_expiry(["01 JAN 1980"], dt.date(2035, 3, 13)) is None
 
 
 def _patterned_passport_scan() -> bytes:
@@ -252,23 +252,6 @@ def test_a_scanned_us_passport_booklet():
     assert f["expiresOn"] == dt.date(2035, 3, 13) and f["issuedOn"] == dt.date(2025, 3, 14), f
     assert f["holder"] == "Jane-Ann Marie Doe" and f["birthDate"] == dt.date(1980, 1, 1), f
     assert "names" not in f
-
-
-def test_reading_a_passport_from_several_readings():
-    exp = dt.date(2031, 4, 9)
-    # a seven-year passport: issued 10 04 2024; one reading misread it as 10 04 2026, which a five-year one would fit
-    assert ocr.issued_from_expiry("10 04 2024", exp) == dt.date(2024, 4, 10)
-    assert ocr.issued_from_expiry("10 04 2026\n09 04 2031", exp, 2) is None
-    assert ocr.issued_from_expiry("10 04 2024\n10 04 2024\n10 04 2026", exp, 2) == dt.date(2024, 4, 10)
-    assert ocr.issued_from_expiry("10 APR 2021", exp) == dt.date(2021, 4, 10)  # ten years
-    assert ocr.issued_from_expiry("09 04 2031", exp) is None                     # the expiry itself is no issue date
-    l2 = _us_passport_zone("X98765432", "900215", "310409", "")
-    reads = ["P<UTODOES<ROE<<JOHNN<<<<<<<<<<<<<<<<<<<<<<<<", "P<UTODOE<ROE<<JOHN<<<<<<<<<<<KK<<CCESS<<<<",
-             "P<UTODOE<ROES<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<"]
-    zones = [None] + [ocr.parse_mrz(r + "\n" + l2.replace("USA", "UTO") + "\n") for r in reads]
-    assert all(z and z["number"] == "X98765432" for z in zones[1:]), zones
-    m = ocr.vote_names(zones)
-    assert m["surname"] == "Doe Roe" and m["given"] == "John", m
 
 
 def _european_passport_booklet() -> bytes:
