@@ -21,7 +21,7 @@ def test_search_item_and_tile(client, family_id):
     # kind=week: what is due on the days after today (not today's or the late ones, nor what has no day or is far off)
     soon, far = (dt.date.today() + dt.timedelta(days=3)).isoformat(), (dt.date.today() + dt.timedelta(days=30)).isoformat()
     for title, due in (("Renew the library books", soon), ("Book the summer camp", far)):
-        assert client.post("/api/tasks", json={"title": title, "due": due, "listId": family_id}).status_code == 200
+        assert client.post("/api/tasks", json={"title": title, "due": due, "listId": family_id}).status_code == 201
     week = client.get("/api/suite/tile", params={"tz": "Europe/Brussels", "kind": "week"}).json()
     assert [x["title"] for x in week["week"]] == ["Renew the library books"] and week["more"] == 0
     assert week["week"][0]["due"].startswith(soon) and week["week"][0]["allDay"] and week["week"][0]["color"]

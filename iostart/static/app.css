@@ -235,7 +235,7 @@ body.home #main { top: env(safe-area-inset-top); }
 .dock .app.small .who > .line { font-size: var(--fs-xs); }
 .dock .app.idle .who > .line { display: none; }
 /* Today takes three fifths, ioHealth and On this day share the rest, one above the other */
-.glance { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+.glance { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(300px, 1fr); gap: 16px; margin-top: 16px; }
 .glance.one { grid-template-columns: minmax(0, 1fr); }
 .glance:empty { display: none; }
 .glance .card { padding: 11px 16px 12px; gap: 6px; }
@@ -251,6 +251,7 @@ body.home #main { top: env(safe-area-inset-top); }
 .todaycols.one { grid-template-columns: minmax(0, 1fr); }
 .todaycols > * { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: var(--fs-m); }
 .todaycols .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; margin: 0 1.5px; }
+.todaycols .gcake { width: 11px; flex: none; font-size: 11px; line-height: 1; text-align: center; }
 .todaycols .tick { width: 11px; height: 11px; border: 1.5px solid var(--fg2); border-radius: 3px; flex: none; box-sizing: border-box; }
 .todaycols > div .wgwhen { min-width: 58px; }
 .todaycols .gbills .wgwhen { min-width: 32px; }
@@ -261,7 +262,8 @@ a.gday:hover { text-decoration: underline; }
 .todaycols a.wgev:hover .wgtitle { text-decoration: underline; }
 .wgwhere { margin-left: auto; flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-s); }
 .glance .wgrings { width: 52px; height: 52px; }
-.glance .wgpix { grid-template-columns: repeat(6, minmax(0, 96px)); }  /* six small photos; on its own in a wide card, they stay small */
+/* one row of small photos, as many of the six as fit at 60px or more (four in the narrow column); the rest stay out of sight */
+.glance .wgpix { grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); grid-template-rows: auto; grid-auto-rows: 0; row-gap: 0; overflow: hidden; }
 .agenda { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
 .agenda:empty { display: none; }
 .card { padding: 12px 16px 12px; border-radius: var(--r-l); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; min-width: 0; }

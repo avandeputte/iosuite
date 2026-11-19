@@ -1035,7 +1035,7 @@ function drawMoneyWidget(d) {
 }
 
 /** The "today" layout's cards under the dock. Today: ioCalendar's events and ioTask's tasks in one list by the hour
-    (what is late first, what has no hour last), and under them the coming days' as far as the card has room beside
+    (what is late first, then ioContact's birthdays, what has no hour last), and under them the coming days' as far as the card has room beside
     the other two (fitGlance), so a light day shows what is ahead; ioMoney's week of bills beside them; then ioHealth and ioPix's
     On this day, one above the other. Each part is there when its app is on the page and answers; a row opens its app.
     again: a refresh, which keeps what the cards show when nothing answers. */
@@ -1044,8 +1044,8 @@ const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,
 async function drawGlance(el, again = false) {
   const app = (k) => S.apps.find((a) => a.key === k);
   const ask = (k, params) => (app(k) ? widget(k, params) : null);
-  const [cal, task, mon, health, pix, calWeek, taskWeek] = await Promise.all([ask('iocalendar', { n: GLANCE_LINES }), ask('iotask', { n: GLANCE_LINES }), ask('iomoney'), ask('iohealth'), ask('iopix', { n: GLANCE_PHOTOS }),
-    ask('iocalendar', { kind: 'week' }), ask('iotask', { kind: 'week' })]);
+  const [cal, task, mon, health, pix, calWeek, taskWeek, bdays] = await Promise.all([ask('iocalendar', { n: GLANCE_LINES }), ask('iotask', { n: GLANCE_LINES }), ask('iomoney'), ask('iohealth'), ask('iopix', { n: GLANCE_PHOTOS }),
+    ask('iocalendar', { kind: 'week' }), ask('iotask', { kind: 'week' }), ask('iocontact')]);
   if (!el.isConnected || (again && ![cal, task, mon, health, pix].some(Boolean))) return;
   const head = (k, text, extra) => h('a', { class: 'ghead', href: app(k).url, title: app(k).url }, h('img', { src: app(k).icon, alt: '' }), h('span', null, text),
     extra ? h('span', { class: typeof extra === 'string' ? 'gextra muted' : 'gextra' }, extra) : null);
@@ -1057,19 +1057,29 @@ async function drawGlance(el, again = false) {
   const eventRow = (o) => ({ at: o.allDay ? 0 : +new Date(o.start), el: row('iocalendar', [o.title, o.location].filter(Boolean).join(' · '), [h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }),
     h('span', { class: 'wgwhen muted' }, evTime(o)), h('span', { class: 'wgtitle' }, o.title), o.location ? h('span', { class: 'wgwhere muted' }, shortPlace(o.location)) : null]) });
   const byHour = (rows) => rows.sort((a, b) => a.at - b.at).map((r) => r.el);
-  const events = withoutBirthdays((cal && cal.today) || []);
-  const all = byHour([...((task && task.today) || []).map(taskRow), ...events.map(eventRow)]), lines = all.slice(0, GLANCE_LINES);
+  // ioContact's birthdays (and its other dates) of today and the coming week, whether or not the Birthdays card is on the
+  // page: on top of their day. ioCalendar's Birthdays calendar has them too ("Ava Calloway's birthday"): those are left out
+  const dates = ((bdays && bdays.items) || []).filter((b) => b.in >= 0 && b.in <= 7);
+  const dateRow = (b) => ({ at: -0.5, el: h('a', { class: 'wgev', href: `${app('iocontact').url}/#/c/${b.id}`, title: b.label === 'birthday' ? (b.turns ? `${b.name} turns ${b.turns}` : `${b.name}'s birthday`) : `${b.name}: ${b.label}` },
+    h('span', { class: 'gcake' }, b.label === 'birthday' ? '🎂' : '🎉'), h('span', { class: 'wgwhen muted' }, b.label === 'birthday' ? 'Birthday' : ''), h('span', { class: 'wgtitle' }, b.name),
+    h('span', { class: 'wgwhere muted' }, b.label === 'birthday' ? (b.turns ? `turns ${b.turns}` : '') : b.label + (b.turns ? ` · ${b.turns} years` : ''))) });
+  const mine = (items, n) => items.filter((o) => !(isBirthdayEvent(o) && dates.some((b) => b.in === n && (o.title || '').includes(b.name))));
+  const dayIn = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return isoDay(d); };
+  const daysTo = (date) => Math.round((new Date(`${date}T12:00:00`) - new Date().setHours(12, 0, 0, 0)) / 86400000);
+  const events = mine(withoutBirthdays((cal && cal.today) || []), 0);
+  const all = byHour([...dates.filter((b) => b.in === 0).map(dateRow), ...((task && task.today) || []).map(taskRow), ...events.map(eventRow)]), lines = all.slice(0, GLANCE_LINES);
   const moreToday = all.length - lines.length + ((cal && cal.more) || 0) + ((task && task.more) || 0);
-  const none = cal && task ? 'Nothing planned or due' : cal ? EMPTY.iocalendar : EMPTY.iotask;
+  const none = cal && task ? 'Nothing planned or due' : cal ? EMPTY.iocalendar : task ? EMPTY.iotask : 'No birthdays today';
   if (!lines.length) lines.push(h('div', { class: 'muted small' }, none));
   // the coming days, each under its name, while the column has lines left (a day's name and at least one row of it)
   const ahead = new Map();
   const on = (date, r) => { if (!ahead.has(date)) ahead.set(date, []); ahead.get(date).push(r); };
-  for (const day of (calWeek && calWeek.days) || []) for (const o of withoutBirthdays(day.items)) on(day.date, eventRow(o));
+  for (const b of dates) if (b.in > 0) on(dayIn(b.in), dateRow(b));
+  for (const day of (calWeek && calWeek.days) || []) for (const o of mine(withoutBirthdays(day.items), daysTo(day.date))) on(day.date, eventRow(o));
   for (const t of (taskWeek && taskWeek.week) || []) { const d = t.allDay || !timed(t) ? String(t.due).slice(0, 10) : isoDay(new Date(t.due)); if (d > isoDay(new Date())) on(d, taskRow(t)); }
   const later = [];  // in steps that show together: a day's name with its first row, then a row at a time
   for (const date of [...ahead.keys()].sort()) {
-    const noon = new Date(`${date}T12:00:00`), days = Math.round((noon - new Date().setHours(12, 0, 0, 0)) / 86400000);
+    const noon = new Date(`${date}T12:00:00`), days = daysTo(date);
     const name = h(cal ? 'a' : 'div', { class: 'gday', href: cal ? `${app('iocalendar').url}/#/day/${date}` : null }, days === 1 ? 'Tomorrow' : noon.toLocaleDateString([], { weekday: 'long' }),
       h('span', { class: 'muted' }, noon.toLocaleDateString([], { month: 'short', day: 'numeric' })));
     byHour(ahead.get(date)).forEach((r, i) => later.push(i ? [r] : [name, r]));
@@ -1079,12 +1089,12 @@ async function drawGlance(el, again = false) {
   if (cal && !events.length && !ahead.size && cal.next) lines.push(row('iocalendar', cal.next.title, [h('span', { class: 'dot', style: { background: cal.next.color || 'var(--fg2)' } }),
     h('span', { class: 'wgwhen muted' }, 'Next'), h('span', { class: 'wgtitle' }, cal.next.title), h('span', { class: 'wgwhere muted' }, `${evDay(cal.next)} ${cal.next.allDay ? '' : evTime(cal.next)}`.trim())]));
   const more = [moreToday ? `+${moreToday} more today` : null, task && task.overdue ? `${task.overdue} overdue` : null].filter(Boolean).join(' · ');
-  const plans = cal || task ? h('div', null, wgHead(cal && task ? 'Plans and tasks' : cal ? 'Plans' : 'Tasks', more || ' '), lines, later) : null;
+  const plans = cal || task || dates.length ? h('div', null, wgHead(cal && task ? 'Plans and tasks' : cal ? 'Plans' : task ? 'Tasks' : 'Birthdays', more || ' '), lines, later) : null;
   // the week's bills (and what needs a look in ioMoney), as its card has them
   const mk = mon ? drawMoneyWidget(mon) : null;
   const bills = mon ? h('a', { class: 'gbills', href: app('iomoney').url, title: app('iomoney').url }, mk || [wgHead('This week'), h('div', { class: 'muted small' }, 'Nothing due')]) : null;
   if (bills) bills.querySelector('.wghead > span').textContent = 'Bills this week';
-  const today = plans || bills ? h('div', { class: 'card todaycard' }, head(cal ? 'iocalendar' : task ? 'iotask' : 'iomoney', 'Today'), h('div', { class: `todaycols${plans && bills ? '' : ' one'}` }, plans, bills)) : null;
+  const today = plans || bills ? h('div', { class: 'card todaycard' }, head(cal ? 'iocalendar' : task ? 'iotask' : plans ? 'iocontact' : 'iomoney', 'Today'), h('div', { class: `todaycols${plans && bills ? '' : ' one'}` }, plans, bills)) : null;
   // the two low cards: ioHealth's steps go in its head (no "Today" line), On this day shows six smaller photos
   const hk = health ? drawHealthWidget(health) : null, pk = pix ? drawPixWidget(pix, GLANCE_PHOTOS) : null;
   const side = [hk ? h('div', { class: 'card' }, head('iohealth', 'Health', hk[0].children[1]), h('div', { class: 'wg' }, hk.slice(1))) : null,
