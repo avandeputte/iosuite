@@ -1,0 +1,9 @@
+## The components the build fetches from Espressif's registry (components.espressif.com).
+dependencies:
+  idf: ">=5.4"
+  # the Tab5's display (each of its panels: ILI9881C, ST7123, ST7121), touch, speaker, I/O expanders
+  espressif/m5stack_tab5: "^1.3.2"
+  lvgl/lvgl: "~9.3.0"
+  # Wi-Fi through the ESP32-C6: the versions M5Stack's own firmware uses with the C6's ESP-Hosted 1.4 firmware
+  espressif/esp_hosted: "1.4.0"
+  espressif/esp_wifi_remote: "0.8.5"
