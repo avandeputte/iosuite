@@ -540,18 +540,24 @@ static void job_loop(void *arg)
 void feed_run(void (*fn)(void *), void *arg)
 {
     job_t j = {fn, arg};
-    if (xQueueSend(jobs, &j, 0) != pdTRUE) {
+    if (!jobs || xQueueSend(jobs, &j, 0) != pdTRUE) {
         ESP_LOGW(TAG_WALL, "busy: a tap was dropped");
     }
 }
 
-void feed_start(void)
+/* what the screens need from their first moment: a feed to read (empty), and the task that runs their calls */
+void feed_init(void)
 {
     FEED = heap_caps_calloc(1, sizeof *FEED, MALLOC_CAP_SPIRAM);
+    assert(FEED);
     strlcpy(FEED->bg, "sky", sizeof FEED->bg);
     FEED->every = 60;
     jobs = xQueueCreate(8, sizeof(job_t));
+    xTaskCreatePinnedToCore(job_loop, "taps", 8192, NULL, 4, NULL, 1);
+}
+
+void feed_start(void)
+{
     xTaskCreatePinnedToCore(feed_loop, "feed", 12288, NULL, 4, &feed_task, 1);
     xTaskCreatePinnedToCore(photo_loop, "photos", 8192, NULL, 3, &photo_task, 1);
-    xTaskCreatePinnedToCore(job_loop, "taps", 8192, NULL, 4, NULL, 1);
 }

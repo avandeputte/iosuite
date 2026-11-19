@@ -2,13 +2,17 @@
 #include "bsp/esp-bsp.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "wall.h"
 
 void app_main(void)
 {
+    boot_begin();
     settings_load();
     if (S.posix[0]) clock_set_zone(S.posix);   /* the clock in local time before the network is up */
 
+    boot_step(BOOT_SCREEN);
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
         .buffer_size = BSP_LCD_H_RES * CONFIG_BSP_LCD_DRAW_BUF_HEIGHT,
@@ -29,13 +33,43 @@ void app_main(void)
     bsp_display_backlight_on();
     ESP_LOGI(TAG_WALL, "screen up; internal memory free: %u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
 
-    alarm_start();   /* before the screens: the volume, and a ring's sound */
+    /* the last start stopped somewhere: say where, then go on without that part when the wall can do without it */
+    boot_report(boot_skip(BOOT_SOUND) || boot_skip(BOOT_WIFI) || boot_skip(BOOT_OTA) || boot_skip(BOOT_RUNNING));
+
+    /* each step waits a moment before the next, so a stop is put down to the step that caused it */
+    if (!boot_skip(BOOT_SOUND)) {
+        boot_step(BOOT_SOUND);
+        alarm_start();   /* before the screens: the volume, and a ring's sound */
+        vTaskDelay(pdMS_TO_TICKS(300));
+    }
+
+    boot_step(BOOT_ROTATE);
+    ui_lock();
+    bsp_display_rotate(disp, S.flip ? LV_DISPLAY_ROTATION_270 : LV_DISPLAY_ROTATION_90);
+    lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
+    ui_unlock();
+    vTaskDelay(pdMS_TO_TICKS(600));
+
+    boot_step(BOOT_UI);
+    feed_init();   /* the screens read the feed and hand their calls to its task from the first moment */
     ui_lock();
     ui_start(disp);
     ui_unlock();
+    vTaskDelay(pdMS_TO_TICKS(1500));
 
-    net_init();
+    if (!boot_skip(BOOT_WIFI)) {
+        boot_step(BOOT_WIFI);
+        net_init();
+        vTaskDelay(pdMS_TO_TICKS(3000));
+    }
+    boot_step(BOOT_FEED);
     feed_start();
-    ota_start();
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    if (!boot_skip(BOOT_OTA)) {
+        boot_step(BOOT_OTA);
+        ota_start();
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+    boot_running();
     ESP_LOGI(TAG_WALL, "ioWall %s", wall_version());
 }

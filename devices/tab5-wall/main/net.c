@@ -167,6 +167,10 @@ void net_connect(const char *ssid, const char *pass)
 
 int net_scan(net_ap_t *out, int max)
 {
+    /* the first screen asks before the Wi-Fi chip is up: wait for it a while */
+    for (int i = 0; i < 100 && !started; i++) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
     if (!started) {
         return 0;
     }
