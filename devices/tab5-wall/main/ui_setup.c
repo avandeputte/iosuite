@@ -14,7 +14,7 @@
 #define TEXT lv_color_white()
 #define DIM lv_color_hex(0xb8bcc4)
 #define BAD lv_color_hex(0xffb4a8)
-#define LABEL_FOR_DEVICE "Wall display (Tab5)"
+#define LABEL_FOR_DEVICE "Wall display (" BOARD_NAME ")"
 
 static lv_obj_t *scr, *card, *kb;
 static net_ap_t aps[24];
@@ -45,10 +45,10 @@ static lv_obj_t *page(const char *title, const char *hint, bool with_keyboard)
     kb = NULL;
     card = lv_obj_create(scr);
     lv_obj_remove_style_all(card);
-    lv_obj_set_size(card, 1040, with_keyboard ? 360 : 640);
-    lv_obj_align(card, LV_ALIGN_TOP_MID, 0, with_keyboard ? 14 : 40);
+    lv_obj_set_size(card, P(1040), with_keyboard ? P(360) : P(640));
+    lv_obj_align(card, LV_ALIGN_TOP_MID, 0, with_keyboard ? P(14) : P(40));
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(card, 14, 0);
+    lv_obj_set_style_pad_row(card, P(14), 0);
     lv_obj_t *t = kit_label(card, font_bold(44), TEXT, title);
     (void)t;
     if (hint) {
@@ -66,8 +66,8 @@ static lv_obj_t *buttons(lv_obj_t *parent)
     lv_obj_remove_style_all(r);
     lv_obj_set_size(r, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(r, 16, 0);
-    lv_obj_set_style_pad_top(r, 8, 0);
+    lv_obj_set_style_pad_column(r, P(16), 0);
+    lv_obj_set_style_pad_top(r, P(8), 0);
     return r;
 }
 
@@ -96,17 +96,17 @@ static void scan_done(void *arg)
     lv_label_set_text(wifi_status, "");
     for (int i = 0; i < naps; i++) {
         lv_obj_t *b = lv_button_create(wifi_list);
-        lv_obj_set_size(b, lv_pct(100), 72);
-        lv_obj_set_style_radius(b, 16, 0);
+        lv_obj_set_size(b, lv_pct(100), P(72));
+        lv_obj_set_style_radius(b, P(16), 0);
         lv_obj_set_style_shadow_width(b, 0, 0);
         lv_obj_set_style_bg_color(b, lv_color_hex(0x1b1d22), 0);
         lv_obj_set_style_bg_color(b, lv_color_hex(0x33363d), LV_STATE_PRESSED);
         lv_obj_t *l = kit_label(b, font_text(30), TEXT, aps[i].ssid);
-        lv_obj_align(l, LV_ALIGN_LEFT_MID, 8, 0);
+        lv_obj_align(l, LV_ALIGN_LEFT_MID, P(8), 0);
         const char *bars = aps[i].rssi > -55 ? "Strong" : aps[i].rssi > -70 ? "Good" : "Weak";
         lv_obj_t *r = kit_label(b, font_text(24), DIM, "");
         lv_label_set_text_fmt(r, "%s%s", aps[i].open ? "Open · " : "", bars);
-        lv_obj_align(r, LV_ALIGN_RIGHT_MID, -8, 0);
+        lv_obj_align(r, LV_ALIGN_RIGHT_MID, -P(8), 0);
         lv_obj_add_event_cb(b, on_network, LV_EVENT_CLICKED, (void *)(intptr_t)i);
     }
 }
@@ -153,7 +153,7 @@ static void connect_now(const char *pass)
     lv_obj_t *l = status_line(c);
     lv_label_set_text_fmt(l, "Joining %s…", chosen_ssid);
     lv_obj_t *sp = lv_spinner_create(c);
-    lv_obj_set_size(sp, 80, 80);
+    lv_obj_set_size(sp, P(80), P(80));
     feed_run(wifi_wait_job, NULL);
 }
 
@@ -203,9 +203,9 @@ static void step_wifi(void)
     lv_label_set_text(wifi_status, "Looking for networks…");
     wifi_list = lv_obj_create(c);
     lv_obj_remove_style_all(wifi_list);
-    lv_obj_set_size(wifi_list, lv_pct(100), 360);
+    lv_obj_set_size(wifi_list, lv_pct(100), P(360));
     lv_obj_set_flex_flow(wifi_list, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(wifi_list, 8, 0);
+    lv_obj_set_style_pad_row(wifi_list, P(8), 0);
     lv_obj_set_scroll_dir(wifi_list, LV_DIR_VER);
     lv_obj_t *b = buttons(c);
     kit_button(b, "Look again", on_rescan, NULL, false);
@@ -389,27 +389,27 @@ static void step_pair(void)
     lv_obj_remove_style_all(r);
     lv_obj_set_size(r, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(r, 40, 0);
+    lv_obj_set_style_pad_column(r, P(40), 0);
     lv_obj_t *qr = lv_qrcode_create(r);
-    lv_qrcode_set_size(qr, 300);
+    lv_qrcode_set_size(qr, P(300));
     lv_qrcode_set_dark_color(qr, lv_color_black());
     lv_qrcode_set_light_color(qr, lv_color_white());
     lv_obj_set_style_border_color(qr, lv_color_white(), 0);
-    lv_obj_set_style_border_width(qr, 14, 0);
+    lv_obj_set_style_border_width(qr, P(14), 0);
     const char *url = pair_url[0] ? pair_url : base;
     lv_qrcode_update(qr, url, strlen(url));
     lv_obj_t *col = lv_obj_create(r);
     lv_obj_remove_style_all(col);
-    lv_obj_set_size(col, 640, LV_SIZE_CONTENT);
+    lv_obj_set_size(col, P(640), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(col, 14, 0);
+    lv_obj_set_style_pad_row(col, P(14), 0);
     lv_obj_t *h = kit_label(col, font_text(28), DIM, "Scan this with your phone, or open the start page, go to the address below and type the code. Sign in there as the person whose calendar this wall shows.");
     lv_label_set_long_mode(h, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(h, lv_pct(100));
     char code[16];
     snprintf(code, sizeof code, "%.4s-%.4s", pair_code, pair_code + 4);
     lv_obj_t *cl = kit_label(col, font_bold(84), TEXT, code);
-    lv_obj_set_style_text_letter_space(cl, 6, 0);
+    lv_obj_set_style_text_letter_space(cl, P(6), 0);
     char where[180];
     snprintf(where, sizeof where, "%s/#/pair", base);
     lv_obj_t *w = kit_label(col, font_text(26), DIM, where);
@@ -521,9 +521,9 @@ static void step_password(void)
     lv_obj_t *b = buttons(c);
     kit_button(b, "Sign in", on_pw_go, NULL, true);
     kit_button(b, "Use a code", on_pw_back, NULL, false);
-    lv_obj_set_height(c, 470);
+    lv_obj_set_height(c, P(470));
     kb = kit_keyboard(scr, name_ta, on_kb_ready, NULL);
-    lv_obj_set_height(kb, 250);
+    lv_obj_set_height(kb, P(250));
 }
 
 /* ------------------------------------------------------------------ the way in */

@@ -1,4 +1,4 @@
-/* Wi-Fi through the Tab5's ESP32-C6 (ESP-Hosted over SDIO: esp_wifi_remote gives the usual esp_wifi_* calls), and
+/* Wi-Fi through the board's ESP32-C6 (ESP-Hosted over SDIO: esp_wifi_remote gives the usual esp_wifi_* calls), and
  * the clock from the network. A dropped connection is tried again by itself, more slowly each time. */
 #include <string.h>
 #include <sys/time.h>
@@ -111,8 +111,7 @@ void net_init(void)
     if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) {
         ESP_ERROR_CHECK(e);
     }
-    /* the C6 has its own power switch on the Tab5's I/O expander */
-    bsp_feature_enable(BSP_FEATURE_WIFI, true);
+    BOARD_WIFI_ON();
     vTaskDelay(pdMS_TO_TICKS(300));
     sta = esp_netif_create_default_wifi_sta();
     esp_netif_set_hostname(sta, "iowall");

@@ -59,7 +59,7 @@ api_resp_t api_request_auth(const char *method, const char *path, const char *bo
         .buffer_size_tx = 2048,
         .crt_bundle_attach = esp_crt_bundle_attach,
         .max_redirection_count = 3,
-        .user_agent = "ioWall Tab5",
+        .user_agent = "ioWall " BOARD_NAME,
         .keep_alive_enable = true,
     };
     bool post = !strcmp(method, "POST");

@@ -1,8 +1,18 @@
 ## The components the build fetches from Espressif's registry (components.espressif.com).
 dependencies:
   idf: ">=5.4"
+  # the board's package, by WALL_BOARD (../CMakeLists.txt):
   # the Tab5's display (each of its panels: ILI9881C, ST7123, ST7121), touch, speaker, I/O expanders
-  espressif/m5stack_tab5: "^1.3.2"
+  espressif/m5stack_tab5:
+    version: "^1.3.2"
+    rules:
+      - if: "$WALL_BOARD == tab5"
+  # the Waveshare 7B's display (EK79007), touch (GT911), speaker (ES8311). The 1.0 line: it draws through
+  # esp_lvgl_port, as the Tab5's package does (from 3.0 on it needs ESP-IDF 5.5, LVGL 9.5 and another LVGL layer)
+  waveshare/esp32_p4_wifi6_touch_lcd_7b:
+    version: "~1.0.3"
+    rules:
+      - if: "$WALL_BOARD == waveshare7b"
   lvgl/lvgl: "~9.3.0"
   # Wi-Fi through the ESP32-C6: the versions M5Stack's own firmware uses with the C6's ESP-Hosted 1.4 firmware
   espressif/esp_hosted: "1.4.0"

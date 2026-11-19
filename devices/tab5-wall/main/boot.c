@@ -94,7 +94,7 @@ void boot_report(bool can_go_on)
     bool stay = !can_go_on || note.stops >= 3;
     bsp_display_lock(0);
     /* the picture is turned only when turning it is not what failed */
-    if (last.step > BOOT_ROTATE) bsp_display_rotate(lv_display_get_default(), S.flip ? LV_DISPLAY_ROTATION_270 : LV_DISPLAY_ROTATION_90);
+    if (last.step > BOOT_ROTATE) bsp_display_rotate(lv_display_get_default(), BOARD_ROTATION(S.flip));
     lv_obj_t *scr = lv_screen_active();
     lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
@@ -102,7 +102,7 @@ void boot_report(bool can_go_on)
     lv_obj_set_width(l, lv_pct(90));
     lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_color(l, lv_color_white(), 0);
-    lv_obj_set_style_text_font(l, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(l, font_symbols(28), 0);
     lv_label_set_text_fmt(l,
         "ioWall %s stopped while it was in: %s\n\n%s\n\ntask %s, at 0x%08x, stop %u in a row\n\n%s",
         wall_version(), STEP[last.step], last.why, last.task[0] ? last.task : "?", (unsigned)last.addr,

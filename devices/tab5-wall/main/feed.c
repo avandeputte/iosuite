@@ -1,5 +1,5 @@
 /* The start page's wall feed, every minute (sooner after a change made here), and its photos, one every so often
- * (the person's choice on the start page: Customize › Wall display), cut by the start page to 1280 × 720 and decoded
+ * (the person's choice on the start page: Customize › Wall display), cut by the start page to the screen's size and decoded
  * here by the P4's JPEG engine into one of two frame buffers in PSRAM, so the one on screen is never written while
  * it fades. A third task runs the taps' HTTP calls (feed_run), so the screen never waits on the network. */
 #include <string.h>
@@ -400,7 +400,8 @@ static bool photo_setup(void)
     }
     jpeg_decode_memory_alloc_cfg_t oc = {.buffer_direction = JPEG_DEC_ALLOC_OUTPUT_BUFFER};
     for (int i = 0; i < 2; i++) {
-        frame[i] = jpeg_alloc_decoder_mem(WALL_W * WALL_H * 2, &oc, &frame_size);
+        /* the engine works in 16-pixel blocks: room for the screen rounded up to them (600 rows: 608) */
+        frame[i] = jpeg_alloc_decoder_mem(((WALL_W + 15) & ~15) * ((WALL_H + 15) & ~15) * 2, &oc, &frame_size);
         if (!frame[i]) {
             ESP_LOGE(TAG_WALL, "no memory for the photos");
             return false;

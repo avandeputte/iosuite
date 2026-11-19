@@ -27,8 +27,8 @@ static lv_obj_t *hrow(lv_obj_t *p, int gap)
     lv_obj_set_size(r, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(r, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(r, gap, 0);
-    lv_obj_set_style_pad_row(r, gap, 0);
+    lv_obj_set_style_pad_column(r, P(gap), 0);
+    lv_obj_set_style_pad_row(r, P(gap), 0);
     return r;
 }
 
@@ -36,9 +36,9 @@ static lv_obj_t *hrow(lv_obj_t *p, int gap)
 static lv_obj_t *chip(lv_obj_t *p, const char *text, lv_event_cb_t cb, void *ud, bool on)
 {
     lv_obj_t *b = lv_button_create(p);
-    lv_obj_set_height(b, 64);
-    lv_obj_set_style_pad_hor(b, 24, 0);
-    lv_obj_set_style_radius(b, 32, 0);
+    lv_obj_set_height(b, P(64));
+    lv_obj_set_style_pad_hor(b, P(24), 0);
+    lv_obj_set_style_radius(b, P(32), 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_set_style_bg_color(b, on ? ACCENT : lv_color_hex(0x2a2c31), 0);
     lv_obj_t *l = kit_label(b, font_text(26), TEXT, text);
@@ -66,7 +66,7 @@ static void date_of(time_t t, char *out, size_t n)
 
 void ui_open_event(const wall_event_t *ev)
 {
-    lv_obj_t *c = kit_panel(ev->title, 860, 520);
+    lv_obj_t *c = kit_panel(ev->title, P(860), P(520));
     char day[11], head[48], when[96];
     if (ev->all_day) {
         strlcpy(day, ev->day, sizeof day);
@@ -99,7 +99,7 @@ void ui_open_event(const wall_event_t *ev)
     lv_obj_t *r = hrow(c, 14);
     lv_obj_t *dot = lv_obj_create(r);
     lv_obj_remove_style_all(dot);
-    lv_obj_set_size(dot, 22, 22);
+    lv_obj_set_size(dot, P(22), P(22));
     lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(dot, ev->has_color ? color_hex(ev->color) : DIM, 0);
@@ -257,8 +257,8 @@ void ui_open_add(void)
         ui_toast("Adding needs ioTask or ioCalendar on the start page");
         return;
     }
-    lv_obj_t *c = kit_panel("Add", 1220, 400);
-    lv_obj_align(c, LV_ALIGN_TOP_MID, 0, 6);
+    lv_obj_t *c = kit_panel("Add", P(1220), P(400));
+    lv_obj_align(c, LV_ALIGN_TOP_MID, 0, P(6));
     lv_obj_add_event_cb(lv_obj_get_parent(c), on_add_closed, LV_EVENT_DELETE, NULL);
     add_event_kind = !FEED->can_add_task;
     add_day = add_event_kind ? 0 : -1;
@@ -281,7 +281,7 @@ void ui_open_add(void)
         strlcat(opts, t, sizeof opts);
     }
     lv_dropdown_set_options(add_times, opts);
-    lv_obj_set_width(add_times, 220);
+    lv_obj_set_width(add_times, P(220));
     lv_obj_set_style_text_font(add_times, font_text(26), 0);
     lv_obj_set_style_text_font(lv_dropdown_get_list(add_times), font_text(26), 0);
     lv_obj_add_event_cb(add_times, on_add_time, LV_EVENT_VALUE_CHANGED, NULL);
@@ -290,7 +290,7 @@ void ui_open_add(void)
     add_status = kit_label(c, font_text(26), DIM, "");
     draw_add_options();
     add_kb = kit_keyboard(lv_layer_top(), add_ta, on_add_go, NULL);
-    lv_obj_set_height(add_kb, 300);
+    lv_obj_set_height(add_kb, P(300));
 }
 
 /* ------------------------------------------------------------------ timers */
@@ -327,7 +327,7 @@ static void draw_timer_list(void)
         lv_obj_t *l = kit_label(r, font_bold(40), TEXT, "");
         if (left >= 3600) lv_label_set_text_fmt(l, "%d:%02d:%02d", (int)(left / 3600), (int)(left / 60 % 60), (int)(left % 60));
         else lv_label_set_text_fmt(l, "%d:%02d", (int)(left / 60), (int)(left % 60));
-        lv_obj_set_width(l, 220);
+        lv_obj_set_width(l, P(220));
         kit_label(r, font_text(26), DIM, "");
         kit_button(r, "Cancel", on_timer_cancel, (void *)(intptr_t)i, false);
     }
@@ -353,7 +353,7 @@ static void on_timers_closed(lv_event_t *e)
 
 void ui_open_timers(void)
 {
-    lv_obj_t *c = kit_panel("Timers", 1000, 560);
+    lv_obj_t *c = kit_panel("Timers", P(1000), P(560));
     lv_obj_add_event_cb(lv_obj_get_parent(c), on_timers_closed, LV_EVENT_DELETE, NULL);
     lv_obj_t *r = hrow(c, 12);
     static const struct { const char *t; int s; } P[] = {
@@ -365,8 +365,8 @@ void ui_open_timers(void)
     lv_obj_remove_style_all(timer_list);
     lv_obj_set_size(timer_list, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(timer_list, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(timer_list, 10, 0);
-    lv_obj_set_style_pad_top(timer_list, 10, 0);
+    lv_obj_set_style_pad_row(timer_list, P(10), 0);
+    lv_obj_set_style_pad_top(timer_list, P(10), 0);
     draw_timer_list();
     if (!timer_refresh) timer_refresh = lv_timer_create(timers_tick, 1000, NULL);
 }
@@ -403,7 +403,7 @@ static void on_alarm_day(lv_event_t *e)
 
 void ui_open_alarms(void)
 {
-    lv_obj_t *c = kit_panel("Alarms", 1180, 660);
+    lv_obj_t *c = kit_panel("Alarms", P(1180), P(660));
     lv_obj_set_scroll_dir(c, LV_DIR_VER);
     static char opts[24 * 12 * 12];
     opts[0] = 0;
@@ -423,23 +423,23 @@ void ui_open_alarms(void)
     for (int i = 0; i < ALARMS; i++) {
         wall_alarm_t *a = &S.alarms[i];
         lv_obj_t *r = hrow(c, 12);
-        lv_obj_set_style_pad_ver(r, 6, 0);
+        lv_obj_set_style_pad_ver(r, P(6), 0);
         lv_obj_t *sw = lv_switch_create(r);
-        lv_obj_set_size(sw, 100, 54);
+        lv_obj_set_size(sw, P(100), P(54));
         if (a->on) lv_obj_add_state(sw, LV_STATE_CHECKED);
         lv_obj_add_event_cb(sw, on_alarm_switch, LV_EVENT_VALUE_CHANGED, (void *)(intptr_t)i);
         lv_obj_t *dd = lv_dropdown_create(r);
         lv_dropdown_set_options_static(dd, opts);
         lv_dropdown_set_selected(dd, a->hour * 12 + a->minute / 5);
-        lv_obj_set_width(dd, 210);
+        lv_obj_set_width(dd, P(210));
         lv_obj_set_style_text_font(dd, font_bold(30), 0);
         lv_obj_set_style_text_font(lv_dropdown_get_list(dd), font_text(28), 0);
         lv_obj_add_event_cb(dd, on_alarm_time, LV_EVENT_VALUE_CHANGED, (void *)(intptr_t)i);
         for (int d = 0; d < 7; d++) {
             char t[2] = {D[d], 0};
             lv_obj_t *b = lv_button_create(r);
-            lv_obj_set_size(b, 64, 64);
-            lv_obj_set_style_radius(b, 32, 0);
+            lv_obj_set_size(b, P(64), P(64));
+            lv_obj_set_style_radius(b, P(32), 0);
             lv_obj_set_style_shadow_width(b, 0, 0);
             lv_obj_set_style_bg_color(b, a->days & (1 << d) ? ACCENT : lv_color_hex(0x2a2c31), 0);
             lv_obj_t *l = kit_label(b, font_bold(26), TEXT, t);
@@ -475,8 +475,8 @@ void ui_ringing(bool on, const char *what)
     lv_obj_add_flag(ring, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_flex_flow(ring, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(ring, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(ring, 30, 0);
-    kit_label(ring, &lv_font_montserrat_48, lv_color_hex(0xffd36b), LV_SYMBOL_BELL);
+    lv_obj_set_style_pad_row(ring, P(30), 0);
+    kit_label(ring, font_symbols(48), lv_color_hex(0xffd36b), LV_SYMBOL_BELL);
     char now[16];
     fmt_time(now, sizeof now, time(NULL));
     kit_label(ring, font_light(150), TEXT, now);
@@ -485,16 +485,16 @@ void ui_ringing(bool on, const char *what)
     lv_obj_remove_style_all(r);
     lv_obj_set_size(r, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(r, 30, 0);
+    lv_obj_set_style_pad_column(r, P(30), 0);
     bool alarm = what && strncmp(what, "Timer", 5) != 0;
     if (alarm) {
         char t[32];
         snprintf(t, sizeof t, "Snooze %d min", S.snooze_min);
         lv_obj_t *b = kit_button(r, t, on_snooze, NULL, false);
-        lv_obj_set_size(b, 360, 120);
+        lv_obj_set_size(b, P(360), P(120));
     }
     lv_obj_t *b = kit_button(r, "Stop", on_stop, NULL, true);
-    lv_obj_set_size(b, 360, 120);
+    lv_obj_set_size(b, P(360), P(120));
 }
 
 /* ------------------------------------------------------------------ settings */
@@ -581,28 +581,28 @@ static void on_settings_closed(lv_event_t *e)
 static lv_obj_t *setting(lv_obj_t *c, const char *name)
 {
     lv_obj_t *r = hrow(c, 18);
-    lv_obj_set_style_pad_ver(r, 6, 0);
+    lv_obj_set_style_pad_ver(r, P(6), 0);
     lv_obj_t *l = kit_label(r, font_text(28), TEXT, name);
-    lv_obj_set_width(l, 330);
+    lv_obj_set_width(l, P(330));
     return r;
 }
 
 static lv_obj_t *slider(lv_obj_t *r, uint8_t *v, int min)
 {
     lv_obj_t *s = lv_slider_create(r);
-    lv_obj_set_size(s, 460, 24);
+    lv_obj_set_size(s, P(460), P(24));
     lv_slider_set_range(s, min, 100);
     lv_slider_set_value(s, *v, LV_ANIM_OFF);
     lv_obj_add_event_cb(s, on_slider, LV_EVENT_VALUE_CHANGED, v);
     lv_obj_add_event_cb(s, on_slider, LV_EVENT_RELEASED, v);
-    lv_obj_set_style_pad_ver(r, 14, 0);
+    lv_obj_set_style_pad_ver(r, P(14), 0);
     return s;
 }
 
 static lv_obj_t *toggle(lv_obj_t *r, bool on, lv_event_cb_t cb)
 {
     lv_obj_t *sw = lv_switch_create(r);
-    lv_obj_set_size(sw, 100, 54);
+    lv_obj_set_size(sw, P(100), P(54));
     if (on) lv_obj_add_state(sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw, cb, LV_EVENT_VALUE_CHANGED, NULL);
     return sw;
@@ -610,7 +610,7 @@ static lv_obj_t *toggle(lv_obj_t *r, bool on, lv_event_cb_t cb)
 
 void ui_show_settings(void)
 {
-    lv_obj_t *c = kit_panel("Settings", 1180, 680);
+    lv_obj_t *c = kit_panel("Settings", P(1180), P(680));
     lv_obj_add_event_cb(lv_obj_get_parent(c), on_settings_closed, LV_EVENT_DELETE, NULL);
     lv_obj_set_scroll_dir(c, LV_DIR_VER);
     char t[200];
@@ -619,13 +619,13 @@ void ui_show_settings(void)
     snprintf(t, sizeof t, "%s at %s", S.user[0] ? S.user : "?", S.server);
     lv_obj_t *who = kit_label(r, font_text(26), DIM, t);
     lv_label_set_long_mode(who, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(who, 500);
+    lv_obj_set_width(who, P(500));
     kit_button(r, "Sign out", on_signout, NULL, false);
 
     r = setting(c, "Wi-Fi");
     snprintf(t, sizeof t, "%s%s%s", S.ssid, net_ip()[0] ? " · " : "", net_ip());
     lv_obj_t *wl = kit_label(r, font_text(26), DIM, t);
-    lv_obj_set_width(wl, 500);
+    lv_obj_set_width(wl, P(500));
     kit_button(r, "Change", on_wifi, NULL, false);
 
     r = setting(c, "24-hour clock");
@@ -640,13 +640,13 @@ void ui_show_settings(void)
     lv_obj_t *dd = lv_dropdown_create(r);
     lv_dropdown_set_options_static(dd, hours);
     lv_dropdown_set_selected(dd, S.night_from);
-    lv_obj_set_width(dd, 150);
+    lv_obj_set_width(dd, P(150));
     lv_obj_add_event_cb(dd, on_hour, LV_EVENT_VALUE_CHANGED, &S.night_from);
     kit_label(r, font_text(26), DIM, "to");
     dd = lv_dropdown_create(r);
     lv_dropdown_set_options_static(dd, hours);
     lv_dropdown_set_selected(dd, S.night_to);
-    lv_obj_set_width(dd, 150);
+    lv_obj_set_width(dd, P(150));
     lv_obj_add_event_cb(dd, on_hour, LV_EVENT_VALUE_CHANGED, &S.night_to);
     kit_label(r, font_text(22), DIM, "the same: no night");
 
