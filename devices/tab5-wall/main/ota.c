@@ -1,5 +1,5 @@
 /* A newer firmware over the air, from this repository's GitHub release "wall-latest": version.txt says which
- * version it holds, iowall.bin is the app. Looked at a minute after starting (to show it in Settings), and at
+ * version it holds, iowall.bin is the app (WALL_OTA_FILE: each board has its own). Looked at a minute after starting (to show it in Settings), and at
  * 3 AM it installs a new one when automatic updates are on. A new firmware that does not get as far as a
  * minute of running is rolled back by the bootloader. */
 #include <string.h>
@@ -36,7 +36,7 @@ static esp_http_client_config_t client(const char *url)
         .buffer_size_tx = 2048,
         .crt_bundle_attach = esp_crt_bundle_attach,
         .max_redirection_count = 4,
-        .user_agent = "ioWall Tab5",
+        .user_agent = "ioWall " BOARD_NAME,
         .keep_alive_enable = true,
     };
 }
@@ -82,7 +82,7 @@ static void install(void)
 {
     state = OTA_UPDATING;
     snprintf(text, sizeof text, "Installing %s…", found);
-    esp_http_client_config_t c = client(RELEASE "iowall.bin");
+    esp_http_client_config_t c = client(RELEASE WALL_OTA_FILE);
     esp_https_ota_config_t o = {.http_config = &c};
     esp_https_ota_handle_t h = NULL;
     if (esp_https_ota_begin(&o, &h) != ESP_OK) {

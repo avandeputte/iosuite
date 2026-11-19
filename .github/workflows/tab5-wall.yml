@@ -1,6 +1,8 @@
 name: Tab5 wall
-# The wall display's firmware (devices/tab5-wall/), built with ESP-IDF. On a pull request the build is kept as the
-# run's artifact; on main it replaces the files of the release "wall-latest", which the devices update from
+# The wall display's firmware (devices/tab5-wall/), built with ESP-IDF for each board it runs on: the M5Stack Tab5 and
+# the Waveshare ESP32-P4-WIFI6-Touch-LCD-7B (that one twice: an ESP32-P4 of revision 3 does not run the earlier
+# chips' build). On a pull request the builds are kept as the
+# run's artifacts; on main they replace the files of the release "wall-latest", which the devices update from
 # (ota.c) and the website's flasher page (iosuite.iothing.net/wall/) writes over USB. That release is never the
 # repository's latest release: those stay the suite's own (version.yml).
 on:
@@ -19,21 +21,30 @@ permissions:
   contents: write   # the release wall-latest
   actions: write    # building the website again, with the new firmware
 
+env:
+  # main: 1.<run>; a pull request: pr<n>.<run>, which a device on it trades for main's at its next update
+  WALL_VERSION: ${{ github.event_name == 'pull_request' && format('pr{0}.{1}', github.event.number, github.run_number) || format('1.{0}', github.run_number) }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      # main: 1.<run>; a pull request: pr<n>.<run>, which a device on it trades for main's at its next update
-      WALL_VERSION: ${{ github.event_name == 'pull_request' && format('pr{0}.{1}', github.event.number, github.run_number) || format('1.{0}', github.run_number) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # file: the name in the release; iowall is the Tab5's, as it was before there was a second board
+          - {board: tab5, chip: rev1, file: iowall}
+          - {board: waveshare7b, chip: rev1, file: iowall-waveshare7b}
+          - {board: waveshare7b, chip: rev3, file: iowall-waveshare7b-rev3}
     steps:
       - uses: actions/checkout@v4
       - name: Build
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.4.4  # the USB host component the board package pulls in needs 5.4.4
+          esp_idf_version: v5.4.4  # the USB host component the Tab5's board package pulls in needs 5.4.4
           target: esp32p4
           path: devices/tab5-wall
-          extra_docker_args: -e WALL_VERSION=${{ env.WALL_VERSION }}
+          extra_docker_args: -e WALL_VERSION=${{ env.WALL_VERSION }} -e WALL_BOARD=${{ matrix.board }} -e WALL_CHIP=${{ matrix.chip }}
           # the image's component manager stops at a Kconfig condition in a newer esp_hosted it only looks at;
           # 2.4.11 and later pass over it (the build keeps esp_hosted 1.4.0)
           command: >-
@@ -46,30 +57,43 @@ jobs:
         run: |
           mkdir -p ../out
           sudo chown -R "$(id -u)" . || true
-          cp iowall.bin iowall-full.bin ../out/
-          printf '%s\n' "$WALL_VERSION" > ../out/version.txt
+          cp iowall.bin "../out/${{ matrix.file }}.bin"
+          cp iowall-full.bin "../out/${{ matrix.file }}-full.bin"
+          grep -E "CONFIG_ESP32P4_REV_MIN=|CONFIG_ESP_HOSTED_SDIO_PIN_CMD=" ../sdkconfig || true
           ls -la ../out
       - uses: actions/upload-artifact@v4
         with:
-          name: iowall-${{ env.WALL_VERSION }}
+          name: ${{ matrix.file }}-${{ env.WALL_VERSION }}
           path: devices/tab5-wall/out/
+
+  release:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
       - name: Release as wall-latest
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        working-directory: devices/tab5-wall/out
+        working-directory: out
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          notes="The wall display's firmware for an M5Stack Tab5, version $WALL_VERSION (commit ${GITHUB_SHA::7}). Flash it from Chrome at https://iosuite.iothing.net/wall/ ; a device signed in updates itself. iowall-full.bin is the whole flash (from 0x0), iowall.bin the app alone (over the air)."
+          printf '%s\n' "$WALL_VERSION" > version.txt
+          ls -la
+          notes="The wall display's firmware, version $WALL_VERSION (commit ${GITHUB_SHA::7}), for an M5Stack Tab5 (iowall) and a Waveshare ESP32-P4-WIFI6-Touch-LCD-7B (iowall-waveshare7b; -rev3 for a board whose ESP32-P4 is of revision 3). Flash it from Chrome at https://iosuite.iothing.net/wall/ ; a device signed in updates itself. A -full.bin is the whole flash (from 0x0), the other the app alone (over the air)."
           if gh release view wall-latest >/dev/null 2>&1; then
             git -C "$GITHUB_WORKSPACE" tag -f wall-latest "$GITHUB_SHA"
             git -C "$GITHUB_WORKSPACE" push -f origin wall-latest
-            gh release edit wall-latest --title "Tab5 wall $WALL_VERSION" --notes "$notes" --latest=false
+            gh release edit wall-latest --title "Wall display $WALL_VERSION" --notes "$notes" --latest=false
             # version.txt last: a device that reads it then finds the binary that goes with it
-            gh release upload wall-latest iowall.bin iowall-full.bin --clobber
+            gh release upload wall-latest iowall*.bin --clobber
             gh release upload wall-latest version.txt --clobber
           else
-            gh release create wall-latest iowall.bin iowall-full.bin version.txt --target "$GITHUB_SHA" \
-              --title "Tab5 wall $WALL_VERSION" --notes "$notes" --prerelease --latest=false
+            gh release create wall-latest iowall*.bin version.txt --target "$GITHUB_SHA" \
+              --title "Wall display $WALL_VERSION" --notes "$notes" --prerelease --latest=false
           fi
           # the website's flasher serves this firmware from its own address (USB flashing needs it same-origin)
           gh workflow run docs.yml --ref main

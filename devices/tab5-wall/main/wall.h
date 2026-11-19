@@ -1,4 +1,4 @@
-/* The wall display for an M5Stack Tab5: what the parts share.
+/* The wall display for an M5Stack Tab5 or a Waveshare ESP32-P4-WIFI6-Touch-LCD-7B (board.h): what the parts share.
  *
  * main.c      starts everything
  * settings.c  what is kept across restarts (NVS): Wi-Fi, the start page's address and the device's app password,
@@ -8,7 +8,7 @@
  * feed.c      the start page's wall feed (/api/wall/feed) every minute, and its photos (/api/wall/photo/<id>.jpg),
  *             decoded by the P4's JPEG engine
  * ui*.c       the screens (LVGL): the wall, setting up, settings, the panels that open over the wall
- * alarm.c     timers and alarms, and the sound (the Tab5's speaker)
+ * alarm.c     timers and alarms, and the sound (the board's speaker)
  * ota.c       a newer firmware from GitHub, over the air
  * boot.c      what stopped the last start, shown on the screen
  *
@@ -22,8 +22,13 @@
 #include <time.h>
 #include "lvgl.h"
 
-#define WALL_W 1280
-#define WALL_H 720
+#include "board.h"
+
+/* The screens are laid out for the Tab5's 1280 × 720; P() brings a size to this board's screen (the 7B's 1024 × 600:
+ * four fifths). Fonts take their size the same way (font_text and the others). */
+#define WALL_W BOARD_W
+#define WALL_H BOARD_H
+#define P(n) ((n) * WALL_W / 1280)
 
 /* ------------------------------------------------------------------ settings.c */
 
@@ -226,6 +231,8 @@ void ui_start(lv_display_t *disp);
 const lv_font_t *font_text(int px);
 const lv_font_t *font_bold(int px);
 const lv_font_t *font_light(int px);
+/** LVGL's own font, for a symbol (LV_SYMBOL_…) or the keyboard: the nearest size it has. */
+const lv_font_t *font_symbols(int px);
 
 void ui_show_setup(void);        /* Wi-Fi, address, sign-in */
 void ui_show_wall(void);

@@ -1,4 +1,4 @@
-/* Timers and alarms, and the sound: a tone made here, played on the Tab5's speaker (ES8388 through the board
+/* Timers and alarms, and the sound: a tone made here, played on the board's speaker (its codec through the board
  * package). The sound has its own task so a ring never holds up the screen. */
 #include <math.h>
 #include <string.h>
@@ -237,7 +237,7 @@ void alarm_tick(void)
 void alarm_start(void)
 {
     make_tone();
-    spk = bsp_audio_codec_speaker_init();   /* I2S, the ES8388 and the amplifier (through the I/O expander) */
+    spk = bsp_audio_codec_speaker_init();   /* I2S, the codec and the amplifier */
     if (spk) {
         esp_codec_dev_sample_info_t fs = {
             .sample_rate = RATE,

@@ -29,16 +29,22 @@ typedef struct {
 static font_slot_t fonts[20];
 static int nfonts;
 
+/* px: on this screen already */
 static const lv_font_t *symbols_for(int px)
 {
     if (px >= 44) return &lv_font_montserrat_48;
     if (px >= 32) return &lv_font_montserrat_36;
-    if (px >= 24) return &lv_font_montserrat_28;
-    return &lv_font_montserrat_20;
+    if (px >= 26) return &lv_font_montserrat_28;
+    if (px >= 22) return &lv_font_montserrat_24;
+    if (px >= 18) return &lv_font_montserrat_20;
+    return &lv_font_montserrat_16;
 }
+
+const lv_font_t *font_symbols(int px) { return symbols_for(P(px)); }
 
 static const lv_font_t *font_of(int kind, int px)
 {
+    px = P(px);
     for (int i = 0; i < nfonts; i++) {
         if (fonts[i].kind == kind && fonts[i].px == px) return fonts[i].f;
     }
@@ -173,7 +179,7 @@ void ui_wake(void)
 
 void ui_apply_rotation(void)
 {
-    bsp_display_rotate(DISP, S.flip ? LV_DISPLAY_ROTATION_270 : LV_DISPLAY_ROTATION_90);
+    bsp_display_rotate(DISP, BOARD_ROTATION(S.flip));
 }
 
 /* ------------------------------------------------------------------ a toast */
@@ -195,17 +201,17 @@ void ui_toast(const char *text)
         lv_obj_set_style_bg_opa(toast, LV_OPA_90, 0);
         lv_obj_set_style_text_color(toast, lv_color_white(), 0);
         lv_obj_set_style_text_font(toast, font_text(26), 0);
-        lv_obj_set_style_pad_hor(toast, 28, 0);
-        lv_obj_set_style_pad_ver(toast, 16, 0);
-        lv_obj_set_style_radius(toast, 32, 0);
-        lv_obj_set_style_max_width(toast, 1000, 0);
+        lv_obj_set_style_pad_hor(toast, P(28), 0);
+        lv_obj_set_style_pad_ver(toast, P(16), 0);
+        lv_obj_set_style_radius(toast, P(32), 0);
+        lv_obj_set_style_max_width(toast, P(1000), 0);
         lv_label_set_long_mode(toast, LV_LABEL_LONG_WRAP);
-        lv_obj_align(toast, LV_ALIGN_BOTTOM_MID, 0, -40);
+        lv_obj_align(toast, LV_ALIGN_BOTTOM_MID, 0, -P(40));
     }
     lv_label_set_text(toast, text);
     lv_obj_remove_flag(toast, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(toast);
-    lv_obj_align(toast, LV_ALIGN_BOTTOM_MID, 0, -40);
+    lv_obj_align(toast, LV_ALIGN_BOTTOM_MID, 0, -P(40));
     if (toast_timer) lv_timer_delete(toast_timer);
     toast_timer = lv_timer_create(toast_gone, 3500, NULL);
     lv_timer_set_repeat_count(toast_timer, 1);
@@ -262,9 +268,9 @@ lv_obj_t *kit_label(lv_obj_t *p, const lv_font_t *f, lv_color_t c, const char *t
 lv_obj_t *kit_button(lv_obj_t *p, const char *text, lv_event_cb_t cb, void *ud, bool primary)
 {
     lv_obj_t *b = lv_button_create(p);
-    lv_obj_set_height(b, 76);
-    lv_obj_set_style_pad_hor(b, 34, 0);
-    lv_obj_set_style_radius(b, 38, 0);
+    lv_obj_set_height(b, P(76));
+    lv_obj_set_style_pad_hor(b, P(34), 0);
+    lv_obj_set_style_radius(b, P(38), 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_set_style_bg_color(b, primary ? lv_color_hex(0x3f86c9) : lv_color_hex(0x33363d), 0);
     lv_obj_set_style_bg_color(b, primary ? lv_color_hex(0x2c6aa6) : lv_color_hex(0x4a4e57), LV_STATE_PRESSED);
@@ -286,8 +292,8 @@ lv_obj_t *kit_textarea(lv_obj_t *p, const char *placeholder, bool password)
     lv_obj_set_style_text_color(ta, lv_color_white(), 0);
     lv_obj_set_style_border_color(ta, lv_color_hex(0x4a4e57), 0);
     lv_obj_set_style_border_color(ta, lv_color_hex(0x3f86c9), LV_STATE_FOCUSED);
-    lv_obj_set_style_radius(ta, 14, 0);
-    lv_obj_set_style_pad_all(ta, 16, 0);
+    lv_obj_set_style_radius(ta, P(14), 0);
+    lv_obj_set_style_pad_all(ta, P(16), 0);
     lv_obj_set_style_text_color(ta, lv_color_hex(0x8a8f98), LV_PART_TEXTAREA_PLACEHOLDER);
     return ta;
 }
@@ -295,11 +301,11 @@ lv_obj_t *kit_textarea(lv_obj_t *p, const char *placeholder, bool password)
 lv_obj_t *kit_keyboard(lv_obj_t *p, lv_obj_t *ta, lv_event_cb_t on_ready, void *ud)
 {
     lv_obj_t *kb = lv_keyboard_create(p);
-    lv_obj_set_size(kb, WALL_W, 330);
+    lv_obj_set_size(kb, WALL_W, P(330));
     lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
     /* the built-in font: every key is drawn again at each press, and this one needs no rasterizing */
-    lv_obj_set_style_text_font(kb, &lv_font_montserrat_28, 0);
-    lv_obj_set_style_text_font(kb, &lv_font_montserrat_28, LV_PART_ITEMS);
+    lv_obj_set_style_text_font(kb, font_symbols(28), 0);
+    lv_obj_set_style_text_font(kb, font_symbols(28), LV_PART_ITEMS);
     lv_obj_set_style_bg_color(kb, lv_color_hex(0x111215), 0);
     lv_obj_set_style_bg_color(kb, lv_color_hex(0x2a2c31), LV_PART_ITEMS);
     lv_obj_set_style_text_color(kb, lv_color_white(), LV_PART_ITEMS);
@@ -344,24 +350,24 @@ lv_obj_t *kit_panel(const char *title, int w, int h)
     lv_obj_set_style_bg_color(card, lv_color_hex(0x16181c), 0);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(card, 0, 0);
-    lv_obj_set_style_radius(card, 28, 0);
-    lv_obj_set_style_pad_all(card, 30, 0);
-    lv_obj_set_style_pad_row(card, 16, 0);
+    lv_obj_set_style_radius(card, P(28), 0);
+    lv_obj_set_style_pad_all(card, P(30), 0);
+    lv_obj_set_style_pad_row(card, P(16), 0);
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
     lv_obj_t *top = lv_obj_create(card);
     lv_obj_remove_style_all(top);
     lv_obj_set_size(top, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_t *t = kit_label(top, font_bold(36), lv_color_white(), title);
     lv_label_set_long_mode(t, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(t, w - 160);
+    lv_obj_set_width(t, w - P(160));
     lv_obj_align(t, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_t *x = lv_button_create(top);
-    lv_obj_set_size(x, 64, 64);
-    lv_obj_set_style_radius(x, 32, 0);
+    lv_obj_set_size(x, P(64), P(64));
+    lv_obj_set_style_radius(x, P(32), 0);
     lv_obj_set_style_bg_color(x, lv_color_hex(0x33363d), 0);
     lv_obj_set_style_shadow_width(x, 0, 0);
     lv_obj_align(x, LV_ALIGN_RIGHT_MID, 0, 0);
-    lv_obj_t *xl = kit_label(x, &lv_font_montserrat_28, lv_color_white(), LV_SYMBOL_CLOSE);
+    lv_obj_t *xl = kit_label(x, font_symbols(28), lv_color_white(), LV_SYMBOL_CLOSE);
     lv_obj_center(xl);
     lv_obj_add_event_cb(x, on_panel_close, LV_EVENT_CLICKED, NULL);
     return card;

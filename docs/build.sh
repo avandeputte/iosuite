@@ -17,24 +17,33 @@ rm -rf site docs/img
 mkdir -p docs/img && cp landing/img/* docs/img/
 mkdocs build --strict
 cp -R landing/. site/
-# the Tab5 wall's flasher (/wall/): the firmware from the release wall-latest (.github/workflows/tab5-wall.yml),
-# served from here because a browser writes over USB only what its own site serves. None published yet: no button.
+# the wall display's flasher (/wall/): the firmware from the release wall-latest (.github/workflows/tab5-wall.yml),
+# served from here because a browser writes over USB only what its own site serves. One for each board, and for
+# each chip revision that needs its own; one not published (yet): no button for it.
 WALL=https://github.com/avandeputte/iosuite/releases/download/wall-latest
-if curl -fsSL -o site/wall/iowall-full.bin "$WALL/iowall-full.bin" && v="$(curl -fsSL "$WALL/version.txt")"; then
-  cat > site/wall/manifest.json <<JSON
-{"name": "ioThing wall for the M5Stack Tab5", "version": "$v", "new_install_prompt_erase": false,
- "builds": [{"chipFamily": "ESP32-P4", "parts": [{"path": "iowall-full.bin", "offset": 0}]}]}
+v="$(curl -fsSL "$WALL/version.txt" || true)"
+for fw in iowall iowall-waveshare7b iowall-waveshare7b-rev3; do
+  case "$fw" in
+    iowall) manifest=manifest.json; name="ioThing wall for the M5Stack Tab5" ;;
+    *) manifest="manifest${fw#iowall}.json"; name="ioThing wall for the Waveshare ESP32-P4-WIFI6-Touch-LCD-7B" ;;
+  esac
+  if [ -n "$v" ] && curl -fsSL -o "site/wall/$fw-full.bin" "$WALL/$fw-full.bin"; then
+    cat > "site/wall/$manifest" <<JSON
+{"name": "$name", "version": "$v", "new_install_prompt_erase": false,
+ "builds": [{"chipFamily": "ESP32-P4", "parts": [{"path": "$fw-full.bin", "offset": 0}]}]}
 JSON
-else
-  rm -f site/wall/iowall-full.bin
-  python3 - site/wall/index.html <<'PY'
+  else
+    rm -f "site/wall/$fw-full.bin"
+    python3 - site/wall/index.html "$fw" <<'PY'
 import re, sys
-p = sys.argv[1]
+p, fw = sys.argv[1:]
 s = open(p).read()
-s = re.sub(r'\s*<a class="btn btn-ghost" href="iowall-full.bin" download>.*?</a>', "", s)
+s, n = re.subn(r'\s*<div class="wflash" data-fw="%s">.*?</div>' % re.escape(fw), "", s, flags=re.S)
+assert n == 1, fw
 open(p, "w").write(s)
 PY
-fi
+  fi
+done
 # a page for each app (/ioContact/ and the others), from landing/apps.toml and the apps' manifests
 python3 tools/app-pages.py site
 rm site/apps.toml

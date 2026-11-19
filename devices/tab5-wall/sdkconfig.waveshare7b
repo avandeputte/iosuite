@@ -1,0 +1,12 @@
+# The Waveshare ESP32-P4-WIFI6-Touch-LCD-7B (32 MB of flash, of which the first 16 are used, as on the Tab5).
+# The pins of its ESP32-C6 are those of Espressif's own P4 board, which Waveshare's examples leave as they are.
+CONFIG_ESP_HOSTED_SDIO_GPIO_RESET_SLAVE=54
+CONFIG_ESP_HOSTED_SDIO_PIN_CMD=19
+CONFIG_ESP_HOSTED_SDIO_PIN_CLK=18
+CONFIG_ESP_HOSTED_SDIO_PIN_D0=14
+CONFIG_ESP_HOSTED_SDIO_PIN_D1=15
+CONFIG_ESP_HOSTED_SDIO_PRIV_PIN_D1_4BIT_BUS=15
+CONFIG_ESP_HOSTED_SDIO_PIN_D2=16
+CONFIG_ESP_HOSTED_SDIO_PIN_D3=17
+# one frame buffer in the panel's driver; LVGL draws into its own two (main.c)
+CONFIG_BSP_LCD_DPI_BUFFER_NUMS=1
