@@ -4,6 +4,7 @@ Saved per account in the prt_settings table ("user:<id>:layout", JSON). Every ap
 page unless the person hides it; the photo strip is the admin's choice (Settings › Home page) unless they pick another.
 Empty: the page as it comes."""
 import json
+import re
 
 from app import apps, db
 from iosuite_shared.errors import Invalid
@@ -14,8 +15,9 @@ STRIP_MOVES = ("shuffle", "page", "off")  # how the photo strip changes by itsel
 STRIP_EVERY = (30, 60, 120, 300, 600, 1800)  # how often, in seconds (null: 60)
 WALL_BGS = ("photos", "sky", "black")  # behind the wall display (null: photos, or the sky without ioPix)
 WALL_EVERY = (20, 60, 300, 900)  # how often its photo changes, in seconds (null: 60)
+WALL_PHOTOS = re.compile(r"rediscover|onthisday|favorites|album:[1-9][0-9]{0,12}")  # which ioPix photos (null: as the strip)
 EMPTY = {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None,
-         "wallBg": None, "wallEvery": None}
+         "wallBg": None, "wallEvery": None, "wallPhotos": None}
 
 
 def _key(user_id: int) -> str:
@@ -26,7 +28,8 @@ def get(user_id: int) -> dict:
     """{hidden: [tile or section keys], order: [tile keys, the first ones first], cards: [section keys, top first],
     strip: rediscover|onthisday|off|null, search: a web search engine (ENGINES) | null,
     stripMove: shuffle|page|off|null, stripEvery: seconds (STRIP_EVERY) | null,
-    wallBg: photos|sky|black|null, wallEvery: seconds (WALL_EVERY) | null}."""
+    wallBg: photos|sky|black|null, wallEvery: seconds (WALL_EVERY) | null,
+    wallPhotos: rediscover|onthisday|favorites|album:<ioPix album id>|null}."""
     raw = db.get_setting(_key(user_id))
     if not raw:
         return dict(EMPTY)
@@ -42,7 +45,8 @@ def get(user_id: int) -> dict:
             "stripMove": v.get("stripMove") if v.get("stripMove") in STRIP_MOVES else None,
             "stripEvery": v.get("stripEvery") if v.get("stripEvery") in STRIP_EVERY else None,
             "wallBg": v.get("wallBg") if v.get("wallBg") in WALL_BGS else None,
-            "wallEvery": v.get("wallEvery") if v.get("wallEvery") in WALL_EVERY else None}
+            "wallEvery": v.get("wallEvery") if v.get("wallEvery") in WALL_EVERY else None,
+            "wallPhotos": v["wallPhotos"] if isinstance(v.get("wallPhotos"), str) and WALL_PHOTOS.fullmatch(v["wallPhotos"]) else None}
 
 
 def save(user_id: int, body: dict) -> dict:
@@ -58,6 +62,7 @@ def save(user_id: int, body: dict) -> dict:
     every = body.get("stripEvery") or None
     wall_bg = body.get("wallBg") or None
     wall_every = body.get("wallEvery") or None
+    wall_photos = body.get("wallPhotos") or None
     if not isinstance(hidden, list) or not all(apps.is_key(k) or k in SECTIONS for k in hidden):
         raise Invalid(f"hidden: a list of app keys and {', '.join(SECTIONS)}")
     if not isinstance(order, list) or not all(apps.is_key(k) for k in order) or len(set(order)) != len(order):
@@ -76,7 +81,9 @@ def save(user_id: int, body: dict) -> dict:
         raise Invalid(f"wallBg: {', '.join(WALL_BGS)}, or nothing (photos)")
     if wall_every is not None and (isinstance(wall_every, bool) or wall_every not in WALL_EVERY):
         raise Invalid(f"wallEvery: {', '.join(map(str, WALL_EVERY))} seconds, or nothing (60)")
+    if wall_photos is not None and not (isinstance(wall_photos, str) and WALL_PHOTOS.fullmatch(wall_photos)):
+        raise Invalid("wallPhotos: rediscover, onthisday, favorites, album:<id>, or nothing (as the photo strip)")
     v = {"hidden": list(dict.fromkeys(hidden)), "order": order, "cards": cards, "strip": strip, "search": search, "stripMove": move, "stripEvery": every,
-         "wallBg": wall_bg, "wallEvery": wall_every}
+         "wallBg": wall_bg, "wallEvery": wall_every, "wallPhotos": wall_photos}
     db.set_setting(_key(user_id), None if v == EMPTY else json.dumps(v))
     return get(user_id)

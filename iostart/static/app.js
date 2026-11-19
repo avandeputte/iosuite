@@ -713,6 +713,15 @@ async function customize() {
   const everies = h('select', { class: 't' }, STRIP_EVERY.map((s) => h('option', { value: s, selected: s === (L.stripEvery || STRIP_DEFAULT.every) ? true : null }, `Every ${everyText(s)}`)));
   const pix = apps.some((a) => a.key === 'iopix');
   const wallBg = h('select', { class: 't' }, Object.keys(WALL_BGS).filter((k) => pix || k !== 'photos').map((k) => h('option', { value: k, selected: k === (L.wallBg || (pix ? 'photos' : 'sky')) ? true : null }, WALL_BG_NAMES[k])));
+  // which photos: as the strip, or the person's favorites or one album in ioPix (the list comes from ioPix as they look)
+  const wallPhotos = h('select', { class: 't' }, [['', 'As the photo strip'], ['rediscover', 'Rediscover: photos at random'], ['onthisday', 'On this day'], ['favorites', 'My favorites']]
+    .map(([v, t]) => h('option', { value: v, selected: v === (L.wallPhotos || '') ? true : null }, t)));
+  if (pix) widget('iopix', { kind: 'albums' }).then((d) => {
+    const list = (d && d.albums) || [];
+    const kept = L.wallPhotos && L.wallPhotos.startsWith('album:') && !list.some((a) => `album:${a.id}` === L.wallPhotos);
+    if (list.length || kept) wallPhotos.append(h('optgroup', { label: 'An album' }, list.map((a) => h('option', { value: `album:${a.id}`, selected: `album:${a.id}` === L.wallPhotos ? true : null }, `${a.name} (${a.n})`)),
+      kept ? h('option', { value: L.wallPhotos, selected: true }, 'An album no longer there') : null));
+  });
   const wallEvery = h('select', { class: 't' }, WALL_EVERY.map((s) => h('option', { value: s, selected: s === (L.wallEvery || WALL_DEFAULT_EVERY) ? true : null }, `Every ${everyText(s)}`)));
   const engines = h('select', { class: 't' }, Object.entries(ENGINES).map(([k, e]) => h('option', { value: k === 'duckduckgo' ? '' : k, selected: (k === 'duckduckgo' ? '' : k) === (L.search || '') ? true : null }, e.name)));
   const body = h('div', null, h('p', { class: 'muted small' }, 'Your own start page, on this account only: untick what you do not need, and put the tiles and the cards in your order. Birthdays and This week share a row when they follow each other.'),
@@ -720,12 +729,14 @@ async function customize() {
     h('div', { class: 'grid' }, fld('Photo strip', strip), fld('Web search', engines)),
     h('div', { class: 'grid' }, fld('The photo strip changes to', moves), fld('How often', everies)),
     h('div', { class: 'grid' }, fld('Wall display background', wallBg), pix ? fld('Its photo changes', wallEvery) : h('div')),
+    pix ? h('div', { class: 'grid' }, fld('Wall display photos', wallPhotos), h('div')) : null,
     h('p', { class: 'muted small' }, `In the search box, a prefix picks a site: ${BANG_HELP}. “t …” adds a task to ioTask and “n …” a note to ioNote; a line that says when (“dinner fri 19:00”) adds an event.`));
   const v = await dialog('Customize the page', body, [{ label: 'Back to the default', value: 'reset' }, { label: 'Cancel', value: null }, { label: 'Save', value: 'save', primary: true }]);
   if (!v) return;
   const json = v === 'reset' ? {} : { hidden: [...tiles, ...cards].filter((t) => !t.on).map((t) => t.key), order: tiles.map((t) => t.key), cards: cards.map((c) => c.key), strip: strip.value || null, search: engines.value || null,
     stripMove: moves.value === STRIP_DEFAULT.move ? null : moves.value, stripEvery: +everies.value === STRIP_DEFAULT.every ? null : +everies.value,
-    wallBg: wallBg.value === (pix ? 'photos' : 'sky') ? null : wallBg.value, wallEvery: +wallEvery.value === WALL_DEFAULT_EVERY ? null : +wallEvery.value };
+    wallBg: wallBg.value === (pix ? 'photos' : 'sky') ? null : wallBg.value, wallEvery: +wallEvery.value === WALL_DEFAULT_EVERY ? null : +wallEvery.value,
+    wallPhotos: wallPhotos.value || null };
   try { await api('api/me/layout', { method: 'PUT', json }); toast(v === 'reset' ? 'Back to the default' : 'Saved'); if (route().view === 'home') onRoute(); } catch (e) { fail(e); }
 }
 
@@ -1349,7 +1360,7 @@ async function showWall(page) {
   S.wallStop = () => { timers.forEach(clearInterval); clearTimeout(hideT); document.removeEventListener('visibilitychange', onVis); document.removeEventListener('keydown', onKey); if (lock) lock.release().catch(() => {}); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); };
   if (bg === 'photos' && has('iopix')) {
     const every = (WALL_EVERY.includes(L.wallEvery) ? L.wallEvery : WALL_DEFAULT_EVERY) * 1000;
-    const ss = wallSlideshow(photos, caption, L.strip || got.photoStrip, every);
+    const ss = wallSlideshow(photos, caption, L.wallPhotos || L.strip || got.photoStrip, every);
     show = ss.next; timers.push(ss.timer);
   }
   const draw = () => { wallWeather(wx, hours, bg === 'black' ? null : sky); wallAgenda(agenda, has); wallSensors(sensors); };
@@ -1379,7 +1390,7 @@ function renderWallSensors(el, d) {
 function wallSlideshow(el, caption, kind, every) {
   let queue = [], busy = false, empty = 0;
   const fill = async () => {
-    const d = await widget('iopix', { kind: kind === 'onthisday' ? 'onthisday' : 'rediscover', n: 24 });
+    const d = await widget('iopix', { kind: !kind || kind === 'off' ? 'rediscover' : kind, n: 24 });  // favorites, album:<id> too
     let items = (d && d.items) || [];
     const wide = innerWidth >= innerHeight;
     items = items.slice().sort((a, b) => (a.w && a.h ? ((a.w >= a.h) === wide ? 0 : 1) : 0.5) - (b.w && b.h ? ((b.w >= b.h) === wide ? 0 : 1) : 0.5));

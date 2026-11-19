@@ -194,5 +194,5 @@ def get(request: Request, key: str, tz: str = "", kind: str = "", n: int = 0, q:
         return fetch(request, key, "/api/suite/search", {"q": q.strip()[:80], "n": 5, "tz": tz} if tz else {"q": q.strip()[:80], "n": 5})
     if not st.get("tile"):
         raise Unavailable(404, f"{apps.name_of(key)} shows only in the search box" if st.get("find") else f"{key} has nothing to show here")
-    params = {k: v for k, v in (("tz", tz), ("kind", re.sub(r"[^a-z]", "", kind)[:20]), ("n", max(0, min(int(n or 0), 24)))) if v}
+    params = {k: v for k, v in (("tz", tz), ("kind", re.sub(r"[^a-z0-9:]", "", kind)[:20]), ("n", max(0, min(int(n or 0), 24)))) if v}
     return fetch(request, key, "/api/suite/tile", params)

@@ -135,12 +135,33 @@ def image(local, kind, item_id, p):
     return None
 
 
+def _random(local, n, params=None) -> list[dict]:
+    got = local.get("/api/random", {"n": n, **(params or {})})
+    ws, hs = got.get("w") or [], got.get("h") or []
+    return [{"id": pid, "year": dt.datetime.fromtimestamp(ts, dt.timezone.utc).year if ts else None,
+             **({"w": ws[i], "h": hs[i]} if i < len(ws) and i < len(hs) and ws[i] and hs[i] else {})}
+            for i, (pid, ts) in enumerate(zip(got.get("id") or [], got.get("ts") or []))]
+
+
 def tile(local, tz, n, kind):
     """{kind: onthisday | rediscover, items: [{id, year, yearsAgo}], count}: up to n photos taken on this day in
     earlier years, one from each year first (the most recent years first), then the rest of those years; count is
     how many there are in all. On a day without any, n photos picked at random from the library (with w and h: the
-    wall display prefers landscape ones). kind asks for one of the two (onthisday still falls back to rediscover)."""
+    wall display prefers landscape ones). kind asks for one of the two (onthisday still falls back to rediscover).
+    For the wall display, kind "favorites" (the viewer's) or "album:<id>" (one of the app's albums the viewer may
+    see) picks n of those at random ({kind, items}; none: the library's, as rediscover), and "albums" lists the albums
+    to choose from: {kind: albums, albums: [{id, name, n}]}."""
     n = n or 4
+    if kind == "albums":
+        state = local.get("/api/state")
+        return {"kind": "albums", "albums": [{"id": a.get("id"), "name": a.get("name"), "n": a.get("n") or 0}
+                                             for a in state.get("albums") or [] if a.get("id") and a.get("name")]}
+    pick = {"fav": "1"} if kind == "favorites" else {"ualbum": kind[6:]} if kind.startswith("album:") and kind[6:].isdigit() else None
+    if pick:
+        items = _random(local, n, pick)
+        if items:
+            return {"kind": kind, "items": items}
+        kind = "rediscover"
     today = dt.datetime.now(_zone(tz)).date()
     by_year: dict[int, list] = {}
     if kind != "rediscover":
@@ -159,12 +180,7 @@ def tile(local, tz, n, kind):
         for i in range(max(len(v) for v in by_year.values())):  # round i: the i-th photo of each year
             items += [{"id": by_year[y][i], "year": y, "yearsAgo": today.year - y} for y in years if i < len(by_year[y])]
         return {"kind": "onthisday", "items": items[:n], "count": sum(len(v) for v in by_year.values())}
-    got = local.get("/api/random", {"n": n})
-    ws, hs = got.get("w") or [], got.get("h") or []
-    items = [{"id": pid, "year": dt.datetime.fromtimestamp(ts, dt.timezone.utc).year if ts else None,
-              **({"w": ws[i], "h": hs[i]} if i < len(ws) and i < len(hs) and ws[i] and hs[i] else {})}
-             for i, (pid, ts) in enumerate(zip(got.get("id") or [], got.get("ts") or []))]
-    return {"kind": "rediscover", "items": items}
+    return {"kind": "rediscover", "items": _random(local, n)}
 
 
 PROVIDER = Provider(search=search, get=get, image=image, tile=tile)
