@@ -76,10 +76,11 @@ def photos_cached(version: str, key: str) -> bytes:
 
 
 @router.get("/api/random", dependencies=[access.public])
-def api_random(n: int = 12):
+def api_random(n: int = 12, fav: str = "", ualbum: int = 0):
     """Explore › Rediscover: photos picked at random from the whole library (stills): {id, w, h, ts} and the badges
-    {video, geo, faces} as /api/photos gives them (by position)."""
-    where, params, _rank = resolve([("type", "photo")])
+    {video, geo, faces} as /api/photos gives them (by position). fav=1: from the asker's favorites only; ualbum: from
+    one of the app's albums (one the asker may see), as for the start page's wall display."""
+    where, params, _rank = resolve([("type", "photo"), *([("fav", "1")] if fav == "1" else []), *([("ualbum", str(ualbum))] if ualbum > 0 else [])])
     con = db()
     try:
         rows = con.execute(f"SELECT id, w, h, ts, video, duration, lat IS NOT NULL, {HAS_PEOPLE}, dprec FROM photos WHERE {where} ORDER BY random() LIMIT ?",
