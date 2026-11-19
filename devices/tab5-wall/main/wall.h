@@ -10,6 +10,7 @@
  * ui*.c       the screens (LVGL): the wall, setting up, settings, the panels that open over the wall
  * alarm.c     timers and alarms, and the sound (the board's speaker)
  * ota.c       a newer firmware from GitHub, over the air
+ * power.c     the battery's level, on a board that measures it
  * boot.c      what stopped the last start, shown on the screen
  *
  * LVGL is not thread-safe: every LVGL call outside its own callbacks happens between ui_lock() and ui_unlock().
@@ -291,6 +292,14 @@ void alarm_snooze(void);
 time_t alarm_next(void);
 void sound_beep(int ms);
 void sound_set_volume(int pct);
+
+/* ------------------------------------------------------------------ power.c */
+
+void power_start(void);
+void power_tick(void);           /* every ten seconds */
+/** True when the board runs on its battery; pct: how full it is. False on USB power, with no battery, or on a board
+ *  that cannot tell. */
+bool power_on_battery(int *pct);
 
 /* ------------------------------------------------------------------ ota.c */
 

@@ -5,7 +5,7 @@ else()
     set(BOARD_PACKAGE m5stack_tab5)
 endif()
 idf_component_register(
-    SRCS "main.c" "settings.c" "net.c" "api.c" "feed.c" "alarm.c" "ota.c" "boot.c"
+    SRCS "main.c" "settings.c" "net.c" "api.c" "feed.c" "alarm.c" "ota.c" "boot.c" "power.c"
          "ui.c" "ui_wall.c" "ui_setup.c" "ui_panels.c" "icons.c"
     INCLUDE_DIRS "."
     EMBED_FILES "fonts/Inter-Regular.ttf" "fonts/Inter-SemiBold.ttf" "fonts/InterDisplay-Light.ttf"

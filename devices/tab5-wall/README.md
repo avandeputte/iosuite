@@ -17,6 +17,8 @@ Firmware that puts the start page's wall (`#/wall`) on its own screen, on USB po
 - **Timers and an alarm clock** on the board's speaker (four of each; alarms by weekday or once, snooze).
 - **Night:** dims from 22:00 to 06:00 by default (or turns the screen off); a touch lights it for 30 seconds.
   Hours and brightness are in Settings on the device.
+- **On its battery** (Tab5): how full it is, beside the date, while it is not on USB power. The Waveshare board has
+  nothing that measures its battery.
 - **Updates itself** at 3 AM from the release `wall-latest` (Settings turns that off). A firmware that does not
   run for a minute is rolled back.
 
@@ -75,6 +77,7 @@ never updates itself; `WALL_VERSION=1.2 idf.py build` gives it a version.
 | `main/feed.c` | `/api/wall/feed` every minute, the photos (`/api/wall/photo/<id>.jpg`, the P4's JPEG decoder), taps |
 | `main/ui.c`, `ui_wall.c`, `ui_setup.c`, `ui_panels.c` | the screens (LVGL), laid out for 1280 × 720; `P()` brings each size to the board's screen |
 | `main/alarm.c` | timers, alarms, the sound |
+| `main/power.c` | the battery's level (the Tab5's INA226) |
 | `main/ota.c` | updates from the release `wall-latest` (each board its own file) |
 | `main/icons.c` | the weather icons, made by `tools/make_icons.py` |
 | `main/fonts/` | Inter (SIL Open Font License, `OFL.txt`) |

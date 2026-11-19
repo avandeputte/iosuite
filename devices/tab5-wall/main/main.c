@@ -46,6 +46,8 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(300));
     }
 
+    power_start();   /* the battery's level, where the board measures it */
+
     boot_step(BOOT_ROTATE);
     ui_lock();
     bsp_display_rotate(disp, BOARD_ROTATION(S.flip));

@@ -16,6 +16,8 @@
 #define BOARD_ROTATION(flip) ((flip) ? LV_DISPLAY_ROTATION_180 : LV_DISPLAY_ROTATION_0)
 /* the C6 is powered with the board */
 #define BOARD_WIFI_ON() ((void)0)
+/* a battery can be connected, but nothing on the board measures it */
+#define BOARD_BATTERY 0
 
 #else
 
@@ -26,6 +28,8 @@
 #define BOARD_ROTATION(flip) ((flip) ? LV_DISPLAY_ROTATION_270 : LV_DISPLAY_ROTATION_90)
 /* the C6 has its own power switch on the Tab5's I/O expander */
 #define BOARD_WIFI_ON() bsp_feature_enable(BSP_FEATURE_WIFI, true)
+/* a power monitor on the battery's line (power.c) */
+#define BOARD_BATTERY 1
 
 #endif
 
