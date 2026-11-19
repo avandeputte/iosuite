@@ -124,11 +124,15 @@ body.home #main { top: env(safe-area-inset-top); }
 .dateline .iconbtn.gear { width: 28px; height: 28px; }
 .dateline .iconbtn.gear .ic { width: 18px; height: 18px; }
 .dateline .menu { left: 0; right: auto; top: 32px; }
-/* the tiles: a column per app with a widget, and a column of three low tiles for the apps without (--cols is set by the page) */
-.apps { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 16px; }
-.stack { display: grid; grid-template-rows: repeat(var(--n, 3), minmax(0, 1fr)); gap: 8px; min-width: 0; }
-/* more than three low tiles in the column: thinner tiles, a smaller icon and name, so they all fit beside the tall ones */
-.stack.dense { gap: 6px; }
+/* the tiles ("cards" layout): a card per app with something to show, as many across as fit at 300px or more (three on
+   a wide screen, one on a phone), so a card's lines can be read; the low tiles of the other apps share one cell, the
+   free one after the last card (fitStack) */
+.apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.stack { display: grid; grid-template-rows: repeat(var(--n, 3), minmax(40px, 1fr)); gap: 8px; min-width: 0; }
+/* more than three low tiles in the cell: thinner tiles, a smaller icon and name, so they all fit beside the cards */
+.stack.dense { gap: 6px; grid-template-rows: repeat(var(--n, 3), minmax(28px, 1fr)); }
+/* no cell free after the cards (or one column): the low tiles in a row of their own, side by side */
+.stack.across { grid-column: 1 / -1; grid-template-rows: none; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 16px; }
 .stack.dense .app.small { padding-top: 2px; padding-bottom: 2px; min-height: 0; overflow: hidden; }
 .stack.dense .app.small > img { width: 22px; height: 22px; }
 .stack.dense .app.small .nm { font-size: var(--fs-base); }
@@ -145,7 +149,7 @@ body.home #main { top: env(safe-area-inset-top); }
 .app.small .more { display: none; }
 /* a low tile's one line under the name (ioDocs: what is to renew) */
 .app.small .who > .line { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.app.small .who > .line:empty { display: none; }
+.app.small .who > .line:empty, .app:not(.small) .who > .line { display: none; }
 .app.small .who > .line .ic { width: 13px; height: 13px; flex: none; }
 .stack.dense .app.small .who { gap: 0; }
 /* a card the width of the page with a row of ioPix photos (drawStrip), scrolling sideways when there are more */
@@ -220,6 +224,40 @@ body.home #main { top: env(safe-area-inset-top); }
 .wgsleep .muted { margin-left: auto; }
 
 /* the week ahead: a card for the birthdays and a card for the coming days, side by side */
+/* ---- the "today" layout: every app in one row to open it (the dock), then what the day holds in a few cards (drawGlance) */
+.dock { display: grid; grid-template-columns: repeat(var(--per, 5), minmax(0, 1fr)); gap: 8px; }  /* --per: the page, so the rows are even */
+.dock .app.small { grid-template-columns: minmax(0, 1fr); grid-template-areas: "img" "who"; justify-items: center; align-content: start; text-align: center; padding: 10px 4px 8px; row-gap: 6px; }
+.dock .app.small > img { width: 36px; height: 36px; }
+.dock .app .who { align-items: center; max-width: 100%; }
+.dock .app .nm { font-size: var(--fs-base); }
+.dock .app .nmrow { gap: 5px; }
+.dock .app .st .dot { width: 6px; height: 6px; }
+.dock .app.small .who > .line { font-size: var(--fs-xs); }
+.dock .app.idle .who > .line { display: none; }
+/* Today takes three fifths, ioHealth and On this day share the rest, one above the other */
+.glance { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+.glance.one { grid-template-columns: minmax(0, 1fr); }
+.glance:empty { display: none; }
+.glance .card { padding: 14px 16px; }
+.gside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.gside > .card { flex: 1 1 auto; }
+.gside.flat { flex-direction: row; } .gside.flat > .card { flex: 1 1 0; }  /* no Today card: the two side by side */
+.ghead { display: flex; align-items: center; gap: 8px; font-size: var(--fs-l); font-weight: 600; min-width: 0; }
+.ghead img { width: 22px; height: 22px; border-radius: 22%; flex: none; }
+.ghead .muted { margin-left: auto; font-size: var(--fs-s); font-weight: 400; }
+.ghead:hover > span:first-of-type { text-decoration: underline; }
+.glance .wg { border-top: 0; padding-top: 0; margin-top: 0; }
+.todaycols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; }
+.todaycols.one { grid-template-columns: minmax(0, 1fr); }
+.todaycols > * { display: flex; flex-direction: column; gap: 7px; min-width: 0; font-size: var(--fs-m); }
+.todaycols .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; margin: 0 1.5px; }
+.todaycols .tick { width: 11px; height: 11px; border: 1.5px solid var(--fg2); border-radius: 3px; flex: none; box-sizing: border-box; }
+.todaycols > div .wgwhen { min-width: 58px; }
+.todaycols .gbills .wgwhen { min-width: 32px; }
+.todaycols a.wgev:hover .wgtitle { text-decoration: underline; }
+.wgwhere { margin-left: auto; flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-s); }
+.glance .wgrings { width: 56px; height: 56px; }
+.glance .wgpix { grid-template-columns: repeat(4, minmax(0, 132px)); }  /* on its own in a wide card, the photos stay small */
 .agenda { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
 .agenda:empty { display: none; }
 .card { padding: 12px 16px 12px; border-radius: var(--r-l); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -461,12 +499,8 @@ table.t td .dot { display: inline-block; width: 10px; height: 10px; border-radiu
   .top .hello { flex: 1; }
   .top .weather { order: 2; flex: 1 1 100%; flex-wrap: wrap; margin-left: 0; }
   .top .search { order: 3; flex: 1 1 100%; }
-  .apps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  /* the column of low tiles takes the whole row instead, two across, at their usual size */
-  .stack.dense { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; grid-auto-rows: auto; gap: 8px 16px; }
-  .stack.dense .app.small { padding-top: 6px; padding-bottom: 6px; }
-  .stack.dense .app.small > img { width: 28px; height: 28px; }
-  .stack.dense .app.small .nm { font-size: var(--fs-l); }
+  .glance { grid-template-columns: minmax(0, 1fr); }
+  .gside { flex-direction: row; } .gside > .card { flex: 1 1 0; }
 }
 /* ---- phones */
 @media (max-width: 600px) {
@@ -476,10 +510,15 @@ table.t td .dot { display: inline-block; width: 10px; height: 10px; border-radiu
   .hello h1 { font-size: 22px; }
   .approw .nm { width: auto; }
   .top { gap: 12px; }
-  .apps { gap: 12px; }
-  .stack { grid-template-rows: none; grid-auto-rows: auto; }
-  /* two tiles to a row: ioHealth leaves out the week's bars and the word "asleep" */
-  .wgtrend, .wgunit { display: none; }
+  .apps, .glance, .glance .gside { gap: 12px; }
+  .stack.across { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+  /* the dock as a phone's home screen: five icons to a row, the name under each without its "io" */
+  .dock { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
+  .dock .app.small { border-color: transparent; padding: 6px 0; }
+  .dock .app .nm { font-size: var(--fs-xs); font-weight: 600; }
+  .dock .app .nm .io, .dock .app .st { display: none; }
+  .todaycols { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .gside, .gside.flat { flex-direction: column; }
 
   .strip .row { grid-auto-columns: 104px; }
   .agenda { grid-template-columns: minmax(0, 1fr); gap: 12px; }
