@@ -1,6 +1,8 @@
 /* The battery, on a board that can measure it (board.h: BOARD_BATTERY). The Tab5 has a power monitor (INA226, on the
  * board's I2C bus at 0x41) across a 5 mΩ resistor in the battery's line: the battery's voltage, and the current
- * into it (charging) or out of it (running on it). Read every ten seconds from the screen's tick. */
+ * into it (charging) or out of it (running on it). Read every ten seconds from the screen's tick. Settings shows
+ * the readings as they are, since which way the current reads was never seen on a board here. */
+#include <stdio.h>
 #include "bsp/esp-bsp.h"
 #include "driver/i2c_master.h"
 #include "esp_log.h"
@@ -16,7 +18,7 @@
 #define REG_BUS 0x02     /* 1.25 mV a step */
 
 static i2c_master_dev_handle_t dev;
-static bool known, on_battery;
+static bool known, on_battery, charging;
 static int percent, millivolts, milliamps;
 
 static bool reg_read(uint8_t reg, uint16_t *v)
@@ -71,8 +73,11 @@ void power_tick(void)
     if (!reg_read(REG_BUS, &bus) || !reg_read(REG_SHUNT, &shunt)) return;
     millivolts = bus * 5 / 4;
     milliamps = (int16_t)shunt / 2;
-    /* out of the battery (negative) by more than a trickle, and a battery there at all */
-    bool now = millivolts > 5000 && milliamps < -30;
+    /* A battery there at all, and more than a trickle through it either way: out of it (negative, as M5Stack's own
+     * firmware reads it) while the board runs on it, into it while USB power charges it. The level shows in both
+     * cases, so a board whose current reads the other way round still shows it. */
+    bool now = millivolts > 5000 && (milliamps < -30 || milliamps > 30);
+    charging = milliamps > 30;
     /* two readings in a row agree before the wall says so: a plug going in or out makes the current jump about */
     static bool last;
     if (now == last || !known) on_battery = now;
@@ -88,10 +93,22 @@ bool power_on_battery(int *pct)
     return true;
 }
 
+bool power_charging(void) { return known && on_battery && charging; }
+
+void power_text(char *out, size_t n)
+{
+    if (!dev) snprintf(out, n, "No power monitor answers on this board");
+    else if (!known) snprintf(out, n, "Not read yet");
+    else snprintf(out, n, "%d.%02d V, %d mA%s", millivolts / 1000, millivolts % 1000 / 10, milliamps,
+                  millivolts <= 5000 ? " (no battery)" : milliamps < -30 ? " (out of the battery)" : milliamps > 30 ? " (into the battery)" : " (battery idle)");
+}
+
 #else
 
 void power_start(void) {}
 void power_tick(void) {}
 bool power_on_battery(int *pct) { return false; }
+bool power_charging(void) { return false; }
+void power_text(char *out, size_t n) { snprintf(out, n, "This board does not measure its battery"); }
 
 #endif

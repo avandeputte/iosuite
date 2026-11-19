@@ -122,6 +122,17 @@ typedef struct {
     char day[11], end_day[11];
     uint32_t color;
     bool has_color;
+    /* what a tap on it adds, where ioCalendar has any */
+    struct {
+        char name[32];
+        uint32_t color;
+        bool has_color;
+    } who[6];              /* the family members it is for */
+    int nwho;
+    char people[160];      /* the other people on it, "A, B" */
+    char calendar[48];
+    char notes[400];
+    bool recurring;
 } wall_event_t;
 
 typedef struct {
@@ -317,6 +328,10 @@ void power_tick(void);           /* every ten seconds */
 /** True when the board runs on its battery; pct: how full it is. False on USB power, with no battery, or on a board
  *  that cannot tell. */
 bool power_on_battery(int *pct);
+/** USB power is filling the battery (the level then shows with a charge mark). */
+bool power_charging(void);
+/** The readings as they are, for Settings: "7.62 V, -410 mA (out of the battery)". */
+void power_text(char *out, size_t n);
 
 /* ------------------------------------------------------------------ ota.c */
 

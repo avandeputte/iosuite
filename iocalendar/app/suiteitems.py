@@ -99,13 +99,39 @@ def _cancelled(o: dict) -> bool:
     return (o.get("status") or "").upper() == "CANCELLED"
 
 
+class _Calendars(dict):
+    """{calendar id: its colour}, as _colors gives it, with what an event's details name besides: each calendar's
+    name, and the family (who an event is for)."""
+    names: dict = {}
+    family: dict = {}
+
+
+def _about(local) -> _Calendars:
+    """The calendars' colours and names and the family, asked together. The family not answering leaves the rest."""
+    cals, fam = local.together(lambda: local.get("/api/calendars"), lambda: local.get("/api/members"))
+    if isinstance(cals, Exception):
+        raise cals
+    out = _Calendars({c["id"]: c.get("color") for c in cals.get("items", [])})
+    out.names = {c["id"]: c.get("name") for c in cals.get("items", [])}
+    out.family = {} if isinstance(fam, Exception) else {m["id"]: m for m in fam.get("items", [])}
+    return out
+
+
 def _pick(o: dict, colors: dict) -> dict:
-    return {"title": o.get("title") or "(no title)", "start": o.get("start"), "end": o.get("end"), "allDay": bool(o.get("allDay")),
-            "location": o.get("location"), "color": colors.get(o.get("calendarId"))}
+    """An occurrence as the tile shows it, and what its details add where there is any: who of the family it is for
+    ({name, color}), the other people on it, the calendar it is on, its notes, whether it repeats."""
+    out = {"title": o.get("title") or "(no title)", "start": o.get("start"), "end": o.get("end"), "allDay": bool(o.get("allDay")),
+           "location": o.get("location"), "color": colors.get(o.get("calendarId"))}
+    fam = getattr(colors, "family", {})
+    who = [{"name": fam[i].get("displayName") or fam[i].get("name"), "color": fam[i].get("color")} for i in o.get("members") or [] if i in fam]
+    more = {"who": who, "people": [str(p) for p in (o.get("people") or []) if p][:12], "calendar": getattr(colors, "names", {}).get(o.get("calendarId")),
+            "notes": (o.get("notes") or "")[:600], "recurring": bool(o.get("recurring"))}
+    out.update({k: v for k, v in more.items() if v})
+    return out
 
 
 def _occurrences(local, start: dt.datetime, end: dt.datetime) -> dict:
-    return local.get("/api/occurrences", {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds")})
+    return local.get("/api/occurrences", {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds"), "notes": 1})
 
 
 def today(local, tz: str, n: int) -> dict:
@@ -115,7 +141,7 @@ def today(local, tz: str, n: int) -> dict:
     now = dt.datetime.now(zone)
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + dt.timedelta(days=1)
-    colors, occ = local.both(lambda: _colors(local), lambda: _occurrences(local, start, end))
+    colors, occ = local.both(lambda: _about(local), lambda: _occurrences(local, start, end))
 
     def ends_after(o: dict) -> bool:
         if o.get("allDay"):
@@ -142,7 +168,7 @@ def week(local, tz: str, days: int = 7, n: int = 12) -> dict:
     zone = _zone(tz)
     start = (dt.datetime.now(zone) + dt.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + dt.timedelta(days=days)
-    colors, occ = local.both(lambda: _colors(local), lambda: _occurrences(local, start, end))
+    colors, occ = local.both(lambda: _about(local), lambda: _occurrences(local, start, end))
     by_day: dict[str, list] = {}
     total = 0
     first, last = start.date(), (end - dt.timedelta(days=1)).date()

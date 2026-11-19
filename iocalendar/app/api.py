@@ -308,17 +308,19 @@ async def import_calendar(cid: int, request: Request, replace: bool = True):
 # ------------------------------------------------------------------ occurrences, events
 
 @router.get("/api/occurrences", dependencies=[access.signed_in])
-def occurrences(request: Request, start: str, end: str, calendars: str | None = None, q: str = "", member: str | None = None):
+def occurrences(request: Request, start: str, end: str, calendars: str | None = None, q: str = "", member: str | None = None,
+                notes: int = 0):
     """Every occurrence between start and end (ISO dates or date-times; repeating events expanded, changed occurrences
     and left-out dates applied), from the calendars named (ids, comma-separated) or all you see. member: only those
-    tagged with these family members (ids or names, comma-separated). Each has `members`: the ids it is tagged with."""
+    tagged with these family members (ids or names, comma-separated). Each has `members`: the ids it is tagged with;
+    notes=1: its notes as well."""
     u = request.state.user
     s, e = _when(start, "start"), _when(end, "end")
     if e <= s:
         raise HTTPException(400, "end is before start")
     if e - s > dt.timedelta(days=800):
         raise HTTPException(400, "At most about two years at a time")
-    return {"items": model.occurrences(visible(u, calendars), s, e, q, member_filter(member))}
+    return {"items": model.occurrences(visible(u, calendars), s, e, q, member_filter(member), bool(notes))}
 
 
 @router.get("/api/events", dependencies=[access.signed_in])
