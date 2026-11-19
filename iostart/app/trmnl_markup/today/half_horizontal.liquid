@@ -1,24 +1,26 @@
-<div class="layout layout--row layout--top layout--stretch-x">
-  <div class="grid grid--cols-12 w--full">
-    <div class="col--span-3 flex flex--col flex--left gap--small lg:gap--base">
+<div class="layout layout--col layout--top layout--stretch-x gap--small lg:gap--base">
+  <div class="flex flex--row flex--between w--full">
+    <div class="flex flex--row flex--left gap lg:gap--large">
       <span class="value value--small lg:value--base">{{ weekday }}</span>
       <span class="label lg:label--large">{{ date }}</span>
-      {%- if weather %}<span class="value value--small lg:value--base">{{ weather.temp }}</span><span class="label label--small lg:label--base" data-clamp="1">{{ weather.text }}</span>{% endif %}
     </div>
-    <div class="col--span-5 flex flex--col flex--left gap--xsmall lg:gap--small">
-      <span class="label label--underline lg:label--large">Today</span>
-      {%- for e in events limit: 5 %}
-      <span class="label lg:label--large{% if forloop.index > 3 %} hidden lg:block{% endif %}" data-clamp="1">{{ e.time }} &middot; {{ e.title }}</span>
-      {%- if e.place != "" %}<span class="label label--small label--gray lg:label--base{% if forloop.index > 3 %} hidden lg:block{% endif %}" data-clamp="1">@ {{ e.place }}</span>{% endif %}
+    {%- if weather %}
+    <div class="flex flex--row flex--right gap lg:gap--large">
+      <span class="label label--small lg:label--base" data-clamp="1">{{ weather.text }}</span>
+      <span class="value value--small lg:value--base">{{ weather.temp }}</span>
+    </div>
+    {%- endif %}
+  </div>
+  <div class="columns gap--[8px]" data-overflow="true" data-overflow-max-cols="3" data-overflow-counter="true">
+    <div class="column">
+      {%- for g in list %}
+      <span class="label label--underline group-header" data-group-header="true">{{ g.label }}</span>
+      {%- for r in g.rows %}
+      <div class="item"><div class="content"><span class="title title--small lg:title--base" data-clamp="1">{{ r.when }} &middot; {{ r.title }}</span></div></div>
       {%- endfor %}
-      {%- if events.size == 0 %}<span class="label label--small lg:label--base" data-clamp="2">{% if next != "" %}{{ next }}{% else %}Nothing more today{% endif %}</span>{% endif %}
-    </div>
-    <div class="col--span-4 flex flex--col flex--left gap--xsmall lg:gap--small">
-      {%- if has_tasks %}
-      <span class="label label--underline lg:label--large">Tasks{% if overdue > 0 %} &middot; {{ overdue }} late{% endif %}</span>
-      {%- for t in tasks limit: 8 %}<span class="label lg:label--large{% if forloop.index > 4 %} hidden lg:block{% endif %}" data-clamp="1">{{ t.title }}</span>{% endfor %}
-      {%- if tasks.size == 0 %}<span class="label label--small lg:label--base">Nothing due</span>{% endif %}
-      {%- endif %}
+      {%- if g.rows.size == 0 %}<div class="item"><div class="content"><span class="title title--small lg:title--base">{{ none }}</span></div></div>{% endif %}
+      {%- if g.more > 0 %}<div class="item"><div class="content"><span class="label label--small label--gray lg:label--base">and {{ g.more }} more today</span></div></div>{% endif %}
+      {%- endfor %}
     </div>
   </div>
 </div>

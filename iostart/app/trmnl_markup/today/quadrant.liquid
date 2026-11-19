@@ -3,10 +3,17 @@
     <span class="title lg:title--large">{{ date_short }}</span>
     {%- if weather %}<span class="title lg:title--large">{{ weather.temp }}</span>{% endif %}
   </div>
-  {%- for e in events limit: 6 %}
-  <span class="label lg:label--large{% if forloop.index > 3 %} hidden lg:block{% endif %}" data-clamp="1">{{ e.time }} &middot; {{ e.title }}</span>
-  {%- endfor %}
-  {%- if events.size == 0 %}<span class="label label--small lg:label--base" data-clamp="2">{% if next != "" %}{{ next }}{% else %}Nothing more today{% endif %}</span>{% endif %}
+  <div class="columns" data-overflow="true" data-overflow-max-cols="1" data-overflow-counter="true">
+    <div class="column">
+      {%- for g in list %}
+      {%- unless forloop.first %}<span class="label label--underline group-header" data-group-header="true">{{ g.label }}</span>{% endunless %}
+      {%- for r in g.rows %}
+      <div class="item"><div class="content"><span class="title title--small lg:title--base" data-clamp="1">{{ r.when }} &middot; {{ r.title }}</span></div></div>
+      {%- endfor %}
+      {%- if g.rows.size == 0 %}<div class="item"><div class="content"><span class="title title--small lg:title--base">{{ none }}</span></div></div>{% endif %}
+      {%- endfor %}
+    </div>
+  </div>
 </div>
 <div class="title_bar">
   <img class="image" src="{{ iosuite_icon }}">

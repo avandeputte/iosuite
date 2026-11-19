@@ -42,8 +42,8 @@ what the app will show on the start page later (today's events, the newest photo
   the colours of the hour and the weather. Customize picks the background (photos, the sky or black), which photos
   (as the photo strip, Rediscover, On this day, your ioPix favorites or one ioPix album) and how often the photo changes; the picture button on the wall goes to the next background. It keeps the screen on where the
   browser allows it; Escape or the ✕ (shown on a touch) goes back.
-- **TRMNL e-ink screens** (Settings › TRMNL): Today (the date, the weather, what is left of today with each place,
-  tomorrow, today's tasks, birthdays), Calendar (seven days), Tasks, Documents to renew, Health, Money and Weather
+- **TRMNL e-ink screens** (Settings › TRMNL): Today (the date, the weather, and the list of the start page's Today card:
+  today's events, tasks and birthdays by the hour, then the coming six days, as many lines as the screen holds), Calendar (seven days), Tasks, Documents to renew, Health, Money and Weather
   (the start page's own, once Settings › Home page has it: now, the next eight hours, five days, with the start
   page's weather pictures), each a TRMNL private plugin in its four sizes (full, the two halves and the quadrant, for TRMNL's mashups), downloaded as the zip
   TRMNL's Import new takes. TRMNL reads `GET /api/trmnl/<screen>?tz=&clock=12|24` with an ioStart app password of
