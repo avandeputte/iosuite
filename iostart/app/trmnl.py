@@ -10,7 +10,8 @@ only lays it out:
 
 The screens (SCREENS): today (the date, the weather, what is left of today with each event's place, tomorrow, today's
 tasks, birthdays), calendar (the next seven days), tasks (due today and late), docs (ioDocs' to renew), health (steps,
-rings, last night's sleep, the week), money (ioMoney's bills of the week, accounts running low, links behind).
+rings, last night's sleep, the week), money (ioMoney's bills of the week, accounts running low, links behind),
+weather (the start page's own: now, the next hours, the coming days, with the start page's weather glyphs).
 
 Two ways for the data to reach TRMNL, as the person's TRMNL is set up:
 
@@ -35,7 +36,7 @@ import re
 import zipfile
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app import apps, wall, widgets
+from app import apps, wall, weather, widgets
 
 SCREENS = {
     "today": {"name": "Today", "apps": ["iocalendar", "iotask", "iocontact"], "every": 15,
@@ -45,7 +46,15 @@ SCREENS = {
     "docs": {"name": "Documents", "apps": ["iodocs"], "every": 240, "about": "ioDocs: the papers to renew"},
     "health": {"name": "Health", "apps": ["iohealth"], "every": 60, "about": "ioHealth: steps, rings, last night's sleep, the week"},
     "money": {"name": "Money", "apps": ["iomoney"], "every": 60, "about": "ioMoney: the bills of the week, accounts running low"},
+    "weather": {"name": "Weather", "apps": [], "every": 60, "about": "The weather now, the next hours and the coming days"},
 }
+# The weather's glyphs, in the order trmnl_markup/weather/shared.liquid has them (the data names one by its place in
+# this list): the start page's own (static/app.js: WX), by AccuWeather's icon number as there (WX_MAP).
+WX = ("sun", "moon", "cloud", "partly", "partlyNight", "rain", "storm", "snow", "fog", "wind", "hot")
+WX_MAP = {1: "sun", 2: "sun", 3: "partly", 4: "partly", 5: "partly", 6: "cloud", 7: "cloud", 8: "cloud", 11: "fog", 12: "rain", 13: "rain", 14: "partly",
+          15: "storm", 16: "storm", 17: "partly", 18: "rain", 19: "snow", 20: "snow", 21: "snow", 22: "snow", 23: "snow", 24: "snow", 25: "snow", 26: "rain",
+          29: "snow", 30: "hot", 31: "snow", 32: "wind", 33: "moon", 34: "moon", 35: "partlyNight", 36: "partlyNight", 37: "fog", 38: "cloud", 39: "rain",
+          40: "rain", 41: "storm", 42: "storm", 43: "snow", 44: "snow"}
 SIZES = ("full", "half_horizontal", "half_vertical", "quadrant")
 MARKUP_DIR = os.path.join(os.path.dirname(__file__), "trmnl_markup")
 LIMIT = 5000  # bytes: what TRMNL keeps of a webhook push (5 KB; 10 KB with TRMNL+); the polled data stays under it too
@@ -293,7 +302,54 @@ def _money(request, z, now, h24):
             "low": low[:3], "behind": [a.get("institution") or a.get("name") for a in m.get("behind") or []][:3]}
 
 
-BUILDERS = {"today": _today, "calendar": _calendar, "tasks": _task_screen, "docs": _docs, "health": _health, "money": _money}
+def _glyph(icon) -> int:
+    return WX.index(WX_MAP.get(icon, "cloud"))
+
+
+def _forecast(request, z, now, h24):
+    """The start page's weather (app/weather.py, as the wall display reads it: wall._weather): now, the next eight
+    hours, five days. Everyone signed in may see it, as on the start page."""
+    w = wall._weather(z)
+    if w is None:
+        on = weather.settings()["enabled"]
+        return {"hours": [], "days": [], "missing": "The weather does not answer right now" if on else "No weather yet: an admin sets it up on the start page, Settings › Weather"}
+    deg = (lambda v: "" if v is None else f"{v}°")
+    pct = (lambda v: f"{v}%" if v and v >= 20 else "")
+    today = now.date()
+    imperial = weather.settings()["units"] == "imperial"
+    try:
+        c = weather.current().get("current") or {}
+    except weather.WeatherError:
+        c = {}
+    u = "imperial" if imperial else "metric"
+    feels, wind = (c.get("feels") or {}).get(u), (c.get("wind") or {}).get(u)
+    days = []
+    for d in w.get("days") or []:
+        try:
+            day = dt.date.fromisoformat(str(d.get("date")))
+        except ValueError:
+            continue
+        if day < today:
+            continue
+        days.append({"day": "Today" if day == today else day.strftime("%a"), "icon": _glyph(d.get("icon")), "text": (d.get("text") or "")[:40],
+                     "hi": deg(d.get("max")), "lo": deg(d.get("min")), "rain": pct(d.get("rain"))})
+    first = next((d for d in w.get("days") or [] if d.get("date") == today.isoformat()), None) or {}
+    r = w.get("rain") or {}
+    note = ""
+    if r.get("from"):
+        note = f"{r.get('what') or 'Rain'} from {clock(dt.datetime.fromtimestamp(r['from'], z), h24)}"
+    elif r and "until" in r:
+        note = f"{r.get('what') or 'Rain'} until {clock(dt.datetime.fromtimestamp(r['until'], z), h24)}" if r.get("until") else f"{r.get('what') or 'Rain'} for the next hours"
+    return {"place": short_place(w.get("place")), "temp": deg(w.get("temp")), "text": w.get("text") or "", "icon": _glyph(w.get("icon")),
+            "feels": deg(round(feels)) if feels is not None else "", "hi": deg(first.get("max")), "lo": deg(first.get("min")), "rain": pct(first.get("rain")),
+            "note": note, "wind": f"{round(wind)} {'mph' if imperial else 'km/h'}" if wind is not None else "",
+            "humidity": f"{round(c['humidity'])}%" if c.get("humidity") is not None else "", "uv": str(round(c["uv"])) if c.get("uv") is not None else "",
+            "hours": [{"time": clock(dt.datetime.fromtimestamp(h["t"], z), h24), "icon": _glyph(h.get("icon")), "temp": deg(h.get("temp")), "rain": pct(h.get("rain"))}
+                      for h in (w.get("hours") or [])[:8]],
+            "days": days[:5]}
+
+
+BUILDERS = {"today": _today, "calendar": _calendar, "tasks": _task_screen, "docs": _docs, "health": _health, "money": _money, "weather": _forecast}
 
 
 def build(request, screen: str, tz: str = "", h24: bool = False, now: dt.datetime | None = None) -> dict:
@@ -314,7 +370,7 @@ def fit(d: dict) -> dict:
     lists = [k for k in ("events", "tomorrow", "tasks", "items", "bills", "days") if isinstance(d.get(k), list)]
     while len(json.dumps(d, ensure_ascii=False).encode()) > LIMIT:
         k = max(lists, key=lambda k: len(json.dumps(d[k])), default=None)
-        if k == "days":
+        if k == "days" and all("events" in x for x in d["days"]):
             longest = max(d["days"], key=lambda x: len(x["events"]), default=None)
             if not longest or not longest["events"]:
                 break
@@ -398,11 +454,12 @@ def plugin_zip(screen: str, mode: str, server: str) -> bytes:
 
 
 def screens(user) -> list:
-    """What Settings › TRMNL lists: every screen whose apps this person may see (Today needs one of its three)."""
+    """What Settings › TRMNL lists: every screen whose apps this person may see (Today needs one of its three), and
+    the weather once the start page has it (Settings › Weather)."""
     reg = apps.registered()
     out = []
     for k, s in SCREENS.items():
         have = [a for a in s["apps"] if a in reg and reg[a].get("url") and apps.may_see(user, reg[a])]
-        if have:
+        if have or (k == "weather" and weather.settings()["enabled"]):
             out.append({"key": k, "name": s["name"], "about": s["about"], "every": s["every"]})
     return out

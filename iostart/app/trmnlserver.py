@@ -10,6 +10,7 @@ sign-in, and the device has to reach the start page inside the network (its LAN 
     GET  /api/display    ID, Access-Token, battery...   -> {image_url, filename, refresh_rate, ...}: what to show next
     POST /api/log        ID, Access-Token               the device's own log lines, the last few kept
     GET  /api/trmnl/image/<key>.png                     the picture image_url names
+    GET  /api/current_screen  ID, Access-Token          what it shows now, without moving on (other TRMNL clients)
 
 Whose screens. A MAC address is no secret, so a device that turns up shows only a code, and belongs to nobody until a
 signed-in person types that code in Settings › TRMNL (claim). From then on it shows that person's screens, read as
@@ -21,7 +22,24 @@ open (ten minutes): otherwise anyone on the network who knows the MAC could read
 What it shows: the device's playlist, one entry after the other at each wake: a layout (full, or one of TRMNL's
 mashups) and the screen in each of its places. A picture that did not change keeps its filename, which is how the
 firmware knows to skip the download; it is drawn again after RESEND minutes anyway, so "updated" on it stays true.
+
+What else the firmware's protocol has, set per device in Settings › TRMNL:
+
+* quiet hours (TRMNL's "sleep mode"): between two times of the person's day the device is told to sleep until the
+  quiet ends, and keeps its last picture or shows a line saying so. A press of its button still shows the screen.
+* the button's function (a double press; the TRMNL X's menu picks one by name): the answer names the function the
+  device arms (special_function), and when it then asks with a special_function header, the answer carries the
+  `action` the firmware waits for: sleep, identify, restart_playlist, rewind, send_to_me (a notification that opens
+  the picture), guest_mode (here: hold the screen it shows, until pressed again) and add_wifi.
+* maximum_compatibility (a full, slower redraw every time), verbose_logging (the device's detailed log) and
+  reset_firmware (the device forgets its Wi-Fi and its key and starts its setup again), each as the firmware reads it.
+* what the device says with every look: battery, charging, signal, firmware, what woke it. A battery that runs low
+  is told to its owner once (push, kind "trmnl").
+
+Left out on purpose: firmware updates (update_firmware, firmware_url). The device keeps the firmware it has; telling
+it to flash one is not something to do untested.
 """
+import datetime as dt
 import functools
 import hashlib
 import hmac
@@ -32,7 +50,7 @@ import secrets
 import threading
 import time
 
-from iosuite_shared import credentials, suite
+from iosuite_shared import credentials, push, suite
 from iosuite_shared.errors import Invalid
 
 from app import config, db, trmnl, trmnldraw, trmnlpush
@@ -45,9 +63,18 @@ PENDING_MAX = 16        # devices nobody claimed yet (the endpoints are open to 
 PENDING_EVERY = 120     # seconds between a waiting device's looks
 PAIR_AGAIN = 10 * 60    # seconds "Pair again" stays open
 RESEND = 180            # minutes after which an unchanged picture is drawn again anyway
-REFRESH = (300, 600, 900, 1800, 3600, 7200, 14400)  # seconds a device may sleep between two looks
+REFRESH = (300, 600, 900, 1800, 3600, 7200, 14400, 21600, 43200, 86400)  # seconds a device may sleep between two looks
 LOG_KEEP = 20
-PATHS = ("/api/setup", "/api/display", "/api/log", "/api/trmnl/image/")  # what a device asks, without a sign-in (main.py)
+PATHS = ("/api/setup", "/api/display", "/api/log", "/api/current_screen", "/api/trmnl/image/")  # what a device asks, without a sign-in (main.py)
+# what a double press of the device's button does (the firmware's special functions, by the names it knows); "hold"
+# is its guest_mode: here, the screen it shows stays until the next double press
+BUTTON = {"sleep": "sleep", "identify": "identify", "restart": "restart_playlist", "back": "rewind", "hold": "guest_mode",
+          "send": "send_to_me", "wifi": "add_wifi", "none": "none"}
+FUNCTIONS = {v: k for k, v in BUTTON.items()} | {"toggle_hold": "hold"}
+QUIET_SHOW = ("last", "notice")  # while quiet: the last picture stays, or a line that says until when
+SLEEP_FOR = 8 * 3600             # the button's "sleep" without quiet hours
+LOW_BATTERY, BATTERY_OK = 15, 30  # percent: told once below the first, again only after it was above the second
+HHMM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 # what TRMNL's firmware calls itself (its Model header) -> (name, grays it can show, how many of its pixels one of the
 # framework's is). Anything else: its Width and Height headers, black and white.
 MODELS = {
@@ -169,6 +196,11 @@ def _note(d: dict, headers) -> None:
             st[name] = v
     if headers.get("fw-version"):
         st["firmware"] = str(headers.get("fw-version"))[:40]
+    if headers.get("battery-charging") in ("0", "1"):
+        st["charging"] = headers.get("battery-charging") == "1"
+    if headers.get("usb-connected") in ("true", "false"):
+        st["usb"] = headers.get("usb-connected") == "true"
+    st["wake"] = re.sub(r"[^a-z0-9_ ]", "", str(headers.get("update-source") or "").lower())[:20]  # timer, button, ...
     model, (w, h) = _model(headers), _dims(headers)
     if model and model != d["model"]:
         d["model"] = model
@@ -177,6 +209,28 @@ def _note(d: dict, headers) -> None:
         d["width"], d["height"] = w, h
         _save(d, "width", "height")
     db.ex("UPDATE prt_trmnl_devices SET seen_at = %s WHERE id = %s", (st["seen"], d["id"]))
+    _low_battery(d)
+
+
+def _low_battery(d: dict) -> None:
+    """Tells the owner once when the battery runs low (and again only after it was charged)."""
+    st, pct = d["state"], battery(d["state"])
+    if pct is None or d["owner"] is None:
+        return
+    if pct >= BATTERY_OK or st.get("charging"):
+        st.pop("low", None)
+    elif pct <= LOW_BATTERY and not st.get("low"):
+        st["low"] = True
+        try:
+            push.notify(d["owner"], "trmnl", f"{_name(d)}: battery at {pct}%", "The screen needs charging soon",
+                        url=push.link(APP, "#/settings/trmnl"), tag=f"trmnl-battery-{d['id']}")
+        except Exception as e:  # noqa: BLE001 - a notification that cannot be sent never keeps a device from its picture
+            log.info("TRMNL low battery: not told (%s)", e)
+
+
+def _name(d: dict) -> str:
+    known = MODELS.get(d["model"])
+    return d["name"] or (known[0] if known else "TRMNL")
 
 
 def battery(st: dict):
@@ -212,7 +266,7 @@ def setup(headers, base: str) -> dict:
     _note(d, headers)
     _save(d, "state")
     return {"status": 200, "api_key": credentials.get(APP, _cred(d["id"])), "friendly_id": d["code"],
-            "image_url": _picture(d, base, waiting=d["owner"] is None)["image_url"], "message": "Welcome to ioSuite"}
+            "image_url": _picture(d, base, waiting=d["owner"] is None, stay=True)["image_url"], "message": "Welcome to ioSuite"}
 
 
 def _device(headers) -> dict:
@@ -229,15 +283,109 @@ def _device(headers) -> dict:
     return d
 
 
+def _answer(d: dict, pic: dict, rate: int, **more) -> dict:
+    """An answer to /api/display in the fields TRMNL's firmware reads."""
+    conf = d["settings"]
+    reset = bool(d["state"].pop("reset", None)) and d["owner"] is not None
+    if reset:  # the device forgets its Wi-Fi and its key now: it may come back for a new key for an hour
+        d["state"]["pairUntil"] = time.time() + 3600
+    return {"status": 0, "image_url": pic["image_url"], "filename": pic["filename"], "refresh_rate": int(rate),
+            "reset_firmware": reset, "update_firmware": False, "firmware_url": None,
+            "special_function": BUTTON.get(conf.get("button"), "sleep"), "maximum_compatibility": bool(conf.get("clean")),
+            "verbose_logging": "debug" if conf.get("verbose") else "info", **more}
+
+
 def display(headers, base: str) -> dict:
-    """GET /api/display: what the device shows next and how long it sleeps after."""
+    """GET /api/display: what the device shows next and how long it sleeps after. With a special_function header
+    (its button was pressed twice, or a function picked in the TRMNL X's menu) the answer is that function's."""
     d = _device(headers)
     _note(d, headers)
-    pic = _picture(d, base, waiting=d["owner"] is None)
+    if d["owner"] is None:
+        out = _answer(d, _picture(d, base, waiting=True), PENDING_EVERY)
+    else:
+        asked = str(headers.get("special_function") or headers.get("special-function") or "").strip().lower()
+        fn = FUNCTIONS.get(BUTTON.get(d["settings"].get("button"), "sleep") if asked == "true" else asked) if asked else None
+        out = _function(d, fn, base) if fn and fn != "none" else _look(d, base)
     _save(d, "state")
-    return {"status": 0, "image_url": pic["image_url"], "filename": pic["filename"],
-            "refresh_rate": PENDING_EVERY if d["owner"] is None else refresh(d),
-            "reset_firmware": False, "update_firmware": False, "firmware_url": None, "special_function": "sleep"}
+    return out
+
+
+def _look(d: dict, base: str) -> dict:
+    """An ordinary look: the next entry of the playlist, or, in the quiet hours, sleep until they end."""
+    left = quiet_left(d)
+    pressed = d["state"].get("wake") not in (None, "", "timer")  # its button: show the screen, quiet or not
+    if left is None:
+        return _answer(d, _picture(d, base, stay=bool(d["state"].get("hold"))), refresh(d))
+    if pressed:
+        return _answer(d, _picture(d, base, stay=True), left)
+    if d["settings"]["quiet"].get("show") == "notice":
+        return _answer(d, _picture(d, base, quiet=True), left)
+    return _answer(d, _picture(d, base, stay=True, again=True), left)
+
+
+def _function(d: dict, fn: str, base: str) -> dict:
+    """What the firmware's special functions get: the `action` it checks for, and what goes with it."""
+    st, wire = d["state"], BUTTON[fn]
+    if fn == "sleep":
+        return _answer(d, _picture(d, base, stay=True, again=True), quiet_left(d, ahead=True) or SLEEP_FOR, action=wire)
+    if fn == "identify":
+        return _answer(d, _picture(d, base, identify=True), refresh(d), action=wire)
+    if fn == "restart":
+        st["at"] = -1
+        st.pop("hold", None)
+        return _answer(d, _picture(d, base), refresh(d), action=wire)
+    if fn == "back":  # the device shows the picture it had before, from its own memory: the playlist goes back with it
+        st["at"] = (st.get("at", 0) - 2) % len(playlist(d))
+        return _answer(d, _picture(d, base), refresh(d), action=wire)
+    if fn == "hold":
+        st["hold"] = not st.get("hold")
+        return _answer(d, _picture(d, base, stay=True), refresh(d), action=wire)
+    if fn == "send":
+        at = st.get("at", 0) % len(playlist(d))
+        names = ", ".join(trmnl.SCREENS[k]["name"] for k in playlist(d)[at]["screens"])
+        try:
+            push.notify(d["owner"], "trmnl", f"{_name(d)}: {names}", "Open to see what the screen shows",
+                        url=push.link(APP, f"api/trmnl/devices/{d['id']}/preview.png?at={at}"), tag=f"trmnl-send-{d['id']}")
+        except Exception as e:  # noqa: BLE001
+            log.info("TRMNL send to me: not sent (%s)", e)
+    return _answer(d, _picture(d, base, stay=True, again=True), refresh(d), action=wire)  # send, wifi: the device does the rest
+
+
+def current(headers, base: str) -> dict:
+    """GET /api/current_screen: what the device shows now, for a client that only looks (the playlist stays where
+    it is)."""
+    d = _device(headers)
+    pic = _picture(d, base, waiting=d["owner"] is None, stay=True, again=True)
+    _save(d, "state")
+    return {"status": 200, "image_url": pic["image_url"], "filename": pic["filename"],
+            "refresh_rate": PENDING_EVERY if d["owner"] is None else refresh(d), "reset_firmware": False, "update_firmware": False,
+            "firmware_url": None, "special_function": BUTTON.get(d["settings"].get("button"), "sleep")}
+
+
+def _zone(d: dict):
+    return trmnl.zone(trmnlpush.settings(d["owner"])["tz"] if d["owner"] is not None else "")
+
+
+def quiet_left(d: dict, now: dt.datetime = None, ahead: bool = False):
+    """Seconds until the device's quiet hours end, when it is in them (None otherwise). ahead: also before they
+    began (the button's sleep: until the next morning)."""
+    q = d["settings"].get("quiet")
+    if not isinstance(q, dict) or not (HHMM.fullmatch(str(q.get("from"))) and HHMM.fullmatch(str(q.get("to")))) or q["from"] == q["to"]:
+        return None
+    now = (now or dt.datetime.now(_zone(d))).astimezone(_zone(d))
+    at = lambda hhmm, day: now.replace(hour=int(hhmm[:2]), minute=int(hhmm[3:]), second=0, microsecond=0) + dt.timedelta(days=day)  # noqa: E731
+    for day in (-1, 0):  # the quiet that began yesterday evening, then today's
+        start = at(q["from"], day)
+        end = at(q["to"], day + (1 if q["to"] <= q["from"] else 0))
+        if start <= now < end:
+            return max(60, int((end - now).total_seconds()) + 30)
+    if ahead:
+        start = at(q["from"], 0)
+        end = at(q["to"], 1 if q["to"] <= q["from"] or start <= now else 0)
+        while end <= now:
+            end += dt.timedelta(days=1)
+        return int((end - now).total_seconds()) + 30
+    return None
 
 
 def add_log(headers, body) -> None:
@@ -256,7 +404,9 @@ def add_log(headers, body) -> None:
         else:
             text, at = str(x)[:300], None
         if text:
-            keep.append({"at": at if isinstance(at, (int, float)) else time.time(), "text": text})
+            level = str(x.get("level") or "") if isinstance(x, dict) else ""
+            keep.append({"at": at if isinstance(at, (int, float)) else time.time(), "text": text,
+                         **({"level": level[:8]} if level in ("warn", "error", "fatal") else {})})
     d["state"]["log"] = keep[-LOG_KEEP:]
     _save(d, "state")
 
@@ -274,7 +424,7 @@ def image(key: str) -> bytes:
     d = get(dev_id)
     if d is None or not hmac.compare_digest(str(d["state"].get("image") or ""), key):
         raise NotFound("No such picture")
-    return _draw(d, d["state"].get("at", 0), d["owner"] is None)[0]
+    return _draw(d, d["state"].get("at", 0), "waiting" if d["owner"] is None else d["state"].get("kind") or "playlist")[0]
 
 
 # ---- the picture ----------------------------------------------------------------------------------------------------
@@ -344,10 +494,27 @@ def _notice(d: dict, title: str, text: str, code: str = "") -> bytes:
     return trmnldraw.png(trmnldraw.Drawer(scale(d), bits).screen([view], "full", d["width"], d["height"]), bits)
 
 
-def _draw(d: dict, at: int, waiting: bool):
-    """(PNG, digest) of what the device shows at playlist position `at`."""
-    if waiting:
+def _facts(d: dict) -> str:
+    st = d["state"]
+    pct = battery(st)
+    bits = [d["mac"], MODELS.get(d["model"], (d["model"] or "TRMNL firmware",))[0], f"{d['width']} x {d['height']}",
+            f"battery {pct}%" if pct is not None else "", f"signal {st['rssi']:.0f} dBm" if st.get("rssi") is not None else "",
+            f"firmware {st['firmware']}" if st.get("firmware") else ""]
+    return " · ".join(x for x in bits if x)
+
+
+def _draw(d: dict, at: int, kind: str = "playlist"):
+    """(PNG, digest) of what the device shows: entry `at` of its playlist, or one of the screens of words (waiting
+    for someone to take it, quiet until a time, identify: which device this is)."""
+    if kind == "waiting":
         return _notice(d, "This screen is not yours yet", "Open the start page, Settings › TRMNL, and type this code under Add a screen", d["code"]), "waiting-" + d["code"]
+    if kind == "identify":
+        return _notice(d, _name(d), _facts(d)), "identify"
+    if kind == "quiet":
+        left = quiet_left(d)
+        conf = trmnlpush.settings(d["owner"])
+        until = trmnl.clock(dt.datetime.now(_zone(d)) + dt.timedelta(seconds=left or 0), conf["clock"] == 24)
+        return _notice(d, f"Quiet until {until}", "Press the button to see the screen now"), f"quiet-{d['settings'].get('quiet')}"
     bits, s = grays(d), scale(d)
     items = playlist(d)
     item = items[at % len(items)]
@@ -363,30 +530,42 @@ def _draw(d: dict, at: int, waiting: bool):
     return trmnldraw.png(render(datas, item["layout"], bits, s, d["width"], d["height"]), bits), digest
 
 
-def _picture(d: dict, base: str, waiting: bool) -> dict:
-    """Draws what comes next for the device, and names it: {image_url, filename}. The filename is what TRMNL's
-    firmware keeps a picture under (a kind, six characters for which screen, the time it was drawn): the same name
-    again means "you have it", so an unchanged picture keeps its name until RESEND minutes passed."""
+def _picture(d: dict, base: str, waiting: bool = False, stay: bool = False, again: bool = False, quiet: bool = False, identify: bool = False) -> dict:
+    """Draws what the device shows next, and names it: {image_url, filename}. The filename is what TRMNL's firmware
+    keeps a picture under (a kind, six characters for which screen, the time it was drawn): the same name again
+    means "you have it", so an unchanged picture keeps its name until RESEND minutes passed.
+
+    stay: the playlist does not move on (a held screen, a press in the quiet hours). again: the very picture of the
+    last answer, by its name, so the device leaves its screen as it is (quiet hours, the button's sleep). quiet,
+    identify, waiting: a screen of words instead of the playlist's."""
     st = d["state"]
     now = time.time()
-    if waiting:
-        at = 0
+    url = lambda key: f"{base.rstrip('/')}/api/trmnl/image/{key}.png"  # noqa: E731
+    kind = "waiting" if waiting else "quiet" if quiet else "identify" if identify else "playlist"
+    n = len(playlist(d))
+    if again and st.get("name") and st.get("image") and kind in ("playlist", "waiting") and st.get("kind", kind) == kind:
+        return {"image_url": url(st["image"]), "filename": st["name"]}
+    if kind != "playlist":
+        at = st.get("at", 0) if kind != "waiting" else 0
+    elif stay or again:
+        at = max(0, st.get("at", 0)) % n
     else:
-        at = (st.get("at", -1) + 1) % len(playlist(d))
-    body, digest = _draw(d, at, waiting)
+        at = (st.get("at", -1) + 1) % n
+    body, digest = _draw(d, at, kind)
+    slot = str(at) if kind in ("playlist", "waiting") else kind
     shown = st.setdefault("shown", {})
-    last = shown.get(str(at)) or {}
-    if last.get("digest") != digest or now - last.get("drawn", 0) >= RESEND * 60:
+    last = shown.get(slot) or {}
+    if last.get("digest") != digest or now - last.get("drawn", 0) >= RESEND * 60 or kind == "identify":
         last = {"digest": digest, "drawn": max(int(now), last.get("drawn", 0) + 1)}  # never the name it had: a name is a second
-        shown[str(at)] = last
-    for k in [k for k in shown if int(k) >= len(playlist(d))]:
+        shown[slot] = last
+    for k in [k for k in shown if k.isdigit() and int(k) >= n]:
         shown.pop(k)
     key = f"{d['id']}-{secrets.token_urlsafe(12)}"
-    st["at"], st["image"] = at, key
     _images[d["id"]] = (key, body)
-    kind = "screen-" if waiting else "plugin-" if playlist(d)[at]["layout"] == "full" else "mashup-"
-    which = hashlib.md5(f"{d['id']}:{'w' if waiting else at}".encode()).hexdigest()[:6]
-    return {"image_url": f"{base.rstrip('/')}/api/trmnl/image/{key}.png", "filename": f"{kind}{which}-{last['drawn']:010d}"}
+    prefix = "screen-" if kind != "playlist" else "plugin-" if playlist(d)[at]["layout"] == "full" else "mashup-"
+    which = hashlib.md5(f"{d['id']}:{'w' if waiting else at if kind == 'playlist' else kind}".encode()).hexdigest()[:6]
+    st["at"], st["image"], st["kind"], st["name"] = at, key, kind, f"{prefix}{which}-{last['drawn']:010d}"
+    return {"image_url": url(key), "filename": st["name"]}
 
 
 # ---- what a person does with their devices (Settings › TRMNL) ---------------------------------------------------------
@@ -397,13 +576,24 @@ def public(d: dict, user=None) -> dict:
     return {"id": d["id"], "name": d["name"] or (known[0] if known else "TRMNL"), "mac": d["mac"], "model": known[0] if known else (d["model"] or "TRMNL firmware"),
             "width": d["width"], "height": d["height"], "seen": st.get("seen"), "battery": battery(st), "rssi": st.get("rssi"),
             "firmware": st.get("firmware"), "refresh": refresh(d), "bits": grays(d), "canBits": list(MODELS.get(d["model"], ("", (1, 2), 1.0))[1]),
-            "playlist": playlist(d), "pairing": st.get("pairUntil", 0) >= time.time(), "log": (st.get("log") or [])[-LOG_KEEP:]}
+            "playlist": playlist(d), "pairing": st.get("pairUntil", 0) >= time.time(), "log": (st.get("log") or [])[-LOG_KEEP:],
+            "charging": bool(st.get("charging")), "quiet": quiet(d), "quietNow": quiet_left(d) is not None,
+            "button": d["settings"].get("button") if d["settings"].get("button") in BUTTON else "sleep", "hold": bool(st.get("hold")),
+            "clean": bool(d["settings"].get("clean")), "verbose": bool(d["settings"].get("verbose")), "resetting": bool(st.get("reset"))}
+
+
+def quiet(d: dict):
+    """{from, to, show} when the device has quiet hours, else None."""
+    q = d["settings"].get("quiet")
+    if not isinstance(q, dict) or not (HHMM.fullmatch(str(q.get("from"))) and HHMM.fullmatch(str(q.get("to")))):
+        return None
+    return {"from": q["from"], "to": q["to"], "show": q.get("show") if q.get("show") in QUIET_SHOW else "last"}
 
 
 def state(user) -> dict:
     """What Settings › TRMNL shows of this: the person's devices, the layouts and how many screens each takes."""
     return {"devices": [public(d) for d in devices_of(user["id"])],
-            "layouts": [{"key": k, "places": trmnldraw.sizes(k)} for k in trmnldraw.LAYOUTS], "refreshes": list(REFRESH),
+            "layouts": [{"key": k, "places": trmnldraw.sizes(k)} for k in trmnldraw.LAYOUTS], "refreshes": list(REFRESH), "buttons": list(BUTTON),
             "deviceServer": address(), "devicePaths": list(PATHS)}
 
 
@@ -417,7 +607,7 @@ def claim(user, code: str) -> dict:
     d = _row(r)
     have = [s["key"] for s in trmnl.screens(user)]
     d["settings"] = {"playlist": [{"layout": "full", "screens": [k]} for k in have] or [{"layout": "full", "screens": ["today"]}], "refresh": 900}
-    d["state"] = {k: v for k, v in d["state"].items() if k in ("seen", "volts", "percent", "rssi", "firmware")}
+    d["state"] = {k: v for k, v in d["state"].items() if k in ("seen", "volts", "percent", "rssi", "firmware", "charging", "usb")}
     db.ex("UPDATE prt_trmnl_devices SET owner = %s, settings = %s, state = %s WHERE id = %s AND owner IS NULL",
           (user["id"], json.dumps(d["settings"]), json.dumps(d["state"]), d["id"]))
     credentials.declare(APP, [{"name": _cred(d["id"]), "label": f"TRMNL screen {d['mac']} ({user.get('name')}): its key",
@@ -434,7 +624,10 @@ def _mine(user, dev_id: int) -> dict:
 
 def configure(user, dev_id: int, b: dict) -> dict:
     """Body: {name?, refresh? (seconds, one of REFRESH), bits? (1|2|4), playlist? [{layout, screens}], pair? (true:
-    open Pair again for ten minutes)}."""
+    open Pair again for ten minutes), quiet? ({from, to, show} as "HH:MM" of the person's day, or null: none),
+    button? (one of BUTTON: what a double press does), hold? (the screen it shows stays), clean? (a full redraw every
+    time), verbose? (the device's detailed log), reset? (true: at its next look the device forgets its Wi-Fi and its
+    key and starts its setup again)}."""
     d = _mine(user, dev_id)
     trmnlpush.ensure_password(user)  # revoked in Settings › Account since: saving the device makes it again
     if "name" in b:
@@ -442,7 +635,7 @@ def configure(user, dev_id: int, b: dict) -> dict:
         _save(d, "name")
     if "refresh" in b:
         if b["refresh"] not in REFRESH:
-            raise Invalid("A screen looks again every 5, 10, 15 or 30 minutes, or every 1, 2 or 4 hours")
+            raise Invalid("A screen looks again every 5, 10, 15 or 30 minutes, every 1, 2, 4, 6 or 12 hours, or once a day")
         d["settings"]["refresh"] = b["refresh"]
     if "bits" in b:
         if b["bits"] not in MODELS.get(d["model"], ("", (1, 2), 1.0))[1]:
@@ -465,6 +658,30 @@ def configure(user, dev_id: int, b: dict) -> dict:
         d["settings"]["playlist"] = out
         d["state"].pop("shown", None)
         d["state"]["at"] = -1
+    if "quiet" in b:
+        q = b["quiet"]
+        if not q:
+            d["settings"].pop("quiet", None)
+        else:
+            if not isinstance(q, dict) or not (HHMM.fullmatch(str(q.get("from"))) and HHMM.fullmatch(str(q.get("to")))) or q["from"] == q["to"]:
+                raise Invalid("Quiet hours go from one time of the day to another, as 22:00 and 07:00")
+            if q.get("show", "last") not in QUIET_SHOW:
+                raise Invalid("While quiet a screen keeps its last picture, or says until when it is quiet")
+            d["settings"]["quiet"] = {"from": q["from"], "to": q["to"], "show": q.get("show", "last")}
+        d["state"].get("shown", {}).pop("quiet", None)
+    if "button" in b:
+        if b["button"] not in BUTTON:
+            raise Invalid("No such function for the button")
+        d["settings"]["button"] = b["button"]
+    for k in ("clean", "verbose"):
+        if k in b:
+            d["settings"][k] = bool(b[k])
+    for k in ("hold", "reset"):
+        if k in b:
+            if b[k]:
+                d["state"][k] = True
+            else:
+                d["state"].pop(k, None)
     if "pair" in b:
         if b["pair"]:
             d["state"]["pairUntil"] = time.time() + PAIR_AGAIN
@@ -489,7 +706,7 @@ def preview(user, dev_id: int, at: int = 0, layout: str = "", screens: list = No
     playlist is being edited, any layout with any of the person's screens."""
     d = _mine(user, dev_id)
     if not layout:
-        return _draw(d, max(0, int(at)), False)[0]
+        return _draw(d, max(0, int(at)))[0]
     may = {s["key"] for s in trmnl.screens(user)}
     screens = screens or []
     if layout not in trmnldraw.LAYOUTS or len(screens) != len(trmnldraw.LAYOUTS[layout]) or any(k not in may for k in screens):

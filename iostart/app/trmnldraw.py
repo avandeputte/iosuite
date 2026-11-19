@@ -8,7 +8,9 @@ use, to the pixel where it could be measured against Chromium (tests/test_trmnl_
     view, layout (row/col, top, center, stretch-x), grid + col--span-N, flex (row/col, left/center/right/between),
     gap, w--full, item/meta/content, columns with data-overflow (columns filled in turn, a group's header repeated
     in gray where the group goes on, "and N more"), progress-bar, title_bar, value/title/label/description in the
-    sizes used, label--gray/--inverted/--outline/--underline, data-clamp, data-fit-value, and the mashup layouts.
+    sizes used, label--gray/--inverted/--outline/--underline, data-clamp, data-fit-value, the mashup layouts, and
+    an img sized with w--N h--N whose src is an SVG in a data: address, drawn by the small part of SVG the suite's
+    glyphs are written in (glyph: circle, path with M L H V A Z, g with fill and stroke).
 
 The fonts are the framework's own (app/trmnl_fonts: TRMNL12/16/21 and Inter, SIL Open Font License), the grays are
 its dither patterns for 1-bit and 2-bit screens and plain grays from 4 bits up. A denser screen (the TRMNL X: 1.8 of
@@ -16,10 +18,12 @@ its pixels to one of the framework's) is laid out at the framework's size and dr
 the framework does there. A class this does not know is laid out as a plain box, so markup using more of the
 framework needs it added here (the test compares every screen).
 """
+import base64
 import functools
 import html.parser
 import math
 import os
+import re
 import struct
 import zlib
 
@@ -105,7 +109,7 @@ def parse(markup: str) -> list:
     p = _Parser()
     p.feed(markup)
     for n in _walk(p.root):
-        n.text = " ".join(n.text.split())
+        n.text = " ".join(n.text.replace("\xa0", "\ue000").split()).replace("\ue000", "\xa0")  # a no-break space holds its line
     return p.root.kids
 
 
@@ -182,6 +186,10 @@ def _style(n: Node, s: float, bits: int = 1, dense: bool = False) -> Style:
     st = Style()
     c, p = n.cls, n.parent
     px = lambda v: v * s  # noqa: E731
+    if n.tag == "img" and not n.up("title_bar"):  # a picture of its own size (w--N h--N: N times 4 of the framework's pixels)
+        side = lambda axis: next((px(4 * float(x[3:])) for x in c if re.fullmatch(axis + r"--\d+(\.5)?", x)), None)  # noqa: E731
+        st.kind, st.w, st.h = "image", side("w") or side("h") or px(24), side("h") or side("w") or px(24)
+        return st
     if n.tag == "img":
         big = bits >= 2 and n.up("view--full") is not None  # where there are grays, the full view's bar has a larger mark
         st.kind, st.w, st.h, st.halo = "icon", px(28 if big else 24), px(28 if big else 24), bool(n.up("title_bar")) and (bits < 4 or dense)
@@ -215,6 +223,8 @@ def _style(n: Node, s: float, bits: int = 1, dense: bool = False) -> Style:
             st.color = "dim"
         if "label--inverted" in c:
             st.color, st.bg, st.radius, st.pl, st.pr = "white", "black", px(4), px(5), px(5)
+            if st.text == "label":  # the full-size label has a pixel of black above and below its line
+                st.pt, st.pb = px(1), px(1)
         if "label--outline" in c:
             st.border, st.radius, st.pl, st.pr, st.pt = 1, px(4), px(2), px(2), 0
         if "label--underline" in c:
@@ -393,7 +403,7 @@ class Drawer:
         inner = max(0.0, aw - st.pl - st.pr - 2 * b)
         if st.kind == "text":
             cw, ch = self._text(n, inner)
-        elif st.kind == "icon":
+        elif st.kind in ("icon", "image"):
             return st.w, st.h
         elif st.kind in ("track", "fill"):
             cw, ch = inner, 0
@@ -628,6 +638,11 @@ class Drawer:
         if st.kind == "icon":
             self._icon(img, X, Y, _r(w), st.halo)
             return
+        if st.kind == "image":
+            mask = glyph(n.attrs.get("src") or "", max(1, _r(w)), max(1, _r(h)))
+            if mask is not None:
+                img.paste(0, (X, Y), mask)
+            return
         if st.kind == "text":
             self._paint_text(img, n)
             return
@@ -758,6 +773,175 @@ class Drawer:
                 corner = edge_x <= r and edge_y <= r and (edge_x, edge_y) in ((4, 1), (1, 4))
                 if straight or corner:
                     img.putpixel((X + xx, Y + yy), 0)
+
+
+# ---- a glyph: the SVG of an img's data: address ------------------------------------------------------------------
+
+class _Svg(html.parser.HTMLParser):
+    """The shapes of a small SVG, in order: (kind, numbers, fill?, stroke width, round caps?)."""
+
+    def __init__(self):
+        super().__init__()
+        self.box, self.shapes, self.inherit = (0.0, 0.0, 24.0, 24.0), [], [{}]
+
+    def handle_starttag(self, tag, attrs):
+        a = {**self.inherit[-1], **{k: v for k, v in attrs if v is not None}}
+        if tag == "svg":
+            nums = [float(x) for x in re.findall(r"-?\d*\.?\d+", a.get("viewbox") or "")]
+            if len(nums) == 4 and nums[2] > 0 and nums[3] > 0:
+                self.box = tuple(nums)
+        if tag in ("svg", "g"):
+            self.inherit.append({k: v for k, v in a.items() if k in ("fill", "stroke", "stroke-width", "stroke-linecap")})
+            return
+        fill = a.get("fill", "#000") != "none"
+        width = float(a.get("stroke-width") or 1) if a.get("stroke", "none") != "none" else 0.0
+        caps = a.get("stroke-linecap") == "round"
+        if tag == "circle":
+            self.shapes.append(("circle", [float(a.get(k) or 0) for k in ("cx", "cy", "r")], fill, width, caps))
+        elif tag == "path":
+            for line, closed in _path(a.get("d") or ""):
+                self.shapes.append(("line", line, fill, width, caps or closed))
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag in ("svg", "g"):
+            self.inherit.pop()
+
+    def handle_endtag(self, tag):
+        if tag in ("svg", "g") and len(self.inherit) > 1:
+            self.inherit.pop()
+
+
+def _path(d: str) -> list:
+    """An SVG path as lines of points [(points, closed)]: M L H V A Z and their relative forms; an arc becomes the
+    points along it."""
+    tokens = re.findall(r"[MmLlHhVvAaZz]|-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?", d)
+    out, pts, x, y, i, cmd = [], [], 0.0, 0.0, 0, ""
+
+    def num():
+        nonlocal i
+        v = float(tokens[i])
+        i += 1
+        return v
+
+    def flag():  # an arc's flags may stand together with what follows ("0 1 0-2.5", "10")
+        t = tokens[i]
+        if len(t) > 1 and t[0] in "01" and not t.startswith(("0.", "1.")):
+            tokens[i] = t[1:]
+            return float(t[0])
+        return num()
+
+    try:
+        while i < len(tokens):
+            if tokens[i].isalpha():
+                cmd = tokens[i]
+                i += 1
+                if cmd in "Zz":
+                    if pts:
+                        out.append((pts + [pts[0]], True))
+                        x, y = pts[0]
+                        pts = [(x, y)]
+                    continue
+            rel = cmd.islower()
+            if cmd in "Mm":
+                if len(pts) > 1:
+                    out.append((pts, False))
+                x, y = (x + num(), y + num()) if rel else (num(), num())
+                pts = [(x, y)]
+                cmd = "l" if rel else "L"  # the pairs after a move are lines
+            elif cmd in "Ll":
+                x, y = (x + num(), y + num()) if rel else (num(), num())
+                pts.append((x, y))
+            elif cmd in "Hh":
+                x = x + num() if rel else num()
+                pts.append((x, y))
+            elif cmd in "Vv":
+                y = y + num() if rel else num()
+                pts.append((x, y))
+            elif cmd in "Aa":
+                rx, ry, turn, large, sweep = num(), num(), num(), flag(), flag()
+                ex, ey = (x + num(), y + num()) if rel else (num(), num())
+                pts.extend(_arc(x, y, rx, ry, turn, bool(large), bool(sweep), ex, ey))
+                x, y = ex, ey
+            else:
+                break
+    except (IndexError, ValueError):
+        pass
+    if len(pts) > 1:
+        out.append((pts, False))
+    return out
+
+
+def _arc(x1, y1, rx, ry, turn, large, sweep, x2, y2) -> list:
+    """The points along an SVG arc from (x1, y1) to (x2, y2), the end included (SVG 1.1, F.6.5)."""
+    if rx == 0 or ry == 0 or (x1, y1) == (x2, y2):
+        return [(x2, y2)]
+    phi = math.radians(turn)
+    c, s_ = math.cos(phi), math.sin(phi)
+    dx, dy = (x1 - x2) / 2, (y1 - y2) / 2
+    xp, yp = c * dx + s_ * dy, -s_ * dx + c * dy
+    rx, ry = abs(rx), abs(ry)
+    lam = xp * xp / (rx * rx) + yp * yp / (ry * ry)
+    if lam > 1:
+        rx, ry = rx * math.sqrt(lam), ry * math.sqrt(lam)
+    top = max(0.0, rx * rx * ry * ry - rx * rx * yp * yp - ry * ry * xp * xp)
+    k = (-1 if large == sweep else 1) * math.sqrt(top / (rx * rx * yp * yp + ry * ry * xp * xp))
+    cxp, cyp = k * rx * yp / ry, -k * ry * xp / rx
+    cx, cy = c * cxp - s_ * cyp + (x1 + x2) / 2, s_ * cxp + c * cyp + (y1 + y2) / 2
+    a1 = math.atan2((yp - cyp) / ry, (xp - cxp) / rx)
+    da = math.atan2((-yp - cyp) / ry, (-xp - cxp) / rx) - a1
+    if sweep and da < 0:
+        da += 2 * math.pi
+    elif not sweep and da > 0:
+        da -= 2 * math.pi
+    steps = max(4, int(abs(da) / (math.pi / 24)))
+    out = []
+    for j in range(1, steps + 1):
+        a = a1 + da * j / steps
+        ex, ey = rx * math.cos(a), ry * math.sin(a)
+        out.append((c * ex - s_ * ey + cx, s_ * ex + c * ey + cy))
+    out[-1] = (x2, y2)
+    return out
+
+
+@functools.lru_cache(maxsize=256)
+def glyph(src: str, w: int, h: int):
+    """The ink of an img whose src is an SVG in a data: address, as a mask w x h (None when it is not one): drawn
+    eight times as large and brought down, so its edges are as soft as a browser's."""
+    m = re.match(r"data:image/svg\+xml;base64,(.*)", src or "", re.S)
+    if not m:
+        return None
+    try:
+        text = base64.b64decode(m.group(1), validate=False).decode("utf-8", "replace")
+    except ValueError:
+        return None
+    p = _Svg()
+    p.feed(text)
+    k = 8
+    bx, by, bw, bh = p.box
+    f = min(w / bw, h / bh) * k  # the whole drawing, in the middle (preserveAspectRatio's default)
+    ox, oy = (w * k - bw * f) / 2 - bx * f, (h * k - bh * f) / 2 - by * f
+    big = Image.new("L", (w * k, h * k), 0)
+    d = ImageDraw.Draw(big)
+    at = lambda x, y: (x * f + ox, y * f + oy)  # noqa: E731
+    for kind, nums, fill, width, caps in p.shapes:
+        sw = width * f
+        if kind == "circle":
+            (cx, cy), r = at(nums[0], nums[1]), nums[2] * f
+            if fill:
+                d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=255)
+            if sw:
+                d.ellipse((cx - r - sw / 2, cy - r - sw / 2, cx + r + sw / 2, cy + r + sw / 2), outline=255, width=max(1, round(sw)))
+            continue
+        pts = [at(x, y) for x, y in nums]
+        if fill and len(set(pts)) > 2:
+            d.polygon(pts, fill=255)
+        if sw:
+            d.line(pts, fill=255, width=max(1, round(sw)), joint="curve")
+            if caps:
+                for x, y in (pts[0], pts[-1]):
+                    d.ellipse((x - sw / 2, y - sw / 2, x + sw / 2, y + sw / 2), fill=255)
+    return big.resize((w, h), Image.LANCZOS)
 
 
 def _r(v: float) -> int:

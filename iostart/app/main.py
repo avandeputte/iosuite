@@ -29,7 +29,7 @@ OPEN_PATHS = ("/", "/bookmarks", "/manifest.webmanifest", "/bookmarks.webmanifes
 # display asks for its pairing code before it has a sign-in (approving one takes a signed-in person: its route says so)
 OPEN_PREFIXES = ("/static/", "/mcp", "/dav/", "/api/wall/pair")
 # a TRMNL e-ink device set to this server (app/trmnlserver.py) has no account: it signs its requests with its own key
-TRMNL_DEVICE = {("GET", "/api/setup"), ("GET", "/api/display"), ("POST", "/api/log")}
+TRMNL_DEVICE = {("GET", "/api/setup"), ("GET", "/api/display"), ("GET", "/api/current_screen"), ("POST", "/api/log")}
 
 
 def _device_asks(request) -> bool:

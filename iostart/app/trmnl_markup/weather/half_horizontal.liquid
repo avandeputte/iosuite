@@ -1,0 +1,34 @@
+<div class="layout layout--row layout--top layout--stretch-x">
+  {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
+  {%- unless missing %}
+  <div class="grid grid--cols-12 w--full">
+    <div class="col--span-4 flex flex--col flex--left gap--small">
+      <div class="flex flex--row flex--left gap">
+        <img class="image w--12 h--12" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}">
+        <span class="value value--xlarge">{{ temp }}</span>
+      </div>
+      <span class="title title--small">{{ text }}</span>
+      <span class="label label--small">{% if hi != "" %}High {{ hi }} &middot; Low {{ lo }}{% endif %}</span>
+      {%- if note != "" %}<span class="label label--small label--inverted">{{ note }}</span>{% endif %}
+    </div>
+    <div class="col--span-8 flex flex--col flex--left gap--small">
+      <span class="label label--underline">The next hours</span>
+      <div class="flex flex--row flex--between w--full">
+        {%- for h in hours limit: 8 %}
+        <div class="flex flex--col flex--center gap--xsmall">
+          <span class="label label--small">{{ h.time }}</span>
+          <img class="image w--8 h--8" src="data:image/svg+xml;base64,{{ wx_open | append: wx[h.icon] | append: '</svg>' | base64_encode }}">
+          <span class="title title--small">{{ h.temp }}</span>
+          <span class="label label--small label--gray">{% if h.rain != "" %}{{ h.rain }}{% else %}&nbsp;{% endif %}</span>
+        </div>
+        {%- endfor %}
+      </div>
+    </div>
+  </div>
+  {%- endunless %}
+</div>
+<div class="title_bar">
+  <img class="image" src="{{ iosuite_icon }}">
+  <span class="title">Weather</span>
+  <span class="instance">{% if place != "" %}{{ place }} &middot; {% endif %}updated {{ updated }}</span>
+</div>

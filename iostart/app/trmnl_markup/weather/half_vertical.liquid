@@ -1,0 +1,41 @@
+<div class="layout layout--col layout--top layout--stretch-x gap">
+  {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
+  {%- unless missing %}
+  <div class="flex flex--col flex--left gap--small w--full">
+    <div class="flex flex--row flex--left gap">
+      <img class="image w--12 h--12" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}">
+      <span class="value value--xlarge">{{ temp }}</span>
+    </div>
+    <span class="title title--small">{{ text }}</span>
+    {%- if hi != "" %}<span class="label label--small">High {{ hi }} &middot; Low {{ lo }}{% if feels != "" %} &middot; feels like {{ feels }}{% endif %}</span>{% endif %}
+    {%- if note != "" %}<span class="label label--small label--inverted">{{ note }}</span>{% endif %}
+  </div>
+  {%- if hours.size > 0 %}
+  <div class="flex flex--row flex--between w--full">
+    {%- for h in hours limit: 5 %}
+    <div class="flex flex--col flex--center gap--xsmall">
+      <span class="label label--small">{{ h.time }}</span>
+      <img class="image w--7 h--7" src="data:image/svg+xml;base64,{{ wx_open | append: wx[h.icon] | append: '</svg>' | base64_encode }}">
+      <span class="title title--small">{{ h.temp }}</span>
+    </div>
+    {%- endfor %}
+  </div>
+  {%- endif %}
+  <div class="flex flex--col flex--left gap--small w--full">
+    <span class="label label--underline">The coming days</span>
+    {%- for d in days limit: 4 %}
+    <div class="grid grid--cols-12 w--full">
+      <div class="col--span-3 flex flex--row flex--left"><span class="title title--small">{{ d.day }}</span></div>
+      <div class="col--span-2 flex flex--row flex--left"><img class="image w--6 h--6" src="data:image/svg+xml;base64,{{ wx_open | append: wx[d.icon] | append: '</svg>' | base64_encode }}"></div>
+      <div class="col--span-3 flex flex--row flex--left"><span class="label label--gray">{{ d.rain }}</span></div>
+      <div class="col--span-4 flex flex--row flex--right"><span class="label">{{ d.hi }} / {{ d.lo }}</span></div>
+    </div>
+    {%- endfor %}
+  </div>
+  {%- endunless %}
+</div>
+<div class="title_bar">
+  <img class="image" src="{{ iosuite_icon }}">
+  <span class="title">Weather</span>
+  <span class="instance">{{ place }}</span>
+</div>

@@ -637,6 +637,13 @@ def trmnl_device_display(request: Request):
     return _device(trmnlserver.display, request.headers, prefix.base_url(request))
 
 
+@router.get("/api/current_screen", dependencies=[access.public])
+def trmnl_device_current(request: Request):
+    """What a TRMNL device shows now, without moving its playlist on (headers ID and Access-Token): for a client that
+    only looks, as TRMNL's own apps do. {status: 200, image_url, filename, refresh_rate, ...}."""
+    return _device(trmnlserver.current, request.headers, prefix.base_url(request))
+
+
 @router.post("/api/log", dependencies=[access.public])
 async def trmnl_device_log(request: Request):
     """A TRMNL device's own log lines (headers ID and Access-Token): the last few are kept with the device."""

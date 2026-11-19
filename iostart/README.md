@@ -43,8 +43,9 @@ what the app will show on the start page later (today's events, the newest photo
   (as the photo strip, Rediscover, On this day, your ioPix favorites or one ioPix album) and how often the photo changes; the picture button on the wall goes to the next background. It keeps the screen on where the
   browser allows it; Escape or the ✕ (shown on a touch) goes back.
 - **TRMNL e-ink screens** (Settings › TRMNL): Today (the date, the weather, what is left of today with each place,
-  tomorrow, today's tasks, birthdays), Calendar (seven days), Tasks, Documents to renew, Health and Money, each a TRMNL
-  private plugin in its four sizes (full, the two halves and the quadrant, for TRMNL's mashups), downloaded as the zip
+  tomorrow, today's tasks, birthdays), Calendar (seven days), Tasks, Documents to renew, Health, Money and Weather
+  (the start page's own, once Settings › Home page has it: now, the next eight hours, five days, with the start
+  page's weather pictures), each a TRMNL private plugin in its four sizes (full, the two halves and the quadrant, for TRMNL's mashups), downloaded as the zip
   TRMNL's Import new takes. TRMNL reads `GET /api/trmnl/<screen>?tz=&clock=12|24` with an ioStart app password of
   yours (a TRMNL server of your own inside the network, or TRMNL's cloud through Cloudflare Access with a service
   token); or, when TRMNL's cloud cannot reach the start page, the start page sends each screen to the plugin's webhook
@@ -56,11 +57,18 @@ what the app will show on the start page later (today's events, the newest photo
   a signed-in person types in Settings › TRMNL to make it theirs. From then on it shows that person's screens, read as
   them with their "TRMNL" app password, one playlist entry at each wake: a screen filling the display, or one of
   TRMNL's mashup layouts (two, three or four screens sharing it). Per device: its name, how often it looks (5 minutes
-  to 4 hours), its shades (black and white or 4 grays on a TRMNL, up to 16 grays on a TRMNL X), a picture of each
-  entry as it is now, its battery, signal, firmware and last log lines. The pictures are drawn in Python
+  to once a day), its shades (black and white or 4 grays on a TRMNL, up to 16 grays on a TRMNL X), a picture of each
+  entry as it is now, its battery, signal, firmware and last log lines; quiet hours (it sleeps from one time of the
+  day to another, keeping its last picture or saying until when; a press of its button still wakes it); what two
+  presses of its button do (sleep until the morning, show which screen it is, start over, go back one, stay on what
+  it shows, send what it shows to your phone as a notification, open its Wi-Fi setup); stay on one entry; a full
+  redraw every time; the device's detailed log; a reset (it forgets its Wi-Fi and key and sets up again). A battery
+  at 15% tells its owner once (Account › Notifications › TRMNL screens). Firmware updates are not offered from here.
+  The pictures are drawn in Python
   (app/trmnldraw.py, no browser), from the same markup, laid out as TRMNL's framework does and held against its own
   renders in the tests (tests/trmnl_ref); an unchanged picture keeps its name, so the device does not fetch it again.
-  The device signs its requests (`/api/setup`, `/api/display`, `/api/log`, `/api/trmnl/image/…`, open without a
+  The device signs its requests (`/api/setup`, `/api/display`, `/api/current_screen`, `/api/log`,
+  `/api/trmnl/image/…`, open without a
   sign-in) with a key of its own, kept with the suite's keys and tokens; a reset device gets a new key only while its
   owner has Pair again open. Fonts: TRMNL's own and Inter (app/trmnl_fonts, SIL Open Font License).
 - **A dot by each app's name**: green when the app answers its `/api/status`, red when it does not. Bookmarks the

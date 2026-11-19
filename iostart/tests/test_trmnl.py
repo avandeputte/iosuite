@@ -1,15 +1,17 @@
 """TRMNL screens (app/trmnl.py) and the start page's pushes to TRMNL's cloud (app/trmnlpush.py). The apps are stood in
 for by their own providers over a table (conftest.apps_answer); TRMNL is never called."""
+import base64
 import datetime as dt
 import io
 import json
+import re
 import zipfile
 
 import pytest
 
 from iosuite_shared import apppasswords, credentials, outbound, users
 
-from app import trmnl, trmnlpush
+from app import trmnl, trmnlpush, weather
 
 TZ = "America/New_York"
 
@@ -65,6 +67,38 @@ def test_trmnl_signs_in_with_an_app_password(client, apps_answer):
     assert r.status_code == 200 and r.json()["tasks"][0]["title"] == "Take out the bins"
 
 
+def test_weather_screen(client, apps_answer, monkeypatch):
+    """The start page's own weather as a screen: listed once the weather is set up, and until then it says where to."""
+    from tests.test_widgets import _fake_accuweather
+    off = client.get(f"/api/trmnl/weather?tz={TZ}").json()
+    assert off["screen"] == "weather" and "Settings › Weather" in off["missing"] and off["hours"] == [] and off["days"] == []
+    assert "weather" not in {x["key"] for x in client.get("/api/trmnl").json()["screens"]}
+    fake = _fake_accuweather([])
+    today = dt.datetime.now(dt.timezone.utc).astimezone(__import__("zoneinfo").ZoneInfo(TZ)).replace(minute=0, second=0, microsecond=0)
+
+    def get(path, **params):  # the same answers, dated today so that they are still ahead
+        a = fake(path, **params)
+        if "daily" in path:
+            a["DailyForecasts"] = [{**a["DailyForecasts"][0], "Date": (today + dt.timedelta(days=i)).isoformat(),
+                                    "Day": {"Icon": 12 if i else 2, "IconPhrase": "Showers" if i else "Mostly sunny", "PrecipitationProbability": 60 if i else 5}} for i in range(5)]
+        if "hourly" in path:
+            a = [{**a[0], "DateTime": (today + dt.timedelta(hours=i + 1)).isoformat()} for i in range(12)]
+        return a
+    monkeypatch.setattr(weather, "_get", get)
+    client.post("/api/weather/settings", json={"key": "abc", "units": "imperial", "locationKey": "349727", "locationName": "New York, United States"})
+    assert "weather" in {x["key"] for x in client.get("/api/trmnl").json()["screens"]}
+    w = client.get(f"/api/trmnl/weather?tz={TZ}").json()
+    assert "missing" not in w and w["place"] == "New York" and w["temp"] == "68°" and w["text"] == "Sunny" and w["feels"] == "70°"
+    assert w["icon"] == trmnl.WX.index("sun") and w["wind"] == "6 mph" and w["humidity"] == "40%" and w["uv"] == "3"
+    assert w["hi"] == "64°" and w["lo"] == "50°" and w["rain"] == "" and w["note"].startswith("Rain ")
+    assert len(w["hours"]) == 8 and w["hours"][0]["icon"] == trmnl.WX.index("rain") and w["hours"][0]["rain"] == "70%" and w["hours"][0]["time"].endswith(("AM", "PM"))
+    assert [d["day"] for d in w["days"]][0] == "Today" and len(w["days"]) == 5 and w["days"][0]["rain"] == "" and w["days"][1] | {"day": ""} == {
+        "day": "", "icon": trmnl.WX.index("rain"), "text": "Showers", "hi": "64°", "lo": "50°", "rain": "60%"}
+    assert len(json.dumps(trmnl.fit(w)).encode()) <= trmnl.LIMIT
+    z = zipfile.ZipFile(io.BytesIO(client.get("/api/trmnl/weather/plugin.zip").content))
+    assert "base64_encode" in z.read("full.liquid").decode() and "capture wx_all" in z.read("shared.liquid").decode()
+
+
 def test_fit_under_the_limit():
     d = {"screen": "tasks", "tasks": [{"title": "x" * 70, "when": ""} for _ in range(200)], "more": 0}
     out = trmnl.fit(d)
@@ -78,7 +112,7 @@ def test_plugin_zip(client):
     assert sorted(z.namelist()) == ["full.liquid", "half_horizontal.liquid", "half_vertical.liquid", "quadrant.liquid", "settings.yml", "shared.liquid"]
     s = z.read("settings.yml").decode()
     assert "strategy: polling" in s and "/api/trmnl/today?tz={{ trmnl.user.time_zone_iana }}" in s and "Bearer {{ app_password }}" in s
-    assert not __import__("re").search(r"iostart-[0-9a-f]{8}-", s)  # no password in the file
+    assert not re.search(r"iostart-[0-9a-f]{8}-", s)  # no password in the file
     for size in trmnl.SIZES:
         m = z.read(f"{size}.liquid").decode()
         assert 'class="layout' in m and 'class="title_bar"' in m and "view--" not in m
@@ -96,11 +130,17 @@ def test_markup_renders():
               "tasks": [{"title": "Bins", "when": "Late", "late": True}], "tasks_more": 0, "overdue": 1, "birthdays": [], "days": [], "more": 0,
               "items": [], "expired": 0, "steps": "1,000", "rings": [], "sleep": "", "in_bed": "", "week": [], "average": "", "bills": [],
               "total": "", "low": [], "behind": []}
+    forecast = {"place": "New York", "temp": "68°", "text": "Sunny", "icon": 0, "feels": "70°", "hi": "72°", "lo": "55°", "rain": "", "note": "Rain from 3 PM",
+                "wind": "6 mph", "humidity": "40%", "uv": "3", "hours": [{"time": "3 PM", "icon": 5, "temp": "66°", "rain": "70%"}],
+                "days": [{"day": "Today", "icon": 3, "text": "Mostly sunny", "hi": "72°", "lo": "55°", "rain": ""}]}
     for screen in trmnl.SCREENS:
         m = trmnl.markup(screen)
         for size in trmnl.SIZES:
-            html = env.parse(m["shared"] + m[size]).render(sample)
+            html = env.parse(m["shared"] + m[size]).render(sample | forecast if screen == "weather" else sample)
             assert 'class="title_bar"' in html and "{{" not in html and "{%" not in html, (screen, size)
+            if screen == "weather":  # each glyph is a whole picture of its own, written out by Liquid
+                pics = re.findall(r'src="data:image/svg\+xml;base64,([^"]+)"', html)
+                assert pics and all(base64.b64decode(x).startswith(b"<svg ") and base64.b64decode(x).endswith(b"</svg>") for x in pics), size
 
 
 @pytest.fixture()
@@ -118,7 +158,7 @@ def test_push(client, apps_answer, trmnl_cloud):
     posted = trmnl_cloud
     alex = users.find("alex")
     s = client.get("/api/trmnl").json()
-    assert {x["key"] for x in s["screens"]} == set(trmnl.SCREENS) and not any(x["push"] for x in s["screens"]) and not s["passwordSet"]
+    assert {x["key"] for x in s["screens"]} == set(trmnl.SCREENS) - {"weather"} and not any(x["push"] for x in s["screens"]) and not s["passwordSet"]
     s = client.put("/api/trmnl", json={"tz": TZ, "clock": 24, "hooks": {"tasks": HOOK}}).json()
     assert s["passwordSet"] and s["clock"] == 24 and [x["key"] for x in s["screens"] if x["push"]] == ["tasks"]
     assert HOOK not in json.dumps(s)  # the address is not handed back

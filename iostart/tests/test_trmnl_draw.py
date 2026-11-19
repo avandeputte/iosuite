@@ -9,6 +9,7 @@ never where things are. No database is needed."""
 import io
 import json
 import os
+import re
 
 import pytest
 from PIL import Image, ImageChops, ImageFilter
@@ -65,7 +66,7 @@ def test_as_trmnl_draws_it(screen, size, bits, most, elsewhere):
 
 
 @pytest.mark.parametrize("screen,size,bits,most", [("today", "full", 4, 0.02), ("health", "full", 4, 0.02), ("calendar", "quadrant", 4, 0.02),
-                                                   ("money", "half_vertical", 4, 0.02), ("tasks", "full", 1, 0.03)])
+                                                   ("money", "half_vertical", 4, 0.02), ("tasks", "full", 1, 0.03), ("weather", "full", 4, 0.02)])
 def test_the_larger_trmnl(screen, size, bits, most):
     img, ref = drawn(screen, size, bits, 1.8, (1872, 1404)), reference(f"{screen}-{size}-x{bits}")
     assert img.size == (1872, 1404)
@@ -111,10 +112,41 @@ def test_text_that_does_not_fit():
     assert one[0].kids[0].text == long  # the markup is read as written; what is cut is cut when drawn
 
 
+def test_glyphs():
+    """An img whose src is an SVG in a data: address (the weather's glyphs) is drawn from the SVG itself: the part of
+    SVG they are written in, and nothing when it is something else."""
+    import base64
+    svg = lambda body: "data:image/svg+xml;base64," + base64.b64encode(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">{body}</svg>'.encode()).decode()  # noqa: E731
+    ink = lambda m: sum(m.point(lambda v: 255 if v >= 128 else 0).histogram()[255:])  # noqa: E731
+    disc = trmnldraw.glyph(svg('<circle cx="12" cy="12" r="6"/>'), 48, 48)
+    assert disc.size == (48, 48) and abs(ink(disc) - 3.14159 * 12 * 12) < 12 and disc.getpixel((24, 24)) == 255 and disc.getpixel((2, 2)) < 10
+    # an arc drawn as a path covers what the circle covers; relative and absolute commands meet
+    arcs = trmnldraw.glyph(svg('<path d="M6 12a6 6 0 1 0 12 0A6 6 0 1 0 6 12z"/>'), 48, 48)
+    assert trmnldraw.same(arcs, disc) < 0.01
+    square = trmnldraw.glyph(svg('<path d="M4 4h16v16H4z"/>'), 24, 24)
+    assert abs(ink(square) - 256) <= 2
+    # a stroke has its width and round ends; fill="none" leaves the inside open
+    line = trmnldraw.glyph(svg('<g fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"><path d="M4 12h16"/></g>'), 24, 24)
+    assert line.getpixel((12, 12)) == 255 and line.getpixel((12, 8)) < 10 and line.getpixel((3, 12)) > 100 and abs(ink(line) - (32 + 3.14159)) < 6
+    ring = trmnldraw.glyph(svg('<g fill="none" stroke="#000" stroke-width="2"><path d="M4 4h16v16H4z"/></g>'), 24, 24)
+    assert ring.getpixel((12, 12)) < 10 and ring.getpixel((12, 4)) == 255
+    assert trmnldraw.glyph("https://example.com/x.png", 24, 24) is None and trmnldraw.glyph("", 24, 24) is None
+    # every glyph of the weather is drawn, each its own, and they are the start page's (static/app.js)
+    m = trmnl.markup("weather")["shared"]
+    parts = re.search(r"\{%- capture wx_all -%\}(.*?)\{%- endcapture -%\}", m, re.S).group(1).split("|")
+    assert len(parts) == len(trmnl.WX)
+    js = open(os.path.join(os.path.dirname(__file__), "..", "static", "app.js"), encoding="utf-8").read()
+    for name, body in zip(trmnl.WX, parts):
+        assert f"  {name}: '{body.replace('#000', 'currentColor')}'," in js, name
+    drawn = [trmnldraw.glyph(svg(b), 64, 64) for b in parts]
+    assert all(ink(g) > 300 for g in drawn)
+    assert all(trmnldraw.same(a, b) > 0.02 for i, a in enumerate(drawn) for b in drawn[i + 1:])
+    assert {int(k) for k in re.findall(r"(\d+): '\w+'", js[js.index("const WX_MAP"):js.index("const wxIcon")])} == set(trmnl.WX_MAP)
+
+
 def test_what_the_markup_uses_is_known():
     """Every class in the suite's markup is one the drawing knows (and was held against TRMNL's framework above): a
     new one has to be added to app/trmnldraw.py and to the references, or it is drawn as a plain box."""
-    import re
     known = {"column", "columns", "content", "description", "fill", "flex", "flex--between", "flex--center", "flex--col", "flex--left", "flex--right", "flex--row",
              "gap", "gap--small", "gap--xsmall", "grid", "grid--cols-12", "group-header", "image", "instance", "item", "label", "label--gray", "label--inverted",
              "label--outline", "label--small", "label--underline", "layout", "layout--center", "layout--col", "layout--row", "layout--stretch-x", "layout--top",
@@ -125,5 +157,5 @@ def test_what_the_markup_uses_is_known():
         m = trmnl.markup(screen)
         for part in m.values():
             for cls in re.findall(r'class="([^"]*)"', part):
-                used |= {c for c in re.sub(r"\{[%{].*?[%}]\}", " ", cls).split() if not c.startswith("col--span-")}
+                used |= {c for c in re.sub(r"\{[%{].*?[%}]\}", " ", cls).split() if not c.startswith("col--span-") and not re.fullmatch(r"[wh]--\d+", c)}
     assert used <= known, sorted(used - known)
