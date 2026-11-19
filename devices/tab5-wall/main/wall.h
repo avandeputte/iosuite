@@ -328,6 +328,10 @@ void power_tick(void);           /* every ten seconds */
 /** True when the board runs on its battery; pct: how full it is. False on USB power, with no battery, or on a board
  *  that cannot tell. */
 bool power_on_battery(int *pct);
+/** USB power is filling the battery (the level then shows with a charge mark). */
+bool power_charging(void);
+/** The readings as they are, for Settings: "7.62 V, -410 mA (out of the battery)". */
+void power_text(char *out, size_t n);
 
 /* ------------------------------------------------------------------ ota.c */
 

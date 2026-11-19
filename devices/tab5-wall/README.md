@@ -17,13 +17,14 @@ Firmware that puts the start page's wall (`#/wall`) on its own screen, on USB po
   the person signed in may see its app. Settings on the device chooses which are swiped to; a view left alone for
   three minutes goes back to the wall.
 - **Touch:** tap an event for its details, tick a task done, tap a Home Assistant tile to switch it, tap the
-  background for the next photo, hold it to make the photo a favorite in ioPix. Add a task or an event with the
+  background for the next photo and the bar, whose Favorite makes the photo a favorite in ioPix. Add a task or an event with the
   on-screen keyboard.
 - **Timers and an alarm clock** on the board's speaker (four of each; alarms by weekday or once, snooze).
 - **Night:** dims from 22:00 to 06:00 by default (or turns the screen off); a touch lights it for 30 seconds.
   Hours and brightness are in Settings on the device.
-- **On its battery** (Tab5): how full it is, beside the date, while it is not on USB power. The Waveshare board has
-  nothing that measures its battery.
+- **On its battery** (Tab5): how full it is, beside the date, while the battery is in use (with a charge mark
+  while USB power fills it). Settings › Power shows the readings as they are. The Waveshare board has nothing that
+  measures its battery.
 - **Updates itself** at 3 AM from the release `wall-latest` (Settings turns that off). A firmware that does not
   run for a minute is rolled back.
 
