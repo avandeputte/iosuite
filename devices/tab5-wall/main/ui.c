@@ -45,7 +45,7 @@ static const lv_font_t *font_of(int kind, int px)
     const uint8_t *a = kind == 0 ? inter_regular_start : kind == 1 ? inter_bold_start : inter_light_start;
     const uint8_t *b = kind == 0 ? inter_regular_end : kind == 1 ? inter_bold_end : inter_light_end;
     /* the clock's digits are few and large: a small glyph cache does; text gets more */
-    lv_font_t *f = lv_tiny_ttf_create_data_ex(a, b - a, px, LV_FONT_KERNING_NORMAL, px > 100 ? 24 : 160);
+    lv_font_t *f = lv_tiny_ttf_create_data_ex(a, b - a, px, LV_FONT_KERNING_NONE, px > 100 ? 24 : 256);
     if (!f) {
         ESP_LOGE(TAG_WALL, "font %d at %d px could not be made", kind, px);
         return symbols_for(px);
@@ -297,8 +297,9 @@ lv_obj_t *kit_keyboard(lv_obj_t *p, lv_obj_t *ta, lv_event_cb_t on_ready, void *
     lv_obj_t *kb = lv_keyboard_create(p);
     lv_obj_set_size(kb, WALL_W, 330);
     lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_text_font(kb, font_text(30), 0);
-    lv_obj_set_style_text_font(kb, font_text(30), LV_PART_ITEMS);
+    /* the built-in font: every key is drawn again at each press, and this one needs no rasterizing */
+    lv_obj_set_style_text_font(kb, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(kb, &lv_font_montserrat_28, LV_PART_ITEMS);
     lv_obj_set_style_bg_color(kb, lv_color_hex(0x111215), 0);
     lv_obj_set_style_bg_color(kb, lv_color_hex(0x2a2c31), LV_PART_ITEMS);
     lv_obj_set_style_text_color(kb, lv_color_white(), LV_PART_ITEMS);

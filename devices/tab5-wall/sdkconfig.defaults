@@ -10,6 +10,8 @@ CONFIG_IDF_EXPERIMENTAL_FEATURES=y
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_SPEED_200M=y
 CONFIG_SPIRAM_USE_MALLOC=y
+# the program runs from the PSRAM, not from the slower flash (as M5Stack's own firmware does)
+CONFIG_SPIRAM_XIP_FROM_PSRAM=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=2048
 CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
 CONFIG_CACHE_L2_CACHE_256KB=y
@@ -74,12 +76,8 @@ CONFIG_LV_CACHE_DEF_SIZE=4194304
 CONFIG_LV_IMAGE_HEADER_CACHE_DEF_CNT=16
 
 # the board package: rotation by the P4's pixel processor, buffers for a 720 x 1280 panel turned on its side.
-# The two draw buffers and the rotation's own buffer are each 720 x height pixels of internal DMA memory, of which
-# about 330 KB is left once the firmware is loaded. At 80 rows they asked for 346 KB: the third could not be had and
-# the board package's assert restarted the device over and over (a black screen). 30 rows: 3 x 43 KB.
+# (the buffers themselves are whole screens in the PSRAM: main.c)
 CONFIG_LVGL_PORT_ENABLE_PPA=y
-CONFIG_BSP_LCD_DRAW_BUF_HEIGHT=30
-CONFIG_BSP_LCD_DRAW_BUF_DOUBLE=y
 # a part that fails to start (the speaker, say) returns its error instead of restarting the whole device
 CONFIG_BSP_ERROR_CHECK=n
 
