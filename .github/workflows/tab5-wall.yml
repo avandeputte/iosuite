@@ -59,7 +59,7 @@ jobs:
           sudo chown -R "$(id -u)" . || true
           cp iowall.bin "../out/${{ matrix.file }}.bin"
           cp iowall-full.bin "../out/${{ matrix.file }}-full.bin"
-          grep -E "CONFIG_ESP32P4_REV_MIN=|CONFIG_ESP_HOSTED_SDIO_PIN_CMD=" ../sdkconfig || true
+          grep -E "CONFIG_ESP32P4_REV_MIN_FULL=|CONFIG_ESP_HOSTED_SDIO_PIN_CMD=" ../sdkconfig || true
           ls -la ../out
       - uses: actions/upload-artifact@v4
         with:

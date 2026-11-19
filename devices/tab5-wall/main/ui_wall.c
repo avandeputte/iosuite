@@ -20,7 +20,7 @@
 #define RAINY lv_color_hex(0x9fd0ff)
 
 static lv_obj_t *scr;
-static lv_obj_t *sky, *img[2], *shade_top, *shade_bottom;
+static lv_obj_t *sky, *img[2], *dim, *shade_top, *shade_bottom;
 static int img_top = -1;
 static lv_obj_t *clock_lbl, *ampm_lbl, *date_lbl, *chips;
 static lv_obj_t *wx_box, *wx_icon, *wx_temp, *wx_text, *wx_rain, *wx_days;
@@ -78,7 +78,7 @@ static void one_line(lv_obj_t *l, const lv_font_t *f)
 
 static void shadow_text(lv_obj_t *l)
 {
-    /* the shades behind the text keep it readable on a bright photo; nothing more to do per label */
+    /* the shades behind the text keep it readable on a bright photo (shades_for); nothing more to do per label */
     (void)l;
 }
 
@@ -788,10 +788,83 @@ static void fade_done(lv_anim_t *a)
     lv_obj_add_flag(img[other], LV_OBJ_FLAG_HIDDEN);
 }
 
+/* The shades over the photo, as dark as the photo is bright: white text on a dark photo needs little, on snow, sand
+ * or a white sky a lot. Three of them: one over the whole photo (none on a dark one), one behind the clock and the
+ * weather, one behind the agenda and the tasks. */
+enum { SH_ALL, SH_TOP, SH_BOTTOM, SH_N };
+static const int SH_PLAIN[SH_N] = {0, 140, 190};   /* no photo: the sky, or black */
+static int sh_now[SH_N] = {0, 140, 190}, sh_from[SH_N], sh_to[SH_N];
+
+static void shades_set(const int v[SH_N])
+{
+    lv_obj_set_style_bg_opa(dim, (lv_opa_t)v[SH_ALL], 0);
+    lv_obj_set_style_bg_main_opa(shade_top, (lv_opa_t)v[SH_TOP], 0);
+    lv_obj_set_style_bg_grad_opa(shade_bottom, (lv_opa_t)v[SH_BOTTOM], 0);
+    memcpy(sh_now, v, sizeof sh_now);
+}
+
+static void shades_cb(void *o, int32_t t)
+{
+    int v[SH_N];
+    for (int i = 0; i < SH_N; i++) v[i] = sh_from[i] + (sh_to[i] - sh_from[i]) * t / 256;
+    shades_set(v);
+}
+
+static void shades_go(const int to[SH_N])
+{
+    memcpy(sh_from, sh_now, sizeof sh_from);
+    memcpy(sh_to, to, sizeof sh_to);
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, dim);
+    lv_anim_set_exec_cb(&a, shades_cb);
+    lv_anim_set_values(&a, 0, 256);
+    lv_anim_set_duration(&a, 900);
+    lv_anim_start(&a);
+}
+
+/* How bright rows y0 to y1 of a photo (RGB565) are, 0 to 255: its mean brightness, pulled up by the share of it
+ * that is bright enough to wash white text out, so a photo half snow and half forest counts as bright. */
+static int brightness(const lv_image_dsc_t *im, int y0, int y1)
+{
+    int w = im->header.w, h = im->header.h;
+    if (y0 < 0) y0 = 0;
+    if (y1 > h) y1 = h;
+    uint32_t sum = 0, bright = 0, n = 0;
+    for (int y = y0; y < y1; y += 6) {
+        const uint16_t *row = (const uint16_t *)(im->data + (size_t)y * im->header.stride);
+        for (int x = 0; x < w; x += 6) {
+            uint16_t p = row[x];
+            int l = (((p >> 11) & 31) * 8 * 3 + ((p >> 5) & 63) * 4 * 6 + (p & 31) * 8) / 10;
+            sum += l;
+            if (l > 160) bright++;
+            n++;
+        }
+    }
+    if (!n) return 0;
+    int mean = sum / n, share = bright * 255 / n;
+    return mean > share ? mean : (mean + share) / 2;
+}
+
+static int between(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+static void shades_for(const lv_image_dsc_t *im)
+{
+    int h = im->header.h;
+    int all = brightness(im, 0, h), top = brightness(im, 0, h * 45 / 100), bottom = brightness(im, h * 38 / 100, h);
+    int to[SH_N] = {
+        between((all - 70) * 9 / 10, 0, 110),
+        between(140 + (top - 70) * 8 / 10, 140, 225),
+        between(190 + (bottom - 70) * 5 / 10, 190, 240),
+    };
+    shades_go(to);
+}
+
 void ui_wall_photo(const lv_image_dsc_t *im, const char *cap)
 {
     if (!scr) return;
     if (!im) {
+        shades_go(SH_PLAIN);
         lv_obj_add_flag(img[0], LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(img[1], LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(caption, "");
@@ -804,6 +877,7 @@ void ui_wall_photo(const lv_image_dsc_t *im, const char *cap)
     lv_obj_remove_flag(img[next], LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_to_index(img[next], 2);  /* above the other photo, under the shades */
     img_top = next;
+    shades_for(im);
     lv_anim_t a;
     lv_anim_init(&a);
     lv_anim_set_var(&a, img[next]);
@@ -849,6 +923,10 @@ static void build(void)
         lv_obj_add_flag(img[i], LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(img[i], LV_OBJ_FLAG_CLICKABLE);
     }
+    dim = box(scr);
+    lv_obj_set_size(dim, WALL_W, WALL_H);
+    lv_obj_set_style_bg_color(dim, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(dim, LV_OPA_TRANSP, 0);
     shade_top = box(scr);
     lv_obj_set_size(shade_top, WALL_W, P(320));
     lv_obj_set_style_bg_color(shade_top, lv_color_black(), 0);
@@ -858,7 +936,7 @@ static void build(void)
     lv_obj_set_style_bg_main_opa(shade_top, 140, 0);
     lv_obj_set_style_bg_grad_opa(shade_top, 0, 0);
     shade_bottom = box(scr);
-    lv_obj_set_size(shade_bottom, WALL_W, P(440));
+    lv_obj_set_size(shade_bottom, WALL_W, P(500));   /* from a little above the agenda */
     lv_obj_align(shade_bottom, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_bg_color(shade_bottom, lv_color_black(), 0);
     lv_obj_set_style_bg_grad_color(shade_bottom, lv_color_black(), 0);
@@ -866,6 +944,8 @@ static void build(void)
     lv_obj_set_style_bg_opa(shade_bottom, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_main_opa(shade_bottom, 0, 0);
     lv_obj_set_style_bg_grad_opa(shade_bottom, 190, 0);
+    lv_obj_set_style_bg_grad_stop(shade_bottom, 90, 0);   /* at its darkest from the agenda's third row down */
+    shades_set(SH_PLAIN);
 
     /* the clock, the date, the chips: top left */
     lv_obj_t *tl = column(scr, 0);
