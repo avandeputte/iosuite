@@ -70,8 +70,9 @@ what the app will show on the start page later (today's events, the newest photo
   cut short; the apps without a card are low tiles that share the free cell after the last card (or a row of their
   own). A card with nothing to show today (nothing planned, nothing due) becomes a low tile with that one line, and a
   card again when it has something. *One Today card, the apps in a row*: every app as an icon in one row to open it,
-  and under it a Today card (ioCalendar's events and ioTask's tasks in one list by the hour, ioMoney's week of bills
-  beside them) with ioHealth and ioPix's On this day next to it.
+  and under it a Today card (ioCalendar's events and ioTask's tasks in one list by the hour, then the coming days'
+  as far as the card has room, so a light day shows what is ahead; ioMoney's week of bills beside them) with ioHealth
+  and ioPix's On this day next to it.
 - **Your own page** (the gear next to the date › Customize the page): untick the tiles and cards you do not need, put the tiles and
   the cards (Birthdays, This week, the photo strip, the bookmarks) in your order, and pick your own photo strip
   ("Default" is the admin's choice). Saved per account, on top of the default the admin set in Settings › Home page.

@@ -1,5 +1,6 @@
 """The suite's standard endpoints (/api/suite/*, iosuite_shared.suiteitems), answered through ioTask's own API as the
 viewer: what the start page's search box and tile and the linked-items panel read."""
+import datetime as dt
 
 
 def test_search_item_and_tile(client, family_id):
@@ -17,5 +18,12 @@ def test_search_item_and_tile(client, family_id):
     assert client.get("/api/suite/items/note/1").status_code == 404
     tile = client.get("/api/suite/tile", params={"tz": "Europe/Brussels"}).json()
     assert tile["overdue"] >= 1 and tile["today"][0]["title"] == "Call the dentist" and tile["today"][0]["late"]
+    # kind=week: what is due on the days after today (not today's or the late ones, nor what has no day or is far off)
+    soon, far = (dt.date.today() + dt.timedelta(days=3)).isoformat(), (dt.date.today() + dt.timedelta(days=30)).isoformat()
+    for title, due in (("Renew the library books", soon), ("Book the summer camp", far)):
+        assert client.post("/api/tasks", json={"title": title, "due": due, "listId": family_id}).status_code == 200
+    week = client.get("/api/suite/tile", params={"tz": "Europe/Brussels", "kind": "week"}).json()
+    assert [x["title"] for x in week["week"]] == ["Renew the library books"] and week["more"] == 0
+    assert week["week"][0]["due"].startswith(soon) and week["week"][0]["allDay"] and week["week"][0]["color"]
     client.cookies.clear()
     assert client.get("/api/suite/search", params={"q": "dentist"}).status_code == 401

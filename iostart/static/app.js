@@ -957,13 +957,13 @@ function fitStack(grid) {
 }
 const wgHead = (t, extra) => h('div', { class: 'wghead' }, h('span', null, t), extra ? h('span', { class: 'muted' }, extra) : null);
 
-function drawPixWidget(d) {
+function drawPixWidget(d, n = 4) {
   if (!d.items || !d.items.length) return null;
   const otd = d.kind === 'onthisday';
   const cap = (it) => (otd ? (it.yearsAgo === 1 ? '1 year ago' : `${it.yearsAgo} years ago`) : (it.year || ''));
-  // four small squares in a row: the year fits under each, "14 years ago" is the tooltip
+  // n small squares in a row (four on a card): the year fits under each, "14 years ago" is the tooltip
   return [wgHead(otd ? 'On this day' : 'Rediscover', otd && d.count > d.items.length ? `${d.count} photos` : null),
-    h('div', { class: 'wgpix' }, d.items.slice(0, 4).map((it) => h('span', { class: 'wgph', title: String(cap(it)), role: 'link', tabindex: '0',
+    h('div', { class: 'wgpix' }, d.items.slice(0, n).map((it) => h('span', { class: 'wgph', title: String(cap(it)), role: 'link', tabindex: '0',
       onclick: (e) => { e.preventDefault(); e.stopPropagation(); location.href = pixPhotoUrl(S.apps.find((a) => a.key === 'iopix'), it.id); },
       onkeydown: (e) => { if (e.key === 'Enter') e.target.click(); } },
       h('img', { src: itemImage('iopix', 'photo', it.id), alt: '', loading: 'lazy', onerror: (e) => e.target.parentNode.remove() }),
@@ -1035,40 +1035,82 @@ function drawMoneyWidget(d) {
 }
 
 /** The "today" layout's cards under the dock. Today: ioCalendar's events and ioTask's tasks in one list by the hour
-    (what is late first, what has no hour last), with ioMoney's week of bills beside them; then ioHealth and ioPix's On
-    this day, one above the other. Each part is there when its app is on the page and answers; a row opens its app.
+    (what is late first, what has no hour last), and under them the coming days' as far as the card has room beside
+    the other two (fitGlance), so a light day shows what is ahead; ioMoney's week of bills beside them; then ioHealth and ioPix's
+    On this day, one above the other. Each part is there when its app is on the page and answers; a row opens its app.
     again: a refresh, which keeps what the cards show when nothing answers. */
+const GLANCE_LINES = 9, GLANCE_PHOTOS = 6;  // the most lines of today in the Today card's list (and of the coming days, on a phone); On this day's photos
+const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 async function drawGlance(el, again = false) {
   const app = (k) => S.apps.find((a) => a.key === k);
-  const [cal, task, mon, health, pix] = await Promise.all(['iocalendar', 'iotask', 'iomoney', 'iohealth', 'iopix'].map((k) => (app(k) ? widget(k) : null)));
+  const ask = (k, params) => (app(k) ? widget(k, params) : null);
+  const [cal, task, mon, health, pix, calWeek, taskWeek] = await Promise.all([ask('iocalendar', { n: GLANCE_LINES }), ask('iotask', { n: GLANCE_LINES }), ask('iomoney'), ask('iohealth'), ask('iopix', { n: GLANCE_PHOTOS }),
+    ask('iocalendar', { kind: 'week' }), ask('iotask', { kind: 'week' })]);
   if (!el.isConnected || (again && ![cal, task, mon, health, pix].some(Boolean))) return;
-  const head = (k, text, extra) => h('a', { class: 'ghead', href: app(k).url, title: app(k).url }, h('img', { src: app(k).icon, alt: '' }), h('span', null, text), extra ? h('span', { class: 'muted' }, extra) : null);
+  const head = (k, text, extra) => h('a', { class: 'ghead', href: app(k).url, title: app(k).url }, h('img', { src: app(k).icon, alt: '' }), h('span', null, text),
+    extra ? h('span', { class: typeof extra === 'string' ? 'gextra muted' : 'gextra' }, extra) : null);
   const row = (k, title, kids) => h('a', { class: 'wgev', href: app(k).url, title }, kids);
-  // events and tasks by the hour
-  const rows = [];
-  for (const t of (task && task.today) || []) {
-    const timed = t.due && !t.allDay && !isNaN(new Date(t.due));
-    rows.push({ at: t.late ? -1 : timed ? +new Date(t.due) : Infinity, el: row('iotask', t.title, [h('span', { class: 'tick', style: { borderColor: t.color || 'var(--fg2)' } }),
-      h('span', { class: `wgwhen ${t.late ? 'wgwarn' : 'muted'}` }, t.late ? 'Late' : timed ? evTime({ start: t.due }) : ''), h('span', { class: 'wgtitle' }, t.title)]) });
-  }
-  const events = withoutBirthdays((cal && cal.today) || []);
-  for (const o of events) rows.push({ at: o.allDay ? 0 : +new Date(o.start), el: row('iocalendar', [o.title, o.location].filter(Boolean).join(' · '), [h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }),
+  // a day's events and tasks by the hour
+  const timed = (t) => t.due && !t.allDay && !isNaN(new Date(t.due));
+  const taskRow = (t) => ({ at: t.late ? -1 : timed(t) ? +new Date(t.due) : Infinity, el: row('iotask', t.title, [h('span', { class: 'tick', style: { borderColor: t.color || 'var(--fg2)' } }),
+    h('span', { class: `wgwhen ${t.late ? 'wgwarn' : 'muted'}` }, t.late ? 'Late' : timed(t) ? evTime({ start: t.due }) : ''), h('span', { class: 'wgtitle' }, t.title)]) });
+  const eventRow = (o) => ({ at: o.allDay ? 0 : +new Date(o.start), el: row('iocalendar', [o.title, o.location].filter(Boolean).join(' · '), [h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }),
     h('span', { class: 'wgwhen muted' }, evTime(o)), h('span', { class: 'wgtitle' }, o.title), o.location ? h('span', { class: 'wgwhere muted' }, shortPlace(o.location)) : null]) });
-  rows.sort((a, b) => a.at - b.at);
-  if (cal && !events.length && cal.next) rows.push({ el: row('iocalendar', cal.next.title, [h('span', { class: 'dot', style: { background: cal.next.color || 'var(--fg2)' } }),
-    h('span', { class: 'wgwhen muted' }, 'Next'), h('span', { class: 'wgtitle' }, cal.next.title), h('span', { class: 'wgwhere muted' }, `${evDay(cal.next)} ${cal.next.allDay ? '' : evTime(cal.next)}`.trim())]) });
-  const plans = cal || task ? h('div', null, wgHead(cal && task ? 'Plans and tasks' : cal ? 'Plans' : 'Tasks', [cal && cal.more ? `+${cal.more} more` : null, task && task.overdue ? `${task.overdue} overdue` : null].filter(Boolean).join(' · ') || null),
-    rows.length ? rows.map((r) => r.el) : h('div', { class: 'muted small' }, cal && task ? 'Nothing planned or due' : cal ? EMPTY.iocalendar : EMPTY.iotask)) : null;
+  const byHour = (rows) => rows.sort((a, b) => a.at - b.at).map((r) => r.el);
+  const events = withoutBirthdays((cal && cal.today) || []);
+  const all = byHour([...((task && task.today) || []).map(taskRow), ...events.map(eventRow)]), lines = all.slice(0, GLANCE_LINES);
+  const moreToday = all.length - lines.length + ((cal && cal.more) || 0) + ((task && task.more) || 0);
+  const none = cal && task ? 'Nothing planned or due' : cal ? EMPTY.iocalendar : EMPTY.iotask;
+  if (!lines.length) lines.push(h('div', { class: 'muted small' }, none));
+  // the coming days, each under its name, while the column has lines left (a day's name and at least one row of it)
+  const ahead = new Map();
+  const on = (date, r) => { if (!ahead.has(date)) ahead.set(date, []); ahead.get(date).push(r); };
+  for (const day of (calWeek && calWeek.days) || []) for (const o of withoutBirthdays(day.items)) on(day.date, eventRow(o));
+  for (const t of (taskWeek && taskWeek.week) || []) { const d = t.allDay || !timed(t) ? String(t.due).slice(0, 10) : isoDay(new Date(t.due)); if (d > isoDay(new Date())) on(d, taskRow(t)); }
+  const later = [];  // in steps that show together: a day's name with its first row, then a row at a time
+  for (const date of [...ahead.keys()].sort()) {
+    const noon = new Date(`${date}T12:00:00`), days = Math.round((noon - new Date().setHours(12, 0, 0, 0)) / 86400000);
+    const name = h(cal ? 'a' : 'div', { class: 'gday', href: cal ? `${app('iocalendar').url}/#/day/${date}` : null }, days === 1 ? 'Tomorrow' : noon.toLocaleDateString([], { weekday: 'long' }),
+      h('span', { class: 'muted' }, noon.toLocaleDateString([], { month: 'short', day: 'numeric' })));
+    byHour(ahead.get(date)).forEach((r, i) => later.push(i ? [r] : [name, r]));
+  }
+  for (const step of later) for (const x of step) x.hidden = true;  // fitGlance shows what there is room for
+  // nothing today and nothing in the week: the next event, however far off
+  if (cal && !events.length && !ahead.size && cal.next) lines.push(row('iocalendar', cal.next.title, [h('span', { class: 'dot', style: { background: cal.next.color || 'var(--fg2)' } }),
+    h('span', { class: 'wgwhen muted' }, 'Next'), h('span', { class: 'wgtitle' }, cal.next.title), h('span', { class: 'wgwhere muted' }, `${evDay(cal.next)} ${cal.next.allDay ? '' : evTime(cal.next)}`.trim())]));
+  const more = [moreToday ? `+${moreToday} more today` : null, task && task.overdue ? `${task.overdue} overdue` : null].filter(Boolean).join(' · ');
+  const plans = cal || task ? h('div', null, wgHead(cal && task ? 'Plans and tasks' : cal ? 'Plans' : 'Tasks', more || ' '), lines, later) : null;
   // the week's bills (and what needs a look in ioMoney), as its card has them
   const mk = mon ? drawMoneyWidget(mon) : null;
   const bills = mon ? h('a', { class: 'gbills', href: app('iomoney').url, title: app('iomoney').url }, mk || [wgHead('This week'), h('div', { class: 'muted small' }, 'Nothing due')]) : null;
   if (bills) bills.querySelector('.wghead > span').textContent = 'Bills this week';
   const today = plans || bills ? h('div', { class: 'card todaycard' }, head(cal ? 'iocalendar' : task ? 'iotask' : 'iomoney', 'Today'), h('div', { class: `todaycols${plans && bills ? '' : ' one'}` }, plans, bills)) : null;
-  const hk = health ? drawHealthWidget(health) : null, pk = pix ? drawPixWidget(pix) : null;
-  const side = [hk ? h('div', { class: 'card' }, head('iohealth', 'Health'), h('div', { class: 'wg' }, hk)) : null,
+  // the two low cards: ioHealth's steps go in its head (no "Today" line), On this day shows six smaller photos
+  const hk = health ? drawHealthWidget(health) : null, pk = pix ? drawPixWidget(pix, GLANCE_PHOTOS) : null;
+  const side = [hk ? h('div', { class: 'card' }, head('iohealth', 'Health', hk[0].children[1]), h('div', { class: 'wg' }, hk.slice(1))) : null,
     pk ? h('div', { class: 'card' }, head('iopix', pk[0].firstChild.textContent, pk[0].children[1] ? pk[0].children[1].textContent : null), h('div', { class: 'wg' }, pk.slice(1))) : null].filter(Boolean);
   el.classList.toggle('one', !today || !side.length);
   el.replaceChildren(...[today, side.length ? h('div', { class: `gside${today ? '' : ' flat'}` }, side) : null].filter(Boolean));
+  // how many of the coming days' rows show: again when the cards' width changes
+  const beyond = ((calWeek && calWeek.more) || 0) + ((taskWeek && taskWeek.more) || 0);
+  el.fit = () => fitGlance(el, plans, lines.length, later, more ? null : beyond);
+  if (!el.watched) { el.watched = new ResizeObserver(() => el.fit && el.fit()); el.watched.observe(el); }
+  el.fit();
+}
+/** The coming days in the Today card's list: with the other cards beside it, as many rows as fit without the card growing
+    taller than they (or today's own rows) make it; on its own (a phone), up to GLANCE_LINES lines with today's. The head says how many are left out (unless
+    it has something to say about today). */
+function fitGlance(el, plans, shown, later, beyond) {
+  if (!plans || !plans.isConnected) return;
+  const show = (step, on) => { for (const x of step) x.hidden = !on; };
+  let i = 0;
+  for (const step of later) show(step, false);
+  const card = el.querySelector('.todaycard'), side = el.querySelector('.gside');
+  if (card && side && Math.abs(card.offsetTop - side.offsetTop) < 4) {  // side by side: the row stays as low as it is
+    for (const tall = el.offsetHeight; i < later.length; i++) { show(later[i], true); if (el.offsetHeight > tall) { show(later[i], false); break; } }
+  } else for (; i < later.length && shown + later[i].length <= GLANCE_LINES; i++) { show(later[i], true); shown += later[i].length; }
+  const note = plans.querySelector('.wghead .muted');
+  if (note && beyond != null) { const left = later.slice(i).reduce((n, step) => n + step.filter((x) => !x.classList.contains('gday')).length, 0) + beyond; note.textContent = left ? `+${left} this week` : ''; }
 }
 
 /** A low tile's one line (LOW); an app that is down or closed to this account leaves the line empty. */
