@@ -50,7 +50,11 @@ what the app will show on the start page later (today's events, the newest photo
   yours (a TRMNL server of your own inside the network, or TRMNL's cloud through Cloudflare Access with a service
   token); or, when TRMNL's cloud cannot reach the start page, the start page sends each screen to the plugin's webhook
   every 15 minutes when it changed (the webhook addresses and the app password it reads with are kept with the suite's
-  keys and tokens). The markup is in app/trmnl_markup/, on TRMNL's own design framework.
+  keys and tokens). The markup is in app/trmnl_markup/, on TRMNL's own design framework. Health shows the day's
+  rings (Move, Exercise, Stand, in black alone) and the week's steps as bars, Money what falls due on each of the
+  week's days, Weather the hours' temperatures as a curve: pictures the markup writes itself, as SVG. On a TRMNL X
+  (the framework's `lg:` classes) the text is larger and the halves and quadrants list more, so the larger screen
+  is filled; a plugin imported before this needs importing again to look so.
 - **A TRMNL server of its own** (Settings › TRMNL › Straight from the start page): the start page answers a TRMNL
   device itself, so a TRMNL needs no TRMNL account, plugin or webhook, and nothing leaves the network. In the device's
   Wi-Fi setup, give the start page's address inside the network as its server; it then shows a six-letter code, which

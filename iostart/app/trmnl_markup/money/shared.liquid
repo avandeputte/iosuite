@@ -1,0 +1,3 @@
+{%- comment -%} What falls due on each of the week's days, a bar a day against the heaviest day's; stretched over the days' names (image--fill). {%- endcomment -%}
+{%- capture days_svg -%}<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 70 100" preserveAspectRatio="none">{%- for d in days -%}<rect x="{{ forloop.index0 | times: 10 | plus: 1.5 }}" y="{{ 100 | minus: d.pct }}" width="7" height="{{ d.pct }}"/>{%- endfor -%}</svg>{%- endcapture -%}
+{%- capture days_img -%}data:image/svg+xml;base64,{{ days_svg | base64_encode }}{%- endcapture -%}

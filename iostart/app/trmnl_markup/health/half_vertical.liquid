@@ -1,17 +1,22 @@
-<div class="layout layout--col layout--top layout--stretch-x gap">
+<div class="layout layout--col layout--top layout--stretch-x gap lg:gap--large">
   {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
   {%- unless missing %}
   <div class="flex flex--col flex--left">
-    <span class="value value--large" data-fit-value="true">{{ steps }}</span>
-    <span class="label">steps today{% if average != "" %} &middot; {{ average }} a day this week{% endif %}</span>
+    <span class="value value--large lg:value--xlarge" data-fit-value="true">{{ steps }}</span>
+    <span class="label lg:label--large">steps today{% if average != "" %} &middot; {{ average }} a day this week{% endif %}</span>
   </div>
-  {%- if sleep != "" %}<div class="flex flex--col flex--left"><span class="value value--small">{{ sleep }}</span><span class="label">asleep last night</span></div>{% endif %}
-  {%- for r in rings %}
-      <div class="progress-bar progress-bar--small w--full">
-        <div class="content"><span class="label label--small">{{ r.name }}</span><span class="label label--small">{{ r.value }}{% if r.goal != "" %} / {{ r.goal }}{% endif %} {{ r.unit }}</span></div>
-        <div class="track"><div class="fill" style="width: {{ r.pct }}%"></div></div>
-      </div>
-      {%- endfor %}
+  {%- if sleep != "" %}<div class="flex flex--col flex--left"><span class="value value--small lg:value--base">{{ sleep }}</span><span class="label lg:label--large">asleep last night</span></div>{% endif %}
+  {%- if rings.size > 0 %}
+  <div class="flex flex--row flex--center w--full"><img class="image w--36 h--36 lg:w--72 lg:h--72" src="{{ rings_img }}"></div>
+  <div class="flex flex--col flex--left gap--xsmall w--full lg:gap--base">
+        {%- for r in rings %}
+        <div class="flex flex--row flex--between w--full">
+          <span class="title title--small lg:title--large lg:text--bold">{{ r.name }}</span>
+          <span class="label lg:label--large">{{ r.value }}{% if r.goal != "" %} / {{ r.goal }}{% endif %} {{ r.unit }}</span>
+        </div>
+        {%- endfor %}
+  </div>
+  {%- endif %}
   {%- endunless %}
 </div>
 <div class="title_bar">

@@ -1,66 +1,69 @@
 <div class="layout layout--row layout--top layout--stretch-x">
   <div class="grid grid--cols-12 w--full">
-    <div class="col--span-7 flex flex--col flex--left gap">
+    <div class="col--span-7 flex flex--col flex--left gap lg:gap--large">
       <div class="flex flex--col flex--left">
-        <span class="value value--large">{{ weekday }}</span>
-        <span class="title">{{ date }}</span>
+        <span class="value value--large lg:value--xxlarge">{{ weekday }}</span>
+        <span class="title lg:title--xlarge">{{ date }}</span>
       </div>
       {%- if has_calendar %}
-      <div class="flex flex--col flex--left gap--small">
-        <span class="label label--underline">Today</span>
+      <div class="flex flex--col flex--left gap--small lg:gap--base">
+        <span class="label label--underline lg:label--xlarge">Today</span>
         {%- for e in events %}
         <div class="item">
           <div class="meta"></div>
           <div class="content">
-            <span class="title title--small" data-clamp="1">{{ e.title }}</span>
-            <div class="flex gap--small">
-              <span class="label label--small">{{ e.time }}</span>
-              {%- if e.place != "" %}<span class="label label--small label--gray" data-clamp="1">@ {{ e.place }}</span>{% endif %}
+            <span class="title title--small lg:text--xlarge lg:text--bold" data-clamp="1">{{ e.title }}</span>
+            <div class="flex gap--small lg:gap--base">
+              <span class="label label--small lg:label--large">{{ e.time }}</span>
+              {%- if e.place != "" %}<span class="label label--small label--gray lg:label--large" data-clamp="1">@ {{ e.place }}</span>{% endif %}
             </div>
           </div>
         </div>
         {%- endfor %}
         {%- if events.size == 0 %}<span class="description">{% if next != "" %}Nothing more today. {{ next }}{% else %}Nothing more today{% endif %}</span>{% endif %}
-        {%- if events_more > 0 %}<span class="label label--small label--gray">and {{ events_more }} more</span>{% endif %}
+        {%- if events_more > 0 %}<span class="label label--small label--gray lg:label--large">and {{ events_more }} more</span>{% endif %}
       </div>
       {%- if tomorrow.size > 0 %}
-      <div class="flex flex--col flex--left gap--xsmall">
-        <span class="label label--underline">Tomorrow</span>
+      <div class="flex flex--col flex--left gap--xsmall lg:gap--small">
+        <span class="label label--underline lg:label--xlarge">Tomorrow</span>
         {%- for e in tomorrow %}
-        <span class="label label--small" data-clamp="1">{{ e.time }} &middot; {{ e.title }}{% if e.place != "" %} @ {{ e.place }}{% endif %}</span>
+        <span class="label label--small lg:label--large" data-clamp="1">{{ e.time }} &middot; {{ e.title }}{% if e.place != "" %} @ {{ e.place }}{% endif %}</span>
         {%- endfor %}
       </div>
       {%- endif %}
       {%- endif %}
     </div>
-    <div class="col--span-5 flex flex--col flex--left gap">
+    <div class="col--span-5 flex flex--col flex--left gap lg:gap--large">
       {%- if weather %}
       <div class="item">
         <div class="meta"></div>
         <div class="content">
-          <span class="value value--xlarge" data-fit-value="true">{{ weather.temp }}</span>
-          <span class="label">{{ weather.text }}</span>
-          <span class="label label--small label--gray">{% if weather.hi != "" %}High {{ weather.hi }} &middot; Low {{ weather.lo }}{% endif %}{% if weather.rain != "" %} &middot; Rain {{ weather.rain }}{% endif %}</span>
+          <div class="flex flex--row flex--left gap lg:gap--large">
+            <img class="image w--16 h--16 lg:w--24 lg:h--24" src="data:image/svg+xml;base64,{{ wx_open | append: wx[weather.icon] | append: '</svg>' | base64_encode }}">
+            <span class="value value--xlarge lg:value--xxlarge" data-fit-value="true">{{ weather.temp }}</span>
+          </div>
+          <span class="label lg:label--large">{{ weather.text }}</span>
+          <span class="label label--small label--gray lg:label--large">{% if weather.hi != "" %}High {{ weather.hi }} &middot; Low {{ weather.lo }}{% endif %}{% if weather.rain != "" %} &middot; Rain {{ weather.rain }}{% endif %}</span>
         </div>
       </div>
       {%- endif %}
       {%- if has_tasks %}
-      <div class="flex flex--col flex--left gap--small">
-        <span class="label label--underline">Tasks{% if overdue > 0 %} &middot; {{ overdue }} late{% endif %}</span>
+      <div class="flex flex--col flex--left gap--small lg:gap--base">
+        <span class="label label--underline lg:label--xlarge">Tasks{% if overdue > 0 %} &middot; {{ overdue }} late{% endif %}</span>
         {%- for t in tasks %}
         <div class="item">
           <div class="meta"></div>
           <div class="content">
-            <span class="title title--small" data-clamp="1">{{ t.title }}</span>
-            {%- if t.when != "" %}<span class="label label--small{% if t.late %} label--inverted{% endif %}">{{ t.when }}</span>{% endif %}
+            <span class="title title--small lg:text--xlarge lg:text--bold" data-clamp="1">{{ t.title }}</span>
+            {%- if t.when != "" %}<span class="label label--small lg:label--large{% if t.late %} label--inverted{% endif %}">{{ t.when }}</span>{% endif %}
           </div>
         </div>
         {%- endfor %}
         {%- if tasks.size == 0 %}<span class="description">Nothing due today</span>{% endif %}
-        {%- if tasks_more > 0 %}<span class="label label--small label--gray">and {{ tasks_more }} more</span>{% endif %}
+        {%- if tasks_more > 0 %}<span class="label label--small label--gray lg:label--large">and {{ tasks_more }} more</span>{% endif %}
       </div>
       {%- endif %}
-      {%- for b in birthdays %}<span class="label label--small label--outline" data-clamp="1">{{ b }}</span>{% endfor %}
+      {%- for b in birthdays %}<span class="label label--small label--outline lg:label--large" data-clamp="1">{{ b }}</span>{% endfor %}
     </div>
   </div>
 </div>

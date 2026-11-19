@@ -1,39 +1,52 @@
 <div class="layout layout--row layout--top layout--stretch-x">
   {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
   {%- unless missing %}
-  <div class="grid grid--cols-12 w--full">
-    <div class="col--span-5 flex flex--col flex--left gap">
+  {%- capture steps_item %}
       <div class="item">
         <div class="meta"></div>
         <div class="content">
-          <span class="value value--xxlarge" data-fit-value="true">{{ steps }}</span>
-          <span class="label">steps today{% if average != "" %} &middot; {{ average }} a day this week{% endif %}</span>
+          <span class="value value--xxlarge lg:value--xxxlarge" data-fit-value="true">{{ steps }}</span>
+          <span class="label lg:label--xlarge">steps today{% if average != "" %} &middot; {{ average }} a day this week{% endif %}</span>
         </div>
       </div>
+  {%- endcapture %}
+  <div class="grid grid--cols-12 w--full">
+    <div class="col--span-5 flex flex--col flex--left flex--top gap lg:gap--xlarge">
+      {%- if rings.size > 0 %}
+      <div class="flex flex--row flex--center w--full"><img class="image w--40 h--40 lg:w--80 lg:h--80" src="{{ rings_img }}"></div>
+      <div class="flex flex--col flex--left gap--xsmall w--full lg:gap--base">
+        {%- for r in rings %}
+        <div class="flex flex--row flex--between w--full">
+          <span class="title title--small lg:text--xlarge lg:text--bold">{{ r.name }}</span>
+          <span class="label lg:label--xlarge">{{ r.value }}{% if r.goal != "" %} / {{ r.goal }}{% endif %} {{ r.unit }}</span>
+        </div>
+        {%- endfor %}
+      </div>
+      {%- else %}{{ steps_item }}{% endif %}
       {%- if sleep != "" %}
       <div class="item">
         <div class="meta"></div>
         <div class="content">
-          <span class="value value--small">{{ sleep }}</span>
-          <span class="label">asleep last night{% if in_bed != "" %} &middot; {{ in_bed }} in bed{% endif %}</span>
+          <span class="value value--small lg:value--base">{{ sleep }}</span>
+          <span class="label lg:label--xlarge">asleep last night{% if in_bed != "" %} &middot; {{ in_bed }} in bed{% endif %}</span>
         </div>
       </div>
       {%- endif %}
-      {%- for r in rings %}
-      <div class="progress-bar progress-bar--small w--full">
-        <div class="content"><span class="label label--small">{{ r.name }}</span><span class="label label--small">{{ r.value }}{% if r.goal != "" %} / {{ r.goal }}{% endif %} {{ r.unit }}</span></div>
-        <div class="track"><div class="fill" style="width: {{ r.pct }}%"></div></div>
-      </div>
-      {%- endfor %}
     </div>
-    <div class="col--span-7 flex flex--col flex--left gap--small">
-      <span class="label label--underline">The last seven days</span>
-      {%- for w in week %}
-      <div class="progress-bar progress-bar--xsmall w--full">
-        <div class="content"><span class="label label--small">{{ w.day }}</span><span class="label label--small">{{ w.steps }}</span></div>
-        <div class="track"><div class="fill" style="width: {{ w.pct }}%"></div></div>
+    <div class="col--span-7 flex flex--col flex--left flex--top gap lg:gap--xlarge">
+      {%- if rings.size > 0 %}{{ steps_item }}{% endif %}
+      <div class="flex flex--col flex--left gap--small lg:gap--base">
+        <span class="label label--underline lg:label--xlarge">The last seven days</span>
+        <img class="image image--fill w--full h--32 lg:h--80" src="{{ week_img }}">
+        <div class="flex flex--row flex--left gap--none">
+          {%- for w in week %}
+          <div class="flex flex--col flex--center gap--none w--16 lg:w--20">
+            <span class="title title--small lg:title--base lg:text--bold" data-pixel-perfect="true">{{ w.day }}</span>
+            <span class="label label--small lg:label--large" data-pixel-perfect="true">{{ w.steps }}</span>
+          </div>
+          {%- endfor %}
+        </div>
       </div>
-      {%- endfor %}
     </div>
   </div>
   {%- endunless %}

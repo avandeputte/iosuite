@@ -1,18 +1,18 @@
-<div class="layout layout--col layout--top layout--stretch-x gap">
+<div class="layout layout--col layout--top layout--stretch-x gap lg:gap--large">
   {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
   {%- unless missing %}
-  {%- if total != "" %}<div class="flex flex--col flex--left"><span class="value value--small" data-fit-value="true">{{ total }}</span><span class="label">due this week</span></div>{% endif %}
-  <div class="flex flex--col flex--left gap--xsmall w--full">
-      {%- for b in bills limit: 8 %}
-      <div class="flex flex--row flex--between w--full">
-        <span class="title title--small" data-clamp="1">{{ b.day }} &middot; {{ b.name }}</span>
-        <span class="title title--small">{{ b.amount }}</span>
+  {%- if total != "" %}<div class="flex flex--col flex--left"><span class="value value--small lg:value--base" data-fit-value="true">{{ total }}</span><span class="label lg:label--large">due this week</span></div>{% endif %}
+  <div class="flex flex--col flex--left gap--xsmall w--full lg:gap--small">
+      {%- for b in bills limit: 14 %}
+      <div class="flex flex--row flex--between w--full{% if forloop.index > 8 %} hidden lg:flex{% endif %}">
+        <span class="title title--small lg:title--base lg:text--bold" data-clamp="1">{{ b.day }} &middot; {{ b.name }}</span>
+        <span class="title title--small lg:title--base lg:text--bold">{{ b.amount }}</span>
       </div>
       {%- endfor %}
       {%- if bills.size == 0 %}<span class="description">No bills due this week</span>{% endif %}
   </div>
-  {%- for l in low %}<span class="label label--small label--inverted" data-clamp="1">{{ l }}</span>{% endfor %}
-      {%- if behind.size > 0 %}<span class="label label--small label--gray" data-clamp="2">Not up to date: {{ behind | join: ", " }}</span>{% endif %}
+  {%- for l in low %}<span class="label label--small label--inverted lg:label--base" data-clamp="1">{{ l }}</span>{% endfor %}
+      {%- if behind.size > 0 %}<span class="label label--small label--gray lg:label--base" data-clamp="2">Not up to date: {{ behind | join: ", " }}</span>{% endif %}
   {%- endunless %}
 </div>
 <div class="title_bar">

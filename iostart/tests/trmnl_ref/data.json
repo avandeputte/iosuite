@@ -9,6 +9,7 @@
   "weather": {
    "temp": "48\u00b0",
    "text": "Mostly cloudy",
+   "icon": 2,
    "hi": "52\u00b0",
    "lo": "41\u00b0",
    "rain": "40%",
@@ -275,24 +276,24 @@
   "rings": [
    {
     "name": "Move",
-    "value": "180",
-    "goal": "500",
+    "value": "412",
+    "goal": "600",
     "unit": "kcal",
-    "pct": 36
+    "pct": 69
    },
    {
     "name": "Exercise",
-    "value": "12",
+    "value": "24",
     "goal": "30",
     "unit": "min",
-    "pct": 40
+    "pct": 80
    },
    {
     "name": "Stand",
-    "value": "3",
+    "value": "5",
     "goal": "12",
     "unit": "h",
-    "pct": 25
+    "pct": 42
    }
   ],
   "sleep": "7 h 11 min",
@@ -350,9 +351,19 @@
     "amount": "$142.17"
    },
    {
+    "day": "Today",
+    "name": "Spotify",
+    "amount": "$16.99"
+   },
+   {
     "day": "Tomorrow",
     "name": "Netflix",
     "amount": "$22.99"
+   },
+   {
+    "day": "Tomorrow",
+    "name": "Car insurance",
+    "amount": "$212.40"
    },
    {
     "day": "Sat",
@@ -360,13 +371,65 @@
     "amount": "~$185.00"
    },
    {
+    "day": "Mon",
+    "name": "Daycare",
+    "amount": "$640.00"
+   },
+   {
+    "day": "Mon",
+    "name": "Water",
+    "amount": "~$61.35"
+   },
+   {
     "day": "Tue",
     "name": "Mortgage",
     "amount": "$2,450.00"
+   },
+   {
+    "day": "Wed",
+    "name": "Gym",
+    "amount": "$45.00"
+   }
+  ],
+  "days": [
+   {
+    "day": "Thu",
+    "amount": "159",
+    "pct": 6
+   },
+   {
+    "day": "Fri",
+    "amount": "235",
+    "pct": 10
+   },
+   {
+    "day": "Sat",
+    "amount": "185",
+    "pct": 8
+   },
+   {
+    "day": "Sun",
+    "amount": "",
+    "pct": 0
+   },
+   {
+    "day": "Mon",
+    "amount": "701",
+    "pct": 29
+   },
+   {
+    "day": "Tue",
+    "amount": "2.5k",
+    "pct": 100
+   },
+   {
+    "day": "Wed",
+    "amount": "45",
+    "pct": 2
    }
   ],
   "more": 0,
-  "total": "$2,800.16",
+  "total": "$3,775.90",
   "low": [
    "Checking: under $500.00 on Dec 1"
   ],
@@ -398,49 +461,57 @@
     "time": "9 AM",
     "icon": 2,
     "temp": "48\u00b0",
-    "rain": ""
+    "rain": "",
+    "y": 80
    },
    {
     "time": "10 AM",
     "icon": 3,
     "temp": "49\u00b0",
-    "rain": ""
+    "rain": "",
+    "y": 60
    },
    {
     "time": "11 AM",
     "icon": 3,
     "temp": "51\u00b0",
-    "rain": ""
+    "rain": "",
+    "y": 20
    },
    {
     "time": "12 PM",
     "icon": 2,
     "temp": "52\u00b0",
-    "rain": "25%"
+    "rain": "25%",
+    "y": 0
    },
    {
     "time": "1 PM",
     "icon": 5,
     "temp": "52\u00b0",
-    "rain": "55%"
+    "rain": "55%",
+    "y": 0
    },
    {
     "time": "2 PM",
     "icon": 5,
     "temp": "51\u00b0",
-    "rain": "70%"
+    "rain": "70%",
+    "y": 20
    },
    {
     "time": "3 PM",
     "icon": 5,
     "temp": "49\u00b0",
-    "rain": "65%"
+    "rain": "65%",
+    "y": 60
    },
    {
     "time": "4 PM",
     "icon": 2,
     "temp": "47\u00b0",
-    "rain": "30%"
+    "rain": "30%",
+    "y": 100
    }
   ],
   "days": [
