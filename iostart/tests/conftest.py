@@ -125,7 +125,9 @@ def apps_answer(monkeypatch):
     table[("iotask", "/api/lists")] = {"items": [{"id": 3, "color": "#2266aa"}]}
     due = [{"id": 41, "title": "Take out the bins", "due": today.isoformat(), "dueAllDay": True, "listId": 3},
            {"id": 42, "title": "Pay the water bill", "due": (today - dt.timedelta(days=2)).isoformat(), "dueAllDay": True, "listId": 3}]
-    table[("iotask", "/api/tasks")] = lambda p: {"items": due if p.get("due") == "today" else [{"id": 42}] if p.get("due") == "overdue" else []}
+    week = [{"id": 43, "title": "Book flights", "due": (today + dt.timedelta(days=3)).isoformat(), "dueAllDay": True, "listId": 3}]
+    table[("iotask", "/api/tasks")] = lambda p: {"items": due if p.get("due") == "today" else [{"id": 42}] if p.get("due") == "overdue"
+                                                 else due + week if p.get("due") == "week" else []}
     table[("iocontact", "/api/upcoming")] = {"items": [{"contactId": 5, "fn": "Ava", "label": "birthday", "turns": 9, "inDays": 1, "date": "x"}]}
     table[("iopix", "/api/random")] = {"id": [], "ts": []}
     table[("iodocs", "/api/documents")] = {"items": [

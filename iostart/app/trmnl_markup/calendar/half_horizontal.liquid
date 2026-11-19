@@ -1,10 +1,10 @@
 <div class="layout layout--col layout--top layout--stretch-x">
   {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
-  <div class="columns" data-overflow="true" data-overflow-max-cols="3" data-overflow-counter="true">
+  <div class="columns gap--[8px]" data-overflow="true" data-overflow-max-cols="3" data-overflow-counter="true">
     <div class="column">
       {%- for d in days limit: 4 %}
       {%- if d.events.size > 0 or forloop.first %}
-      <span class="label label--underline group-header lg:label--large" data-group-header="true">{{ d.label }} &middot; {{ d.date }}</span>
+      <span class="label label--underline group-header" data-group-header="true">{{ d.label }} &middot; {{ d.date }}</span>
       {%- for e in d.events limit: 3 %}
       <div class="item">
         <div class="meta"></div>

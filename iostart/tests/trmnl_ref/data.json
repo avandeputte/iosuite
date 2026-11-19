@@ -22,71 +22,159 @@
     }
    ]
   },
-  "has_calendar": true,
-  "has_tasks": true,
-  "events": [
+  "list": [
    {
-    "time": "All day",
-    "title": "Theo: no school",
-    "place": ""
+    "label": "Today \u00b7 1 late",
+    "rows": [
+     {
+      "title": "Pay the water bill",
+      "when": "Late",
+      "note": "",
+      "late": true
+     },
+     {
+      "title": "Theo: no school",
+      "when": "All day",
+      "note": "",
+      "late": false
+     },
+     {
+      "title": "Riley's dentist",
+      "when": "9:30 AM",
+      "note": "@ Bayside Dental",
+      "late": false
+     },
+     {
+      "title": "Sign Ava's field trip form",
+      "when": "Due 3 PM",
+      "note": "",
+      "late": false
+     },
+     {
+      "title": "Ava swim practice",
+      "when": "4 PM",
+      "note": "@ Flushing Meadows Aquatic Center",
+      "late": false
+     },
+     {
+      "title": "Dinner with the Parks",
+      "when": "6 PM",
+      "note": "@ Nan Xiang Dumpling",
+      "late": false
+     },
+     {
+      "title": "Order Thanksgiving turkey",
+      "when": "To do",
+      "note": "",
+      "late": false
+     },
+     {
+      "title": "Call the plumber about the upstairs sink",
+      "when": "To do",
+      "note": "",
+      "late": false
+     }
+    ],
+    "more": 0
    },
    {
-    "time": "9:30 AM",
-    "title": "Riley's dentist",
-    "place": "Bayside Dental"
+    "label": "Tomorrow \u00b7 Nov 20",
+    "rows": [
+     {
+      "title": "Grandma Joan",
+      "when": "Birthday",
+      "note": "\u00b7 turns 80",
+      "late": false
+     },
+     {
+      "title": "Recycling out",
+      "when": "7 AM",
+      "note": "",
+      "late": false
+     },
+     {
+      "title": "Parent-teacher conference",
+      "when": "3:30 PM",
+      "note": "@ PS 41",
+      "late": false
+     },
+     {
+      "title": "Return library books",
+      "when": "To do",
+      "note": "",
+      "late": false
+     }
+    ],
+    "more": 0
    },
    {
-    "time": "4 PM",
-    "title": "Ava swim practice",
-    "place": "Flushing Meadows Aquatic Center"
+    "label": "Saturday \u00b7 Nov 21",
+    "rows": [
+     {
+      "title": "Book flights for Christmas",
+      "when": "To do",
+      "note": "",
+      "late": false
+     }
+    ],
+    "more": 0
    },
    {
-    "time": "6 PM",
-    "title": "Dinner with the Parks",
-    "place": "Nan Xiang Dumpling"
+    "label": "Sunday \u00b7 Nov 22",
+    "rows": [
+     {
+      "title": "Soccer: Theo vs. Hawks",
+      "when": "10 AM",
+      "note": "@ Cunningham Park",
+      "late": false
+     },
+     {
+      "title": "Grandma's birthday lunch",
+      "when": "12:30 PM",
+      "note": "@ Ralph's",
+      "late": false
+     },
+     {
+      "title": "Renew Costco membership",
+      "when": "Due 5 PM",
+      "note": "",
+      "late": false
+     }
+    ],
+    "more": 0
+   },
+   {
+    "label": "Monday \u00b7 Nov 23",
+    "rows": [
+     {
+      "title": "Uncle Rob",
+      "when": "Birthday",
+      "note": "",
+      "late": false
+     }
+    ],
+    "more": 0
+   },
+   {
+    "label": "Tuesday \u00b7 Nov 24",
+    "rows": [
+     {
+      "title": "Car service",
+      "when": "8 AM",
+      "note": "@ Bayside Honda",
+      "late": false
+     },
+     {
+      "title": "Put the bins out",
+      "when": "To do",
+      "note": "",
+      "late": false
+     }
+    ],
+    "more": 0
    }
   ],
-  "events_more": 1,
-  "next": "",
-  "tomorrow": [
-   {
-    "time": "7 AM",
-    "title": "Recycling out",
-    "place": ""
-   },
-   {
-    "time": "3:30 PM",
-    "title": "Parent-teacher conference",
-    "place": "PS 41"
-   }
-  ],
-  "tasks": [
-   {
-    "title": "Pay the water bill",
-    "when": "Late",
-    "late": true
-   },
-   {
-    "title": "Sign Ava's field trip form",
-    "when": "3 PM",
-    "late": false
-   },
-   {
-    "title": "Order Thanksgiving turkey",
-    "when": "",
-    "late": false
-   },
-   {
-    "title": "Call the plumber about the upstairs sink",
-    "when": "",
-    "late": false
-   }
-  ],
-  "tasks_more": 2,
-  "overdue": 1,
-  "birthdays": [
-   "Grandma Joan: turns 80 tomorrow"
-  ]
+  "none": "Nothing planned or due today"
  },
  "calendar": {
   "screen": "calendar",
@@ -167,7 +255,7 @@
    }
   ],
   "count": 9,
-  "more": 1
+  "more": 0
  },
  "tasks": {
   "screen": "tasks",

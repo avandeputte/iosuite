@@ -95,7 +95,8 @@ class _Parser(html.parser.HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         n = Node(tag, attrs, self.cur)
-        self.cur.kids.append(n)
+        if tag != "style":  # a style sheet is the browser's: what it says, the drawing does of itself
+            self.cur.kids.append(n)
         if tag not in ("img", "br", "svg", "circle", "rect", "path"):
             self.cur = n
 
@@ -404,6 +405,9 @@ def _style(n: Node, s: float, bits: int = 1, dense: bool = False) -> Style:
     for g, v in (("gap--xsmall", 5), ("gap--small", 7), ("gap--base", 10), ("gap--medium", 16), ("gap--large", 20), ("gap--xlarge", 30), ("gap--none", 0)):
         if g in c and st.kind in ("box", "grid", "columns"):
             st.gap = px(v)
+    exact = next((x for x in c if re.fullmatch(r"gap--\[\d+px\]", x)), None)  # a gap of so many of the framework's pixels
+    if exact and st.kind in ("box", "grid", "columns"):
+        st.gap = px(int(exact[6:-3]))
     if "w--full" in c:
         st.full = True
     wide = next((x for x in c if re.fullmatch(r"w--\d+", x)), None)  # a box of a set width: N times 4 of the framework's pixels
@@ -568,17 +572,22 @@ class Drawer:
         src = [k for col in n.kids if "column" in col.cls for k in col.kids if not k.st.hidden]
         layout = n.up("layout")
         budget = getattr(layout, "budget", INF) if layout is not None else INF
+        if budget < INF and n.parent is layout and layout.st.dir != "row":
+            # what stands above and below the columns in their layout (a header line) is not theirs to fill
+            for k in self.kids(layout):
+                if k is not n:
+                    budget -= self.size(k, layout.room, layout.st.ai == "stretch")[1] + k.st.mt + k.st.mb + layout.st.gap
         try:
             most = max(1, int(n.attrs.get("data-overflow-max-cols") or 1))
         except ValueError:
             most = 1
         if n.attrs.get("data-overflow") != "true":
             most, budget = max(1, len([c for c in n.kids if "column" in c.cls])), INF
-        gap = self.s * GAP
+        gap = self.s * GAP  # between a column's lines; between the columns it is the gap the element asks for
         head = lambda k: "group-header" in k.cls  # noqa: E731
         best = None
         for count in range(1, most + 1):
-            colw = round((inner - gap * (count - 1)) / count / self.s) * self.s
+            colw = round((inner - n.st.gap * (count - 1)) / count / self.s) * self.s
             hs = [self.size(k, colw, True)[1] for k in src]
             cols, y, hidden, group, i = [[]], 0.0, 0, None, 0
             while i < len(src):
@@ -638,7 +647,7 @@ class Drawer:
         b = st.border
         ix, iy, iw, ih = x + st.pl + b, y + st.pt + b, w - st.pl - st.pr - 2 * b, h - st.pt - st.pb - 2 * b
         if "layout" in n.cls:
-            n.budget = ih
+            n.budget, n.room = ih, iw
         if st.kind == "text":
             self._text(n, max(0.0, iw))
             return
@@ -668,7 +677,7 @@ class Drawer:
             cx = ix + (free / 2 if st.jc == "center" else free if st.jc == "end" else 0)
             step = free / (len(ks) - 1) if st.jc == "between" and len(ks) > 1 else 0
             for k, (kw, kh) in zip(ks, sz):
-                if st.ai == "stretch" and k.st.h is None:
+                if (st.ai == "stretch" or "item" in k.cls) and k.st.h is None:  # an item is as tall as its row, whatever the row says
                     kh, ky = ih, iy
                 else:
                     ky = iy + (0 if st.ai == "start" else ih - kh if st.ai == "end" else (ih - kh) / 2)

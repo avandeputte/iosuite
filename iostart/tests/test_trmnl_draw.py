@@ -70,9 +70,9 @@ def test_as_trmnl_draws_it(screen, size, bits, most, elsewhere):
     assert apart(img, ref) <= (0.04 if (screen, size, bits) in ORPHAN else elsewhere)
 
 
-# on the TRMNL X: every full screen, health in every size (the rings), and one of each other size
+# on the TRMNL X: every full screen, health (the rings) and today (its list) in every size, and one of each other size
 LARGER = ([(s, "full", 4, 0.02) for s in trmnl.SCREENS] + [("health", z, 4, 0.02) for z in trmnl.SIZES if z != "full"]
-          + [("today", "half_horizontal", 4, 0.02), ("money", "half_vertical", 4, 0.02), ("weather", "half_vertical", 4, 0.02), ("calendar", "quadrant", 4, 0.02),
+          + [("today", z, 4, 0.02) for z in trmnl.SIZES if z != "full"] + [("money", "half_vertical", 4, 0.02), ("weather", "half_vertical", 4, 0.02), ("calendar", "quadrant", 4, 0.02),
              ("tasks", "full", 1, 0.03)])
 
 
@@ -81,8 +81,9 @@ def test_the_larger_trmnl(screen, size, bits, most):
     img, ref = drawn(screen, size, bits, 1.8, (1872, 1404)), reference(f"{screen}-{size}-x{bits}")
     assert img.size == (1872, 1404)
     assert trmnldraw.same(img, ref) <= most
-    # among the quadrants is the calendar's, where a header is left alone (ORPHAN) on this screen
-    assert apart(img, ref, 2) <= (0.04 if size == "quadrant" else 0.005)
+    # among the quadrants is the calendar's and among the halves standing side by side today's, where a header is
+    # left alone (ORPHAN) on this screen
+    assert apart(img, ref, 2) <= (0.05 if size in ("quadrant", "half_vertical") else 0.005)
 
 
 def test_classes_for_the_large_screen():
@@ -225,7 +226,7 @@ def test_what_the_markup_uses_is_known():
         m = trmnl.markup(screen)
         for part in m.values():
             for cls in re.findall(r'class="([^"]*)"', part):
-                used |= {c for c in re.sub(r"\{[%{].*?[%}]\}", " ", cls).split() if not c.startswith("col--span-") and not re.fullmatch(r"(lg:)?[wh]--\d+", c)}
+                used |= {c for c in re.sub(r"\{[%{].*?[%}]\}", " ", cls).split() if not c.startswith("col--span-") and not re.fullmatch(r"(lg:)?[wh]--\d+|gap--\[\d+px\]", c)}
     plain = {c for c in used if ":" not in c}
     sized = {c[3:] for c in used if c.startswith("lg:")}
     assert all(c.startswith("lg:") for c in used - plain), sorted(used - plain)  # no sm: or md:, which the drawing does not read

@@ -8,8 +8,8 @@ only lays it out:
 
     GET /api/trmnl/{screen}?tz=Europe/Brussels&clock=12|24
 
-The screens (SCREENS): today (the date, the weather, what is left of today with each event's place, tomorrow, today's
-tasks, birthdays), calendar (the next seven days), tasks (due today and late), docs (ioDocs' to renew), health (steps,
+The screens (SCREENS): today (the date, the weather, and what the start page's Today card lists: what is left of
+today's events and tasks, birthdays, then the coming days), calendar (the next seven days), tasks (due today and late), docs (ioDocs' to renew), health (steps,
 rings, last night's sleep, the week), money (ioMoney's bills of the week, accounts running low, links behind),
 weather (the start page's own: now, the next hours, the coming days, with the start page's weather glyphs).
 
@@ -40,7 +40,7 @@ from app import apps, wall, weather, widgets
 
 SCREENS = {
     "today": {"name": "Today", "apps": ["iocalendar", "iotask", "iocontact"], "every": 15,
-              "about": "The date, the weather, what is left of today with each place, tomorrow, today's tasks"},
+              "about": "The date, the weather, today's events, tasks and birthdays, then the coming days as far as there is room"},
     "calendar": {"name": "Calendar", "apps": ["iocalendar"], "every": 15, "about": "ioCalendar: the next seven days"},
     "tasks": {"name": "Tasks", "apps": ["iotask"], "every": 15, "about": "ioTask: what is due today, the late ones first"},
     "docs": {"name": "Documents", "apps": ["iodocs"], "every": 240, "about": "ioDocs: the papers to renew"},
@@ -169,16 +169,6 @@ def _tasks(items, z, h24: bool) -> list:
     return out
 
 
-def _birthdays(items) -> list:
-    out = []
-    for b in items or []:
-        if (b.get("in") or 0) > 1:
-            continue
-        what = (f"turns {b['turns']}" if b.get("turns") else "birthday") if b.get("label", "birthday") == "birthday" else b.get("label")
-        out.append(f"{b.get('name')}: {what} {in_days(b.get('in'))}")
-    return out[:3]
-
-
 # ------------------------------------------------------------------ the screens
 
 def _wall_event(o: dict, z, h24: bool) -> dict:
@@ -200,20 +190,76 @@ def _when(o: dict, z, today: dt.date, h24: bool) -> str:
     return day_name(d, today) if (d - today).days < 7 else month_day(d)
 
 
+AHEAD = 30  # the lines of the coming days a screen lists at most (about what the large screen's full view holds)
+BIRTHDAY = re.compile(r"\b(birthday|anniversary)\b", re.I)
+
+
 def _today(request, z, now, h24):
-    """From the wall display's feed (wall.feed): the same events, tasks, birthdays and weather as the start page's #/wall."""
+    """What the start page's Today card lists, from the wall display's feed (wall.feed) and ioTask's coming week:
+    list: [{label, rows: [{title, when, note, late}], more}], today first and then each of the coming six days that
+    has anything, a day's rows as the card orders them: what is late, ioContact's birthdays, the all-day events,
+    what has an hour by the hour (events and tasks together), the tasks without one. The markup shows as many
+    as the screen has room for. none: what to say of a day with nothing."""
     today = now.date()
     f = wall.feed(request, str(now.tzinfo))
-    tom = next((d for d in f.get("days") or [] if d.get("date") == (today + dt.timedelta(days=1)).isoformat()), None)
     t = f.get("tasks") or {}
+    week = (_ask(request, "iotask", tz=str(now.tzinfo), kind="week", n=20) or {}) if f.get("tasks") is not None else {}
+    days: dict = {}  # day -> [(order, row)]
+
+    def put(day, order, title, when, note="", late=False):
+        days.setdefault(day, []).append((order, {"title": str(title or "(no title)")[:80], "when": when, "note": note[:60], "late": late}))
+
+    dates = [b for b in f.get("birthdays") or [] if b.get("in") is not None and 0 <= b["in"] <= 6]
+    for b in dates:
+        born = b.get("label", "birthday") == "birthday"
+        put(today + dt.timedelta(days=b["in"]), -0.5, b.get("name"), "Birthday" if born else str(b.get("label") or "").capitalize(),
+            (f"\u00b7 turns {b['turns']}" if born else f"\u00b7 {b['turns']} years") if b.get("turns") else "")
+
+    def events(day, items):
+        for o in items or []:
+            # ioCalendar's Birthdays calendar has ioContact's dates too ("Ava Calloway's birthday"): once is enough
+            if o.get("allDay") and BIRTHDAY.search(o.get("title") or "") and any(
+                    b["in"] == (day - today).days and str(b.get("name") or "\0") in (o.get("title") or "") for b in dates):
+                continue
+            e = _wall_event(o, z, h24)
+            put(day, 0 if o.get("allDay") or o.get("s") is None else o["s"], e["title"], e["time"], f"@ {e['place']}" if e["place"] else "")
+
+    def task(x, day=None, late=False):
+        d = _at(x.get("due"), z) if x.get("due") and not x.get("allDay") else None
+        if day is None:  # one of the coming week's: on the day it is due
+            try:
+                day = d.date() if d else dt.date.fromisoformat(str(x.get("due"))[:10])
+            except ValueError:
+                return
+        put(day, -1 if late else d.timestamp() if d else float("inf"), x.get("title"), "Late" if late else f"Due {clock(d, h24)}" if d else "To do", late=late)
+
+    events(today, f.get("today"))
+    for x in t.get("items") or []:
+        task(x, today, bool(x.get("late")))
+    for d in f.get("days") or []:
+        try:
+            events(dt.date.fromisoformat(str(d.get("date"))[:10]), d.get("items"))
+        except ValueError:
+            continue
+    for x in week.get("week") or []:
+        task(x)
+    rows = lambda day: [r for _, r in sorted(days.get(day, []), key=lambda x: x[0])]  # noqa: E731
     nxt = f.get("next")
-    return {"weather": _weather(f.get("weather"), today), "has_calendar": f.get("today") is not None, "has_tasks": f.get("tasks") is not None,
-            "events": [_wall_event(o, z, h24) for o in f.get("today") or []][:6],
-            "events_more": max(0, len(f.get("today") or []) - 6) + (f.get("todayMore") or 0),
-            "next": f"Next: {nxt.get('title') or '(no title)'}, {_when(nxt, z, today, h24)}" if nxt and not f.get("today") else "",
-            "tomorrow": [_wall_event(o, z, h24) for o in (tom or {}).get("items") or []][:4],
-            "tasks": _tasks(t.get("items"), z, h24), "tasks_more": t.get("more") or 0, "overdue": t.get("overdue") or 0,
-            "birthdays": _birthdays(f.get("birthdays"))}
+    ahead = [d for d in sorted(days) if today < d <= today + dt.timedelta(days=6)]
+    first = rows(today)
+    if nxt and not first and not ahead:  # nothing today and nothing in the week: the next event, however far off
+        first.append({"title": str(nxt.get("title") or "(no title)")[:80], "when": "Next", "note": _when(nxt, z, today, h24), "late": False})
+    late = t.get("overdue") or 0
+    out = [{"label": f"Today \u00b7 {late} late" if late else "Today", "rows": first, "more": (f.get("todayMore") or 0) + (t.get("more") or 0)}]
+    left = AHEAD
+    for d in ahead:
+        if left <= 0:
+            break
+        out.append({"label": f"{day_name(d, today)} \u00b7 {month_day(d)}", "rows": rows(d)[:left], "more": 0})
+        left -= len(out[-1]["rows"])
+    cal, tasks = f.get("today") is not None, f.get("tasks") is not None
+    return {"weather": _weather(f.get("weather"), today), "list": out,
+            "none": "Nothing planned or due today" if cal and tasks else "Nothing planned today" if cal else "Nothing due today" if tasks else "No birthdays today"}
 
 
 def _calendar(request, z, now, h24):
@@ -392,7 +438,11 @@ def build(request, screen: str, tz: str = "", h24: bool = False, now: dt.datetim
 
 def fit(d: dict) -> dict:
     """Under LIMIT bytes: the longest lists are shortened (from their end, and 'more' counts on) until it fits."""
-    lists = [k for k in ("events", "tomorrow", "tasks", "items", "bills", "days") if isinstance(d.get(k), list)]
+    lists = [k for k in ("tasks", "items", "bills", "days") if isinstance(d.get(k), list)]
+    while len(json.dumps(d, ensure_ascii=False).encode()) > LIMIT and len(d.get("list") or []) > 1:
+        d["list"][-1]["rows"].pop()  # the Today screen: the furthest day's last line first, today's own never
+        if not d["list"][-1]["rows"]:
+            d["list"].pop()
     while len(json.dumps(d, ensure_ascii=False).encode()) > LIMIT:
         k = max(lists, key=lambda k: len(json.dumps(d[k])), default=None)
         if k == "days" and all("events" in x for x in d["days"]):
@@ -402,9 +452,8 @@ def fit(d: dict) -> dict:
             longest["events"].pop()
         elif k and d[k]:
             d[k].pop()
-            more = {"events": "events_more", "tasks": "tasks_more" if "tasks_more" in d else "more"}.get(k, "more")
-            if more in d:
-                d[more] = (d[more] or 0) + 1
+            if "more" in d:
+                d["more"] = (d["more"] or 0) + 1
         else:
             break
     return d

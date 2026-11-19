@@ -30,12 +30,18 @@ def test_wording():
 def test_screens(client, apps_answer):
     today = client.get(f"/api/trmnl/today?tz={TZ}").json()
     assert today["screen"] == "today" and today["weekday"] and today["updated"]
-    assert today["events"][0]["title"] == "Dinner" and today["events"][0]["place"] == "Nan Xiang Dumpling"
-    assert today["events"][0]["time"].endswith(("AM", "PM"))
-    assert today["tomorrow"] == [{"time": "9:30 AM", "title": "Dentist", "place": ""}]
-    assert [t["title"] for t in today["tasks"]] == ["Take out the bins", "Pay the water bill"] and today["tasks"][1]["when"] == "Late"
-    assert today["overdue"] == 1 and today["birthdays"] == ["Ava: turns 9 tomorrow"] and today["weather"] is None
-    assert client.get(f"/api/trmnl/today?tz={TZ}&clock=24").json()["tomorrow"][0]["time"] == "09:30"
+    first, ahead = today["list"][0], today["list"][1:]
+    assert first["label"] == "Today \u00b7 1 late" and first["more"] == 0
+    # the order of the start page's Today card: what is late, then what has an hour, then the tasks without one
+    assert [(r["title"], r["when"]) for r in first["rows"]][0] == ("Pay the water bill", "Late") and first["rows"][0]["late"]
+    assert first["rows"][1]["title"] == "Dinner" and first["rows"][1]["when"].endswith(("AM", "PM")) and first["rows"][1]["note"] == "@ Nan Xiang Dumpling"
+    assert first["rows"][2] == {"title": "Take out the bins", "when": "To do", "note": "", "late": False}
+    # the coming days, each under its name: ioContact's birthday first, the events, ioTask's coming week on its day
+    assert ahead[0]["label"].startswith("Tomorrow \u00b7 ")
+    assert [(r["title"], r["when"], r["note"]) for r in ahead[0]["rows"]] == [("Ava", "Birthday", "\u00b7 turns 9"), ("Dentist", "9:30 AM", "")]
+    assert ("Book flights", "To do") in [(r["title"], r["when"]) for g in ahead for r in g["rows"]]
+    assert today["none"] == "Nothing planned or due today" and today["weather"] is None
+    assert client.get(f"/api/trmnl/today?tz={TZ}&clock=24").json()["list"][1]["rows"][1]["when"] == "09:30"
     cal = client.get(f"/api/trmnl/calendar?tz={TZ}").json()
     assert cal["days"][0]["label"] == "Today" and cal["days"][1]["label"] == "Tomorrow" and cal["days"][1]["events"][0]["title"] == "Dentist"
     tasks = client.get(f"/api/trmnl/tasks?tz={TZ}").json()
@@ -106,10 +112,46 @@ def test_weather_screen(client, apps_answer, monkeypatch):
     assert "base64_encode" in z.read("full.liquid").decode() and "capture wx_all" in z.read("shared.liquid").decode()
 
 
+def test_today_lists_what_the_card_lists(monkeypatch):
+    """The Today screen from the wall's feed: a birthday from ioContact and ioCalendar's all-day event for it are one line,
+    a task with an hour goes among the events by the hour, nothing today or this week shows the next event."""
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    z = ZoneInfo(TZ)
+    now = dt.datetime(2026, 11, 19, 8, 5, tzinfo=z)
+    at = lambda d, h, m=0: int(dt.datetime(2026, 11, d, h, m, tzinfo=z).timestamp())  # noqa: E731
+    feed = {"today": [{"title": "Riley's dentist", "allDay": False, "s": at(19, 9, 30), "place": "Bayside Dental"},
+                      {"title": "Theo: no school", "allDay": True, "day": "2026-11-19", "place": ""}],
+            "todayMore": 0, "next": None,
+            "days": [{"date": "2026-11-21", "items": [{"title": "Grandma Joan's birthday", "allDay": True, "day": "2026-11-21", "place": ""},
+                                                      {"title": "Soccer", "allDay": False, "s": at(21, 10), "place": ""}]}],
+            "tasks": {"items": [{"title": "Sign the form", "due": "2026-11-19T15:00:00-05:00"}, {"title": "Call the plumber"}], "more": 2, "overdue": 0},
+            "birthdays": [{"name": "Grandma Joan", "in": 2, "label": "birthday", "turns": 80}, {"name": "Ann & Rob", "in": 0, "label": "anniversary", "turns": 25}]}
+    monkeypatch.setattr(trmnl.wall, "feed", lambda request, tz="": feed)
+    monkeypatch.setattr(trmnl, "_ask", lambda request, key, **kw: {"week": [{"title": "Book flights", "due": "2026-11-24", "allDay": True}]})
+    d = trmnl._today(None, z, now, False)
+    first = d["list"][0]
+    assert first["label"] == "Today" and first["more"] == 2
+    assert [(r["title"], r["when"]) for r in first["rows"]] == [("Ann & Rob", "Anniversary"), ("Theo: no school", "All day"), ("Riley's dentist", "9:30 AM"),
+                                                                 ("Sign the form", "Due 3 PM"), ("Call the plumber", "To do")]
+    assert [g["label"] for g in d["list"][1:]] == ["Saturday \u00b7 Nov 21", "Tuesday \u00b7 Nov 24"]
+    assert [(r["title"], r["note"]) for r in d["list"][1]["rows"]] == [("Grandma Joan", "\u00b7 turns 80"), ("Soccer", "")]
+    feed.update(today=[], days=[], tasks={"items": [], "more": 0, "overdue": 0}, birthdays=[],
+                next={"title": "Car service", "allDay": False, "s": at(30, 8), "place": ""})
+    monkeypatch.setattr(trmnl, "_ask", lambda request, key, **kw: {"week": []})
+    d = trmnl._today(None, z, now, False)
+    assert len(d["list"]) == 1 and d["list"][0]["rows"][0]["title"] == "Car service" and d["list"][0]["rows"][0]["when"] == "Next"
+
+
 def test_fit_under_the_limit():
     d = {"screen": "tasks", "tasks": [{"title": "x" * 70, "when": ""} for _ in range(200)], "more": 0}
     out = trmnl.fit(d)
     assert len(json.dumps(out).encode()) <= trmnl.LIMIT and out["more"] == 200 - len(out["tasks"])
+    rows = lambda n: [{"title": "y" * 70, "when": "To do", "note": "", "late": False} for _ in range(n)]  # noqa: E731
+    d = {"screen": "today", "list": [{"label": "Today", "rows": rows(30), "more": 0}, {"label": "Tomorrow", "rows": rows(30), "more": 0},
+                                     {"label": "Saturday", "rows": rows(30), "more": 0}]}
+    out = trmnl.fit(d)  # the furthest days give way first, today's own lines never
+    assert len(json.dumps(out).encode()) <= trmnl.LIMIT and len(out["list"][0]["rows"]) == 30 and len(out["list"]) == 2 and 0 < len(out["list"][1]["rows"]) < 30
 
 
 def test_plugin_zip(client):
@@ -133,8 +175,9 @@ def test_markup_renders():
     liquid = pytest.importorskip("liquid")
     env = liquid.Environment()
     sample = {"weekday": "Thursday", "date": "November 19", "date_short": "Thu, Nov 19", "updated": "8:05 AM", "weather": None, "has_calendar": True,
-              "has_tasks": True, "events": [{"time": "6 PM", "title": "Dinner", "place": "Nan Xiang"}], "events_more": 0, "next": "", "tomorrow": [],
-              "tasks": [{"title": "Bins", "when": "Late", "late": True}], "tasks_more": 0, "overdue": 1, "birthdays": [], "days": [], "more": 0,
+              "has_tasks": True, "list": [{"label": "Today", "more": 1, "rows": [{"title": "Bins", "when": "Late", "note": "", "late": True}]},
+                                             {"label": "Tomorrow", "more": 0, "rows": [{"title": "Dinner", "when": "6 PM", "note": "@ Nan Xiang", "late": False}]}],
+              "none": "Nothing planned or due today", "tasks": [{"title": "Bins", "when": "Late", "late": True}], "overdue": 1, "days": [], "more": 0,
               "items": [], "expired": 0, "steps": "1,000", "rings": [], "sleep": "", "in_bed": "", "week": [], "average": "", "bills": [],
               "total": "", "low": [], "behind": []}
     forecast = {"place": "New York", "temp": "68°", "text": "Sunny", "icon": 0, "feels": "70°", "hi": "72°", "lo": "55°", "rain": "", "note": "Rain from 3 PM",

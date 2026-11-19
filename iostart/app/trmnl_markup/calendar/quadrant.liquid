@@ -4,7 +4,7 @@
     <div class="column">
       {%- for d in days limit: 2 %}
       {%- if d.events.size > 0 or forloop.first %}
-      <span class="label label--underline group-header lg:label--large" data-group-header="true">{{ d.label }} &middot; {{ d.date }}</span>
+      <span class="label label--underline group-header" data-group-header="true">{{ d.label }} &middot; {{ d.date }}</span>
       {%- for e in d.events limit: 3 %}
       <div class="item">
         <div class="meta"></div>
