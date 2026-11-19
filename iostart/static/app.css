@@ -238,7 +238,7 @@ body.home #main { top: env(safe-area-inset-top); }
 .glance { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(300px, 1fr); gap: 16px; margin-top: 16px; }
 .glance.one { grid-template-columns: minmax(0, 1fr); }
 .glance:empty { display: none; }
-.glance .card { padding: 11px 16px 12px; gap: 6px; }
+.glance .card { padding: 16px; gap: 9px; }
 .gside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .gside > .card { flex: 1 1 auto; }
 .gside.flat { flex-direction: row; } .gside.flat > .card { flex: 1 1 0; }  /* no Today card: the two side by side */
@@ -261,7 +261,7 @@ body.home #main { top: env(safe-area-inset-top); }
 a.gday:hover { text-decoration: underline; }
 .todaycols a.wgev:hover .wgtitle { text-decoration: underline; }
 .wgwhere { margin-left: auto; flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-s); }
-.glance .wgrings { width: 52px; height: 52px; }
+.glance .wgrings { width: 60px; height: 60px; }
 /* one row of small photos, as many of the six as fit at 60px or more (four in the narrow column); the rest stay out of sight */
 .glance .wgpix { grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); grid-template-rows: auto; grid-auto-rows: 0; row-gap: 0; overflow: hidden; }
 .agenda { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }

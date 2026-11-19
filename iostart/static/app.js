@@ -1040,6 +1040,7 @@ function drawMoneyWidget(d) {
     On this day, one above the other. Each part is there when its app is on the page and answers; a row opens its app.
     again: a refresh, which keeps what the cards show when nothing answers. */
 const GLANCE_LINES = 9, GLANCE_PHOTOS = 6;  // the most lines of today in the Today card's list (and of the coming days, on a phone); On this day's photos
+const GLANCE_MIN = 8;  // the lines the list has at least when there are that many, however low the cards beside it are
 const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 async function drawGlance(el, again = false) {
   const app = (k) => S.apps.find((a) => a.key === k);
@@ -1069,7 +1070,7 @@ async function drawGlance(el, again = false) {
   const events = mine(withoutBirthdays((cal && cal.today) || []), 0);
   const all = byHour([...dates.filter((b) => b.in === 0).map(dateRow), ...((task && task.today) || []).map(taskRow), ...events.map(eventRow)]), lines = all.slice(0, GLANCE_LINES);
   const moreToday = all.length - lines.length + ((cal && cal.more) || 0) + ((task && task.more) || 0);
-  const none = cal && task ? 'Nothing planned or due' : cal ? EMPTY.iocalendar : task ? EMPTY.iotask : 'No birthdays today';
+  const none = cal && task ? 'Nothing planned or due today' : cal ? 'Nothing planned today' : task ? EMPTY.iotask : 'No birthdays today';
   if (!lines.length) lines.push(h('div', { class: 'muted small' }, none));
   // the coming days, each under its name, while the column has lines left (a day's name and at least one row of it)
   const ahead = new Map();
@@ -1108,7 +1109,8 @@ async function drawGlance(el, again = false) {
   el.fit();
 }
 /** The coming days in the Today card's list: with the other cards beside it, as many rows as fit without the card growing
-    taller than they (or today's own rows) make it; on its own (a phone), up to GLANCE_LINES lines with today's. The head says how many are left out (unless
+    taller than they (or today's own rows) make it, and GLANCE_MIN lines with today's whatever their height (a low Health
+    card alone must not leave the list empty); on its own (a phone), up to GLANCE_LINES lines with today's. The head says how many are left out (unless
     it has something to say about today). */
 function fitGlance(el, plans, shown, later, beyond) {
   if (!plans || !plans.isConnected) return;
@@ -1117,10 +1119,14 @@ function fitGlance(el, plans, shown, later, beyond) {
   for (const step of later) show(step, false);
   const card = el.querySelector('.todaycard'), side = el.querySelector('.gside');
   if (card && side && Math.abs(card.offsetTop - side.offsetTop) < 4) {  // side by side: the row stays as low as it is
-    for (const tall = el.offsetHeight; i < later.length; i++) { show(later[i], true); if (el.offsetHeight > tall) { show(later[i], false); break; } }
+    for (const tall = el.offsetHeight; i < later.length; i++) {
+      show(later[i], true);
+      if (shown + later[i].length > GLANCE_MIN && el.offsetHeight > tall) { show(later[i], false); break; }
+      shown += later[i].length;
+    }
   } else for (; i < later.length && shown + later[i].length <= GLANCE_LINES; i++) { show(later[i], true); shown += later[i].length; }
   const note = plans.querySelector('.wghead .muted');
-  if (note && beyond != null) { const left = later.slice(i).reduce((n, step) => n + step.filter((x) => !x.classList.contains('gday')).length, 0) + beyond; note.textContent = left ? `+${left} this week` : ''; }
+  if (note && beyond != null) { const left = later.slice(i).reduce((n, step) => n + step.filter((x) => !x.classList.contains('gday')).length, 0) + beyond; note.textContent = left ? `+${left} more this week` : ''; }
 }
 
 /** A low tile's one line (LOW); an app that is down or closed to this account leaves the line empty. */
