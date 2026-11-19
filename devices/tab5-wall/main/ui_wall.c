@@ -5,7 +5,7 @@
  * of the hour and the weather, or black.
  *
  * Touch: a swipe to the left or the right goes to the views beside the wall (ui_views.c); an event opens its details; a task's circle ticks it off; a Home Assistant tile switches it; a tap on the
- * photo shows the next one and the bar (add, timers, alarms, favorite, settings); holding it makes it a favorite. */
+ * photo shows the next one and the bar (add, timers, alarms, favorite, settings). */
 #include <string.h>
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -239,12 +239,6 @@ static void on_background(lv_event_t *e)
         }
         bar_show();
         if (feed_current_photo()) feed_next_photo();
-    } else if (c == LV_EVENT_LONG_PRESSED) {
-        if (feed_current_photo() && FEED->can_fav) {
-            toggle_favorite();
-        } else {
-            bar_show();
-        }
     }
 }
 
@@ -717,6 +711,7 @@ static void draw_chips(void)
         lv_obj_set_style_bg_color(c, lv_color_black(), 0);
         lv_obj_set_style_bg_opa(c, LV_OPA_40, 0);
         lv_color_t col = pct <= 15 ? lv_color_hex(0xff6b5e) : TEXT;
+        if (power_charging()) label(c, font_symbols(20), col, LV_SYMBOL_CHARGE);
         label(c, font_symbols(20), col, pct > 80 ? LV_SYMBOL_BATTERY_FULL : pct > 55 ? LV_SYMBOL_BATTERY_3 : pct > 30 ? LV_SYMBOL_BATTERY_2 : pct > 10 ? LV_SYMBOL_BATTERY_1 : LV_SYMBOL_BATTERY_EMPTY);
         lv_label_set_text_fmt(label(c, font_text(22), col, ""), "%d%%", pct);
     }
@@ -953,7 +948,6 @@ static void build(void)
     lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
     lv_obj_add_event_cb(scr, on_background, LV_EVENT_SHORT_CLICKED, NULL);
-    lv_obj_add_event_cb(scr, on_background, LV_EVENT_LONG_PRESSED, NULL);
     lv_obj_add_event_cb(scr, on_swipe, LV_EVENT_GESTURE, NULL);
 
     sky = box(scr);

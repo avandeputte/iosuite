@@ -722,6 +722,10 @@ void ui_show_settings(void)
     snprintf(t, sizeof t, "%s (the start page's)", FEED->zone[0] ? FEED->zone : "not known yet");
     kit_label(r, font_text(26), DIM, t);
 
+    r = setting(c, "Power");
+    power_text(t, sizeof t);
+    kit_label(r, font_text(26), DIM, t);
+
     r = setting(c, "Firmware");
     snprintf(t, sizeof t, "Version %s", wall_version());
     kit_label(r, font_text(26), DIM, t);
