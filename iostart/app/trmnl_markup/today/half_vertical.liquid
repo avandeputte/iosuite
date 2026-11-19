@@ -1,0 +1,39 @@
+<div class="layout layout--col layout--top layout--stretch-x gap">
+  <div class="flex flex--row flex--between w--full">
+    <div class="flex flex--col flex--left">
+      <span class="value value--small">{{ weekday }}</span>
+      <span class="label">{{ date }}</span>
+    </div>
+    {%- if weather %}
+    <div class="flex flex--col flex--right">
+      <span class="value value--small">{{ weather.temp }}</span>
+      <span class="label label--small" data-clamp="1">{{ weather.text }}</span>
+    </div>
+    {%- endif %}
+  </div>
+  <div class="flex flex--col flex--left gap--small w--full">
+    <span class="label label--underline">Today</span>
+    {%- for e in events limit: 4 %}
+    <div class="item">
+      <div class="meta"></div>
+      <div class="content">
+        <span class="title title--small" data-clamp="1">{{ e.title }}</span>
+        <span class="label label--small" data-clamp="1">{{ e.time }}{% if e.place != "" %} @ {{ e.place }}{% endif %}</span>
+      </div>
+    </div>
+    {%- endfor %}
+    {%- if events.size == 0 %}<span class="description">{% if next != "" %}{{ next }}{% else %}Nothing more today{% endif %}</span>{% endif %}
+  </div>
+  {%- if has_tasks %}
+  <div class="flex flex--col flex--left gap--xsmall w--full">
+    <span class="label label--underline">Tasks{% if overdue > 0 %} &middot; {{ overdue }} late{% endif %}</span>
+    {%- for t in tasks limit: 4 %}<span class="label" data-clamp="1">{{ t.title }}</span>{% endfor %}
+    {%- if tasks.size == 0 %}<span class="label label--small">Nothing due today</span>{% endif %}
+  </div>
+  {%- endif %}
+</div>
+<div class="title_bar">
+  <img class="image" src="{{ iosuite_icon }}">
+  <span class="title">Today</span>
+  <span class="instance">{{ updated }}</span>
+</div>

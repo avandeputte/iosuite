@@ -1,0 +1,26 @@
+<div class="layout layout--col layout--top layout--stretch-x">
+  {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
+  {%- if items.size == 0 and missing == nil %}<div class="flex flex--col flex--center w--full"><span class="value value--small">Nothing to renew</span></div>{% endif %}
+  <div class="columns" data-overflow="true" data-overflow-max-cols="1" data-overflow-counter="true">
+    <div class="column">
+      {%- for x in items limit: 6 %}
+      <div class="item">
+        <div class="meta"></div>
+        <div class="content">
+          <span class="title title--small" data-clamp="1">{{ x.title }}</span>
+          {%- if x.who != "" or x.kind != "" %}<span class="description" data-clamp="1">{{ x.kind }}{% if x.who != "" and x.kind != "" %} &middot; {% endif %}{{ x.who }}</span>{% endif %}
+          <div class="flex gap--small">
+            <span class="label label--small{% if x.expired %} label--inverted{% endif %}">{{ x.when }}</span>
+            
+          </div>
+        </div>
+      </div>
+      {%- endfor %}
+    </div>
+  </div>
+</div>
+<div class="title_bar">
+  <img class="image" src="{{ iosuite_icon }}">
+  <span class="title">To renew</span>
+  <span class="instance">{% if expired > 0 %}{{ expired }} expired{% endif %}</span>
+</div>

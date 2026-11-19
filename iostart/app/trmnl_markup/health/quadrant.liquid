@@ -1,0 +1,12 @@
+<div class="layout layout--col layout--center gap--small">
+  {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
+  {%- unless missing %}
+  <span class="value value--large" data-fit-value="true">{{ steps }}</span>
+  <span class="label">steps today{% if sleep != "" %} &middot; {{ sleep }} asleep{% endif %}</span>
+  {%- endunless %}
+</div>
+<div class="title_bar">
+  <img class="image" src="{{ iosuite_icon }}">
+  <span class="title">Health</span>
+  <span class="instance"></span>
+</div>

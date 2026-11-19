@@ -24,10 +24,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest<10", "httpx<1", "pyflakes<4"]
+test = ["pytest<10", "httpx<1", "pyflakes<4", "python-liquid<4"]
 
 [project.urls]
 Homepage = "https://github.com/avandeputte/iosuite/tree/main/iostart"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["trmnl_markup/*.liquid", "trmnl_markup/*/*.liquid"]

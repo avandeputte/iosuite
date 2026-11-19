@@ -1,0 +1,18 @@
+<div class="layout layout--col layout--top layout--stretch-x gap--small">
+  {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
+  {%- unless missing %}
+  {%- if total != "" %}<span class="title">{{ total }} due this week</span>{% endif %}
+      {%- for b in bills limit: 3 %}
+      <div class="flex flex--row flex--between w--full">
+        <span class="label" data-clamp="1">{{ b.day }} &middot; {{ b.name }}</span>
+        <span class="label value--tnums">{{ b.amount }}</span>
+      </div>
+      {%- endfor %}
+      {%- if bills.size == 0 %}<span class="description">No bills due this week</span>{% endif %}
+  {%- endunless %}
+</div>
+<div class="title_bar">
+  <img class="image" src="{{ iosuite_icon }}">
+  <span class="title">Bills</span>
+  <span class="instance"></span>
+</div>

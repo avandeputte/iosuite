@@ -13,7 +13,7 @@ import zipfile
 
 from iosuite_shared.access import json_body
 
-from app import access, apps, config, siteicons, bookmarkcheck, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, wall, weather, widgets
+from app import access, apps, config, siteicons, bookmarkcheck, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, trmnl, trmnlpush, wall, weather, widgets
 
 router = APIRouter()
 
@@ -588,6 +588,57 @@ def wall_pair_info(code: str):
 def wall_pair_approve(code: str, request: Request):
     """The signed-in person lets the device in: it gets an app password of theirs (Settings › Account lists it)."""
     return _wall(wall.pair_approve, code, request.state.user)
+
+
+# ------------------------------------------------------------------ TRMNL e-ink screens (app/trmnl.py, app/trmnlpush.py)
+
+@router.get("/api/trmnl", dependencies=[access.signed_in])
+def trmnl_settings(request: Request):
+    """Settings › TRMNL: the screens this person may put on a TRMNL, which of them the start page pushes and how the
+    last push went, their time zone and clock, and the address TRMNL reaches the start page at (for the plugin files)."""
+    return {**trmnlpush.state(request.state.user), "server": wall.base_url(request)}
+
+
+@router.put("/api/trmnl", dependencies=[access.signed_in])
+async def trmnl_save(request: Request):
+    """{tz?, clock? (12|24), hooks?: {screen: webhook URL | ''}}: which screens the start page pushes to TRMNL's cloud
+    and where. The first address makes the app password they are read with; the last one removed revokes it."""
+    b = await json_body(request)
+    return {**await run_in_threadpool(trmnlpush.configure, request.state.user, b), "server": wall.base_url(request)}
+
+
+@router.post("/api/trmnl/{screen}/send", dependencies=[access.signed_in])
+def trmnl_send(screen: str, request: Request):
+    """Push this screen now (Settings › TRMNL's Send now): {at, ok, error}."""
+    if screen not in trmnl.SCREENS:
+        raise HTTPException(404, "No such TRMNL screen")
+    got = trmnlpush.push(request.state.user["id"], only=screen, force=True)
+    if screen not in got:
+        raise HTTPException(400, "This screen is not pushed: add its TRMNL webhook address first")
+    return got[screen]
+
+
+@router.get("/api/trmnl/{screen}/plugin.zip", dependencies=[access.signed_in])
+def trmnl_plugin(screen: str, request: Request, mode: str = "poll"):
+    """The screen as a TRMNL private plugin, the zip TRMNL's Import new takes. mode poll: TRMNL (its cloud, or a
+    TRMNL server of your own) asks the start page, with an app password typed in TRMNL's form; push: the start page
+    sends it (strategy webhook). No password or key is in the file."""
+    if screen not in trmnl.SCREENS:
+        raise HTTPException(404, "No such TRMNL screen")
+    body = trmnl.plugin_zip(screen, "push" if mode == "push" else "poll", wall.base_url(request))
+    return Response(body, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="iosuite-trmnl-{screen}{"-push" if mode == "push" else ""}.zip"'})
+
+
+@router.get("/api/trmnl/{screen}", dependencies=[access.signed_in])
+def trmnl_data(screen: str, request: Request, tz: str = "", clock: str = "12"):
+    """What a TRMNL plugin shows (its polling URL): the screen's data, flat and already worded, as the person signed in
+    (an ioStart app password as Bearer, for TRMNL). tz: their time zone (TRMNL fills it in: trmnl.user.time_zone_iana);
+    clock: 12 or 24. Screens: today, calendar, tasks, docs, health, money."""
+    try:
+        return trmnl.build(request, screen, tz, clock == "24")
+    except trmnl.NoScreen:
+        raise HTTPException(404, "No such TRMNL screen (today, calendar, tasks, docs, health, money)")
 
 
 # the server (version, updates, the log, restart): iosuite_shared's server_router, mounted in main.py

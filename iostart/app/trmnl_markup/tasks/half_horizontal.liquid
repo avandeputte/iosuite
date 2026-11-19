@@ -1,0 +1,22 @@
+<div class="layout layout--col layout--top layout--stretch-x">
+  {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
+  {%- if tasks.size == 0 and missing == nil %}<div class="flex flex--col flex--center w--full"><span class="value value--small">Nothing due today</span></div>{% endif %}
+  <div class="columns" data-overflow="true" data-overflow-max-cols="3" data-overflow-counter="true">
+    <div class="column">
+      {%- for t in tasks limit: 6 %}
+      <div class="item">
+        <div class="meta"></div>
+        <div class="content">
+          <span class="title title--small" data-clamp="1">{{ t.title }}</span>
+          {%- if t.when != "" %}<span class="label label--small{% if t.late %} label--inverted{% endif %}">{{ t.when }}</span>{% endif %}
+        </div>
+      </div>
+      {%- endfor %}
+    </div>
+  </div>
+</div>
+<div class="title_bar">
+  <img class="image" src="{{ iosuite_icon }}">
+  <span class="title">Tasks today</span>
+  <span class="instance">{% if overdue > 0 %}{{ overdue }} late &middot; {% endif %}{% if more > 0 %}{{ more }} more &middot; {% endif %}updated {{ updated }}</span>
+</div>

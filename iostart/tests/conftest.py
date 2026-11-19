@@ -18,6 +18,7 @@ os.environ.update(_authtest.auth_env("suite_test_shared"))
 os.environ.setdefault("UPDATE_CHECK", "0")
 os.environ.setdefault("SITE_ICONS", "0")  # no fetching of the bookmarked sites' icons (tests/test_site_icons.py turns it on, mocked)
 os.environ.setdefault("HA_FEED", "0")  # no websocket thread toward a mocked Home Assistant
+os.environ.setdefault("TRMNL_PUSH", "0")  # no thread pushing TRMNL screens (tests/test_trmnl.py calls trmnlpush.push itself)
 os.environ.setdefault("LOG_FILE", "")  # no server log from the tests
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 

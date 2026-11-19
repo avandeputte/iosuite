@@ -42,6 +42,14 @@ what the app will show on the start page later (today's events, the newest photo
   the colours of the hour and the weather. Customize picks the background (photos, the sky or black) and how often
   the photo changes; the picture button on the wall goes to the next background. It keeps the screen on where the
   browser allows it; Escape or the ✕ (shown on a touch) goes back.
+- **TRMNL e-ink screens** (Settings › TRMNL): Today (the date, the weather, what is left of today with each place,
+  tomorrow, today's tasks, birthdays), Calendar (seven days), Tasks, Documents to renew, Health and Money, each a TRMNL
+  private plugin in its four sizes (full, the two halves and the quadrant, for TRMNL's mashups), downloaded as the zip
+  TRMNL's Import new takes. TRMNL reads `GET /api/trmnl/<screen>?tz=&clock=12|24` with an ioStart app password of
+  yours (a TRMNL server of your own inside the network, or TRMNL's cloud through Cloudflare Access with a service
+  token); or, when TRMNL's cloud cannot reach the start page, the start page sends each screen to the plugin's webhook
+  every 15 minutes when it changed (the webhook addresses and the app password it reads with are kept with the suite's
+  keys and tokens). The markup is in app/trmnl_markup/, on TRMNL's own design framework.
 - **A dot by each app's name**: green when the app answers its `/api/status`, red when it does not. Bookmarks the
   server cannot reach get a red dot too. The server asks each app once a minute and pings each bookmark every five (HEAD, redirects not followed; never its own address or a link-local one).
 - **Your own page** (the gear next to the date › Customize the page): untick the tiles and cards you do not need, put the tiles and
