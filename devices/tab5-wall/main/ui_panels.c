@@ -578,6 +578,15 @@ static void on_settings_closed(lv_event_t *e)
     ota_lbl = NULL;
 }
 
+/* a view's chip: lit while it is swiped to */
+static void on_view(lv_event_t *e)
+{
+    int i = (int)(intptr_t)lv_event_get_user_data(e);
+    VIEWS_OFF ^= 1u << i;
+    settings_save_views();
+    lv_obj_set_style_bg_color(lv_event_get_target(e), VIEWS_OFF >> i & 1 ? lv_color_hex(0x2a2c31) : ACCENT, 0);
+}
+
 static lv_obj_t *setting(lv_obj_t *c, const char *name)
 {
     lv_obj_t *r = hrow(c, 18);
@@ -656,6 +665,16 @@ void ui_show_settings(void)
 
     r = setting(c, "Volume");
     slider(r, &S.volume, 0);
+
+    r = setting(c, "Views");
+    int views = 0;
+    for (int i = 0; i < VIEWS; i++) {
+        if (!ui_views_has(i)) continue;
+        chip(r, ui_views_name(i), on_view, (void *)(intptr_t)i, !(VIEWS_OFF >> i & 1));
+        views++;
+    }
+    if (!views) kit_label(r, font_text(26), DIM, "None yet: the start page has not said which there are");
+    line(c, 22, DIM, "A swipe to the left or the right on the wall goes through the lit ones; after three minutes untouched, the wall is back.");
 
     r = setting(c, "Turn the screen around");
     toggle(r, S.flip, on_flip);

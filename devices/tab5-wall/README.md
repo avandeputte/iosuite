@@ -8,9 +8,14 @@ Firmware that puts the start page's wall (`#/wall`) on its own screen, on USB po
   1024 × 600. The wall is laid out the same, at four fifths of the Tab5's sizes.
 
 - **The wall:** clock and date, the weather now with the coming hours and days and a rain note, today's events
-  with their places ("6:00 PM Dinner @ Nan Xiang Dumpling") and the week's (swipe between them), birthdays,
+  with their places ("6:00 PM Dinner @ Nan Xiang Dumpling") and the week's (a tap on Week), birthdays,
   today's tasks, Home Assistant tiles, and ioPix photos behind it all (or a sky, or black: the start page's wall
   setting).
+- **Views a swipe away:** swipe left or right on the wall for the calendar's coming days, today's tasks, money
+  (the week's bills, accounts running low), health (steps, rings, sleep), the papers to renew and the weather, each
+  over the photo, darkened. They are the start page's TRMNL screens (`/api/trmnl/<screen>`), so a view is there when
+  the person signed in may see its app. Settings on the device chooses which are swiped to; a view left alone for
+  three minutes goes back to the wall.
 - **Touch:** tap an event for its details, tick a task done, tap a Home Assistant tile to switch it, tap the
   background for the next photo, hold it to make the photo a favorite in ioPix. Add a task or an event with the
   on-screen keyboard.
@@ -75,6 +80,7 @@ never updates itself; `WALL_VERSION=1.2 idf.py build` gives it a version.
 | `main/net.c` | Wi-Fi, the clock (SNTP) |
 | `main/api.c` | HTTP to the start page with the device's app password |
 | `main/feed.c` | `/api/wall/feed` every minute, the photos (`/api/wall/photo/<id>.jpg`, the P4's JPEG decoder), taps |
+| `main/ui_views.c` | the views beside the wall (`/api/trmnl/<screen>`) and the swipe between them |
 | `main/ui.c`, `ui_wall.c`, `ui_setup.c`, `ui_panels.c` | the screens (LVGL), laid out for 1280 × 720; `P()` brings each size to the board's screen |
 | `main/alarm.c` | timers, alarms, the sound |
 | `main/power.c` | the battery's level (the Tab5's INA226) |

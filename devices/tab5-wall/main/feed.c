@@ -325,6 +325,7 @@ static void feed_loop(void *arg)
 {
     for (;;) {
         fetch_once();
+        views_poll();
         bool ok;
         ui_lock();
         ok = FEED->ok && !FEED->why[0];

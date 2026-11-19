@@ -26,7 +26,7 @@ typedef struct {
     lv_font_t *f;
 } font_slot_t;
 
-static font_slot_t fonts[20];
+static font_slot_t fonts[48];   /* every size the screens ask for: one past the last would be made anew each time */
 static int nfonts;
 
 /* px: on this screen already */

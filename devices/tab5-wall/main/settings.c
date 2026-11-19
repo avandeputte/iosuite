@@ -9,6 +9,7 @@
 #define CFG_VERSION 3
 
 wall_settings_t S;
+uint32_t VIEWS_OFF;
 
 static void defaults(void)
 {
@@ -40,6 +41,7 @@ void settings_load(void)
     if (nvs_open("wall", NVS_READONLY, &h) != ESP_OK) {
         return;
     }
+    if (nvs_get_u32(h, "views_off", &VIEWS_OFF) != ESP_OK) VIEWS_OFF = 0;
     wall_settings_t got;
     size_t n = sizeof got;
     if (nvs_get_blob(h, "cfg", &got, &n) == ESP_OK && n == sizeof got && got.version == CFG_VERSION) {
@@ -65,6 +67,15 @@ void settings_save(void)
     nvs_close(h);
 }
 
+void settings_save_views(void)
+{
+    nvs_handle_t h;
+    if (nvs_open("wall", NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_u32(h, "views_off", VIEWS_OFF);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
 void settings_forget_sign_in(void)
 {
     S.token[0] = 0;
@@ -76,4 +87,6 @@ void settings_reset(void)
 {
     defaults();
     settings_save();
+    VIEWS_OFF = 0;
+    settings_save_views();
 }
