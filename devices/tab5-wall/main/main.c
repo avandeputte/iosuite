@@ -19,7 +19,7 @@ void app_main(void)
             .sw_rotate = true,   /* turned on its side by the P4's pixel processor (LVGL_PORT_ENABLE_PPA) */
         },
     };
-    cfg.lvgl_port_cfg.task_stack = 16384;
+    cfg.lvgl_port_cfg.task_stack = 32768;   /* the TrueType rasterizer draws on this stack */
     cfg.lvgl_port_cfg.task_affinity = 0;
     lv_display_t *disp = bsp_display_start_with_config(&cfg);
     if (!disp) {
