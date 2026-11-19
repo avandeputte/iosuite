@@ -50,6 +50,19 @@ what the app will show on the start page later (today's events, the newest photo
   token); or, when TRMNL's cloud cannot reach the start page, the start page sends each screen to the plugin's webhook
   every 15 minutes when it changed (the webhook addresses and the app password it reads with are kept with the suite's
   keys and tokens). The markup is in app/trmnl_markup/, on TRMNL's own design framework.
+- **A TRMNL server of its own** (Settings › TRMNL › Straight from the start page): the start page answers a TRMNL
+  device itself, so a TRMNL needs no TRMNL account, plugin or webhook, and nothing leaves the network. In the device's
+  Wi-Fi setup, give the start page's address inside the network as its server; it then shows a six-letter code, which
+  a signed-in person types in Settings › TRMNL to make it theirs. From then on it shows that person's screens, read as
+  them with their "TRMNL" app password, one playlist entry at each wake: a screen filling the display, or one of
+  TRMNL's mashup layouts (two, three or four screens sharing it). Per device: its name, how often it looks (5 minutes
+  to 4 hours), its shades (black and white or 4 grays on a TRMNL, up to 16 grays on a TRMNL X), a picture of each
+  entry as it is now, its battery, signal, firmware and last log lines. The pictures are drawn in Python
+  (app/trmnldraw.py, no browser), from the same markup, laid out as TRMNL's framework does and held against its own
+  renders in the tests (tests/trmnl_ref); an unchanged picture keeps its name, so the device does not fetch it again.
+  The device signs its requests (`/api/setup`, `/api/display`, `/api/log`, `/api/trmnl/image/…`, open without a
+  sign-in) with a key of its own, kept with the suite's keys and tokens; a reset device gets a new key only while its
+  owner has Pair again open. Fonts: TRMNL's own and Inter (app/trmnl_fonts, SIL Open Font License).
 - **A dot by each app's name**: green when the app answers its `/api/status`, red when it does not. Bookmarks the
   server cannot reach get a red dot too. The server asks each app once a minute and pings each bookmark every five (HEAD, redirects not followed; never its own address or a link-local one).
 - **Your own page** (the gear next to the date › Customize the page): untick the tiles and cards you do not need, put the tiles and

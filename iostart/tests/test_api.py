@@ -48,14 +48,14 @@ def test_server_info(client):
     s = client.get("/api/server").json()
     assert s["version"] and "canRun" in s and "autoCheck" not in s  # the daily check is the suite's switch (Updates)
     assert "about" not in s and "progress" in s and s["repo"] and s["branch"]
-    assert client.get("/api/log").status_code in (200, 404)  # the server log, when there is one
+    assert client.get("/api/log").status_code in (200, 405)  # the server log, when there is one (without, the path only takes a TRMNL device's POST)
 
 
 def test_the_server_log_is_for_admins_only(client):
     testing.add_account(client, {"name": "kid2", "password": "secret123", "role": "viewer"})
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"name": "kid2", "password": "secret123"}).status_code == 200
-    assert client.get("/api/log").status_code in (403, 404)  # 404: the tests run without a log file, so the route is not there
+    assert client.get("/api/log").status_code in (403, 405)  # 405: the tests run without a log file, so the path only takes a TRMNL device's POST
     assert client.post("/api/server", json={"action": "restart"}).status_code == 403
 
 

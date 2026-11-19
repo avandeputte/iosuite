@@ -624,3 +624,16 @@ a.hatile:hover { background: var(--bg3); }
 .trmnl-screen .btns { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
 .trmnl-screen .field { margin-top: 4px; }
 .err.small { font-size: var(--fs-s, 13px); margin-top: 0; min-height: 0; }
+.trmnl-device h3 { margin: 12px 0 6px; }
+.trmnl-rows { display: grid; gap: 6px; }
+.trmnl-row { display: flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid transparent; border-radius: var(--r-s); }
+.trmnl-row.on { border-color: var(--line); background: var(--bg2); }
+.trmnl-nr { width: 28px; height: 28px; flex: none; border-radius: 50%; color: var(--fg2); font-weight: 600; }
+.trmnl-row.on .trmnl-nr { background: var(--brand); color: #fff; }
+.trmnl-picks { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
+.trmnl-pic { display: block; width: 100%; max-width: 800px; height: auto; margin: 10px 0; border: 1px solid var(--line); border-radius: var(--r-s); background: #fff; }
+.trmnl-claim .trmnl-code { width: 150px; text-transform: uppercase; letter-spacing: .15em; font-weight: 600; }
+.trmnl-log ul { margin: 6px 0 0; padding-left: 18px; }
+.trmnl-addr { display: flex; align-items: center; gap: 4px; margin: 4px 0 8px; }
+.trmnl-addr code { font-size: var(--fs-m, 15px); padding: 6px 10px; border-radius: var(--r-s); background: var(--bg2); overflow-wrap: anywhere; }
+@media (max-width: 640px) { .trmnl-row { flex-wrap: wrap; } .trmnl-picks { flex-basis: calc(100% - 40px); } .trmnl-row .iconbtn:first-of-type { margin-left: auto; } }

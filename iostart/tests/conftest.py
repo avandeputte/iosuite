@@ -101,3 +101,44 @@ def via_providers(table: dict, asked: list, sent: list = None, cookie: bool = Tr
             raise widgets.Unavailable(403 if e.status == 401 else e.status, str(e))
         return got
     return fake
+
+
+@pytest.fixture()
+def apps_answer(monkeypatch):
+    """The apps a TRMNL screen reads, stood in for by their own providers over a table: (table, asked, sent). Times are
+    New York's (tests/test_trmnl.py, tests/test_trmnl_server.py)."""
+    import datetime as dt
+    from app import wall, widgets
+    table, asked, sent = {}, [], []
+    monkeypatch.setattr(widgets, "fetch", via_providers(table, asked, sent))
+    wall.forget()
+    zone = dt.timezone(dt.timedelta(hours=-5))
+    now = dt.datetime.now(dt.timezone.utc).astimezone(zone)
+    soon = (now + dt.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    today = now.date()
+    table[("iocalendar", "/api/calendars")] = {"items": [{"id": 1, "color": "#963522"}]}
+    table[("iocalendar", "/api/occurrences")] = lambda p: {"items": [
+        {"calendarId": 1, "title": "Dinner", "start": soon.isoformat(), "end": (soon + dt.timedelta(hours=2)).isoformat(), "allDay": False,
+         "location": "Nan Xiang Dumpling, 38-12 Prince St, Flushing"}] if p["start"][:10] == today.isoformat() else [
+        {"calendarId": 1, "title": "Dentist", "start": f"{(today + dt.timedelta(days=1)).isoformat()}T09:30:00-05:00",
+         "end": f"{(today + dt.timedelta(days=1)).isoformat()}T10:30:00-05:00", "allDay": False, "location": ""}]}
+    table[("iotask", "/api/lists")] = {"items": [{"id": 3, "color": "#2266aa"}]}
+    due = [{"id": 41, "title": "Take out the bins", "due": today.isoformat(), "dueAllDay": True, "listId": 3},
+           {"id": 42, "title": "Pay the water bill", "due": (today - dt.timedelta(days=2)).isoformat(), "dueAllDay": True, "listId": 3}]
+    table[("iotask", "/api/tasks")] = lambda p: {"items": due if p.get("due") == "today" else [{"id": 42}] if p.get("due") == "overdue" else []}
+    table[("iocontact", "/api/upcoming")] = {"items": [{"contactId": 5, "fn": "Ava", "label": "birthday", "turns": 9, "inDays": 1, "date": "x"}]}
+    table[("iopix", "/api/random")] = {"id": [], "ts": []}
+    table[("iodocs", "/api/documents")] = {"items": [
+        {"id": 1, "title": "Morgan's passport", "kindLabel": "Passport", "expiresOn": (today - dt.timedelta(days=7)).isoformat(),
+         "expiry": {"days": -7, "state": "expired"}, "people": []},
+        {"id": 2, "title": "Car registration", "kindLabel": "Registration", "expiresOn": (today + dt.timedelta(days=12)).isoformat(),
+         "expiry": {"days": 12, "state": "soon"}, "people": []}]}
+    table[("iohealth", "/api/series")] = lambda p: {"points": [{"t": int(dt.datetime.combine(today - dt.timedelta(days=i), dt.time(12)).replace(tzinfo=dt.timezone.utc).timestamp()),
+                                                                "v": 1000 * (i + 1)} for i in range(7)]}
+    table[("iohealth", "/api/sleep")] = {"items": [{"date": today.isoformat(), "asleep": 431, "inBed": 470}]}
+    table[("iohealth", "/api/activity")] = {"items": [{"move": 180, "moveGoal": 500, "exercise": 12, "exerciseGoal": 30, "stand": 3, "standGoal": 12}]}
+    table[("iomoney", "/api/bills")] = {"currency": "USD", "items": [{"day": today.isoformat(), "merchant": "Con Edison", "amount": -142.17, "currency": "USD"},
+                                                                     {"day": today.isoformat(), "merchant": "Netflix", "amount": -22.99, "currency": "USD", "paid": True}]}
+    table[("iomoney", "/api/forecast")] = {"items": []}
+    table[("iomoney", "/api/summary")] = {"monarch": {"stale": [{"name": "Checking", "institution": "Chase"}]}}
+    return table, asked, sent

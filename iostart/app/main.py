@@ -28,6 +28,12 @@ OPEN_PATHS = ("/", "/bookmarks", "/manifest.webmanifest", "/bookmarks.webmanifes
 # (a sync app shows that as "wrong password"), and the Nextcloud sign-in flow starts before anyone is signed in; a wall
 # display asks for its pairing code before it has a sign-in (approving one takes a signed-in person: its route says so)
 OPEN_PREFIXES = ("/static/", "/mcp", "/dav/", "/api/wall/pair")
+# a TRMNL e-ink device set to this server (app/trmnlserver.py) has no account: it signs its requests with its own key
+TRMNL_DEVICE = {("GET", "/api/setup"), ("GET", "/api/display"), ("POST", "/api/log")}
+
+
+def _device_asks(request) -> bool:
+    return (request.method, request.url.path) in TRMNL_DEVICE or (request.method == "GET" and request.url.path.startswith("/api/trmnl/image/"))
 
 
 @asynccontextmanager
@@ -59,7 +65,7 @@ mcp_enabled = mcp_switch.enabled
 
 # who is asking, whether sign-in is required at all, the cross-site check on writes, and the MCP endpoint's gate (the
 # switch; an app password or session; every tool acts as that account): iosuite-shared's middleware
-app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES,
+app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES, is_open=_device_asks,
                                        before=auth.mcp_gate(mcp_enabled, on_user=mcp.current_user.set,
                                                                     on_request=mcp.remember_sign_in)))
 

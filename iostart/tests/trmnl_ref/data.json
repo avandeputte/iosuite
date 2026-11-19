@@ -1,0 +1,377 @@
+{
+ "today": {
+  "screen": "today",
+  "name": "Today",
+  "weekday": "Thursday",
+  "date": "November 19",
+  "date_short": "Thu, Nov 19",
+  "updated": "8:05 AM",
+  "weather": {
+   "temp": "48\u00b0",
+   "text": "Mostly cloudy",
+   "hi": "52\u00b0",
+   "lo": "41\u00b0",
+   "rain": "40%",
+   "days": [
+    {
+     "day": "Fri",
+     "hi": "55\u00b0",
+     "lo": "44\u00b0",
+     "text": "Sunny"
+    }
+   ]
+  },
+  "has_calendar": true,
+  "has_tasks": true,
+  "events": [
+   {
+    "time": "All day",
+    "title": "Theo: no school",
+    "place": ""
+   },
+   {
+    "time": "9:30 AM",
+    "title": "Riley's dentist",
+    "place": "Bayside Dental"
+   },
+   {
+    "time": "4 PM",
+    "title": "Ava swim practice",
+    "place": "Flushing Meadows Aquatic Center"
+   },
+   {
+    "time": "6 PM",
+    "title": "Dinner with the Parks",
+    "place": "Nan Xiang Dumpling"
+   }
+  ],
+  "events_more": 1,
+  "next": "",
+  "tomorrow": [
+   {
+    "time": "7 AM",
+    "title": "Recycling out",
+    "place": ""
+   },
+   {
+    "time": "3:30 PM",
+    "title": "Parent-teacher conference",
+    "place": "PS 41"
+   }
+  ],
+  "tasks": [
+   {
+    "title": "Pay the water bill",
+    "when": "Late",
+    "late": true
+   },
+   {
+    "title": "Sign Ava's field trip form",
+    "when": "3 PM",
+    "late": false
+   },
+   {
+    "title": "Order Thanksgiving turkey",
+    "when": "",
+    "late": false
+   },
+   {
+    "title": "Call the plumber about the upstairs sink",
+    "when": "",
+    "late": false
+   }
+  ],
+  "tasks_more": 2,
+  "overdue": 1,
+  "birthdays": [
+   "Grandma Joan: turns 80 tomorrow"
+  ]
+ },
+ "calendar": {
+  "screen": "calendar",
+  "name": "Calendar",
+  "weekday": "Thursday",
+  "date": "November 19",
+  "date_short": "Thu, Nov 19",
+  "updated": "8:05 AM",
+  "days": [
+   {
+    "label": "Today",
+    "date": "Nov 19",
+    "events": [
+     {
+      "time": "All day",
+      "title": "Theo: no school",
+      "place": ""
+     },
+     {
+      "time": "9:30 AM",
+      "title": "Riley's dentist",
+      "place": "Bayside Dental"
+     },
+     {
+      "time": "4 PM",
+      "title": "Ava swim practice",
+      "place": "Flushing Meadows Aquatic Center"
+     },
+     {
+      "time": "6 PM",
+      "title": "Dinner with the Parks",
+      "place": "Nan Xiang Dumpling"
+     }
+    ]
+   },
+   {
+    "label": "Tomorrow",
+    "date": "Nov 20",
+    "events": [
+     {
+      "time": "7 AM",
+      "title": "Recycling out",
+      "place": ""
+     },
+     {
+      "time": "3:30 PM",
+      "title": "Parent-teacher conference",
+      "place": "PS 41"
+     }
+    ]
+   },
+   {
+    "label": "Sunday",
+    "date": "Nov 22",
+    "events": [
+     {
+      "time": "10 AM",
+      "title": "Soccer: Theo vs. Hawks",
+      "place": "Cunningham Park"
+     },
+     {
+      "time": "12:30 PM",
+      "title": "Grandma's birthday lunch",
+      "place": "Ralph's"
+     }
+    ]
+   },
+   {
+    "label": "Tuesday",
+    "date": "Nov 24",
+    "events": [
+     {
+      "time": "8 AM",
+      "title": "Car service",
+      "place": "Bayside Honda"
+     }
+    ]
+   }
+  ],
+  "count": 9,
+  "more": 1
+ },
+ "tasks": {
+  "screen": "tasks",
+  "name": "Tasks",
+  "weekday": "Thursday",
+  "date": "November 19",
+  "date_short": "Thu, Nov 19",
+  "updated": "8:05 AM",
+  "tasks": [
+   {
+    "title": "Pay the water bill",
+    "when": "Late",
+    "late": true
+   },
+   {
+    "title": "Sign Ava's field trip form",
+    "when": "3 PM",
+    "late": false
+   },
+   {
+    "title": "Order Thanksgiving turkey",
+    "when": "",
+    "late": false
+   },
+   {
+    "title": "Call the plumber about the upstairs sink",
+    "when": "",
+    "late": false
+   },
+   {
+    "title": "Return library books",
+    "when": "",
+    "late": false
+   },
+   {
+    "title": "Book flights for Christmas",
+    "when": "",
+    "late": false
+   },
+   {
+    "title": "Renew Costco membership",
+    "when": "",
+    "late": false
+   },
+   {
+    "title": "Water the plants",
+    "when": "",
+    "late": false
+   }
+  ],
+  "more": 0,
+  "overdue": 1
+ },
+ "docs": {
+  "screen": "docs",
+  "name": "Documents",
+  "weekday": "Thursday",
+  "date": "November 19",
+  "date_short": "Thu, Nov 19",
+  "updated": "8:05 AM",
+  "items": [
+   {
+    "title": "Morgan's passport",
+    "kind": "Passport",
+    "who": "Morgan",
+    "when": "Expired 7 days ago",
+    "date": "Nov 12, 2026",
+    "expired": true
+   },
+   {
+    "title": "Car registration",
+    "kind": "Registration",
+    "who": "",
+    "when": "Expires in 12 days",
+    "date": "Dec 1, 2026",
+    "expired": false
+   },
+   {
+    "title": "Riley's driver license",
+    "kind": "Driver license",
+    "who": "Riley",
+    "when": "Expires in 57 days",
+    "date": "Jan 15, 2027",
+    "expired": false
+   },
+   {
+    "title": "Home insurance policy",
+    "kind": "Insurance",
+    "who": "",
+    "when": "Expires in 74 days",
+    "date": "Feb 1, 2027",
+    "expired": false
+   }
+  ],
+  "more": 0,
+  "expired": 1
+ },
+ "health": {
+  "screen": "health",
+  "name": "Health",
+  "weekday": "Thursday",
+  "date": "November 19",
+  "date_short": "Thu, Nov 19",
+  "updated": "8:05 AM",
+  "steps": "3,412",
+  "rings": [
+   {
+    "name": "Move",
+    "value": "180",
+    "goal": "500",
+    "unit": "kcal",
+    "pct": 36
+   },
+   {
+    "name": "Exercise",
+    "value": "12",
+    "goal": "30",
+    "unit": "min",
+    "pct": 40
+   },
+   {
+    "name": "Stand",
+    "value": "3",
+    "goal": "12",
+    "unit": "h",
+    "pct": 25
+   }
+  ],
+  "sleep": "7 h 11 min",
+  "in_bed": "7 h 50 min",
+  "week": [
+   {
+    "day": "Fri",
+    "steps": "8,214",
+    "pct": 64
+   },
+   {
+    "day": "Sat",
+    "steps": "10,433",
+    "pct": 81
+   },
+   {
+    "day": "Sun",
+    "steps": "6,120",
+    "pct": 48
+   },
+   {
+    "day": "Mon",
+    "steps": "12,880",
+    "pct": 100
+   },
+   {
+    "day": "Tue",
+    "steps": "7,340",
+    "pct": 57
+   },
+   {
+    "day": "Wed",
+    "steps": "9,105",
+    "pct": 71
+   },
+   {
+    "day": "Thu",
+    "steps": "3,412",
+    "pct": 26
+   }
+  ],
+  "average": "8,215"
+ },
+ "money": {
+  "screen": "money",
+  "name": "Money",
+  "weekday": "Thursday",
+  "date": "November 19",
+  "date_short": "Thu, Nov 19",
+  "updated": "8:05 AM",
+  "bills": [
+   {
+    "day": "Today",
+    "name": "Con Edison",
+    "amount": "$142.17"
+   },
+   {
+    "day": "Tomorrow",
+    "name": "Netflix",
+    "amount": "$22.99"
+   },
+   {
+    "day": "Sat",
+    "name": "Verizon",
+    "amount": "~$185.00"
+   },
+   {
+    "day": "Tue",
+    "name": "Mortgage",
+    "amount": "$2,450.00"
+   }
+  ],
+  "more": 0,
+  "total": "$2,800.16",
+  "low": [
+   "Checking: under $500.00 on Dec 1"
+  ],
+  "behind": [
+   "Chase"
+  ]
+ }
+}
