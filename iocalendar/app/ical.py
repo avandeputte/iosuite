@@ -425,7 +425,7 @@ def _last_end(cal: Calendar, m: Event, lo: dt.datetime, tzname: str | None) -> d
 
 def occurrences(cal: Calendar, start: dt.datetime, end: dt.datetime, tzname: str | None = None) -> list[dict]:
     """The occurrences that overlap [start, end): {start, end, allDay, recurrenceId, title, location, status, transparent,
-    people, categories, reminders (minutes before the start)}."""
+    people, categories, notes, reminders (minutes before the start)}."""
     comps = events_of(cal)
     m = master_of(comps)
     if m is None:
@@ -457,7 +457,7 @@ def occurrences(cal: Calendar, start: dt.datetime, end: dt.datetime, tzname: str
                     "status": str(occ.get("STATUS") or "").upper() or None,
                     "transparent": str(occ.get("TRANSP") or "").upper() == "TRANSPARENT",
                     "people": [p["name"] or p["email"] for p in people_of(occ)], "categories": _categories(occ),
-                    "reminders": reminders_of(occ)})
+                    "notes": str(occ.get("DESCRIPTION") or "").strip() or None, "reminders": reminders_of(occ)})
     return out
 
 

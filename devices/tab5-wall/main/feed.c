@@ -88,6 +88,21 @@ static void parse_event(const cJSON *o, wall_event_t *e)
     jstr(o, "day", e->day, sizeof e->day);
     jstr(o, "endDay", e->end_day, sizeof e->end_day);
     e->has_color = jcolor(o, "color", &e->color);
+    const cJSON *x;
+    cJSON_ArrayForEach(x, cJSON_GetObjectItemCaseSensitive(o, "who")) {
+        if (e->nwho >= (int)(sizeof e->who / sizeof e->who[0])) break;
+        jstr(x, "name", e->who[e->nwho].name, sizeof e->who[0].name);
+        e->who[e->nwho].has_color = jcolor(x, "color", &e->who[e->nwho].color);
+        if (e->who[e->nwho].name[0]) e->nwho++;
+    }
+    cJSON_ArrayForEach(x, cJSON_GetObjectItemCaseSensitive(o, "people")) {
+        if (!cJSON_IsString(x) || !x->valuestring[0]) continue;
+        if (e->people[0]) strlcat(e->people, ", ", sizeof e->people);
+        strlcat(e->people, x->valuestring, sizeof e->people);
+    }
+    jstr(o, "calendar", e->calendar, sizeof e->calendar);
+    jstr(o, "notes", e->notes, sizeof e->notes);
+    e->recurring = jbool(o, "recurring");
 }
 
 static bool parse(const char *text, wall_feed_t *f)

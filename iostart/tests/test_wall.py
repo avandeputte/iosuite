@@ -87,6 +87,7 @@ def test_feed(client, apps_answer):
     assert d["bg"] == "photos" and d["every"] == 60 and d["user"]["name"] == "alex"
     ev = d["today"][0]
     assert ev["title"] == "Dinner" and ev["place"] == "Nan Xiang Dumpling" and ev["s"] == int(soon.timestamp()) and ev["color"] == "#963522"
+    assert "who" not in ev and "notes" not in ev  # nothing more to say of it
     assert d["tasks"]["items"] == [{"id": 41, "title": "Take out the bins", "late": False, "color": "#2266aa", "due": now.date().isoformat(), "allDay": True}]
     assert d["birthdays"] == [{"name": "Ava", "in": 1, "label": "birthday", "turns": 9}]  # the next week only
     assert [p["id"] for p in d["photos"]] == ["8", "7"]  # landscape first
@@ -140,3 +141,20 @@ def test_taps(client, apps_answer):
     assert sent == [("iotask", "/api/tasks/41/complete", {}), ("iopix", "/api/favorites", {"ids": [8], "on": True}),
                     ("iopix", "/api/favorites", {"ids": [8], "on": False})]
     assert client.post("/api/wall/tasks/a%20b/done").status_code == 404
+
+
+def test_feed_event_details(client, apps_answer):
+    """What a tap on an event shows: who of the family it is for, the other people, its calendar, its notes."""
+    table, asked, _ = apps_answer
+    soon = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)
+    table[("iocalendar", "/api/calendars")] = {"items": [{"id": 1, "color": "#963522", "name": "Family"}]}
+    table[("iocalendar", "/api/members")] = {"items": [{"id": 7, "name": "ava", "displayName": "Ava", "color": "#2266aa"},
+                                                       {"id": 8, "name": "theo", "displayName": "Theo", "color": "#33aa55"}]}
+    table[("iocalendar", "/api/occurrences")] = lambda p: {"items": [
+        {"calendarId": 1, "title": "Swimming", "start": soon.isoformat(), "end": (soon + dt.timedelta(hours=1)).isoformat(), "allDay": False,
+         "location": "", "members": [8, 7, 99], "people": ["Coach Kim"], "notes": "Bring   goggles\nand a towel", "recurring": True}]}
+    ev = client.get("/api/wall/feed?tz=America/New_York").json()["today"][0]
+    assert ev["who"] == [{"name": "Theo", "color": "#33aa55"}, {"name": "Ava", "color": "#2266aa"}]
+    assert ev["people"] == ["Coach Kim"] and ev["calendar"] == "Family" and ev["recurring"] is True
+    assert ev["notes"] == "Bring goggles\nand a towel"
+    assert any(path == "/api/occurrences" and p.get("notes") == 1 for _, path, p, _ in asked)

@@ -209,6 +209,12 @@ def short_place(loc) -> str:
 def _event(o: dict, zone) -> dict:
     out = {"title": str(o.get("title") or "(no title)")[:120], "allDay": bool(o.get("allDay")), "color": o.get("color") or None,
            "place": short_place(o.get("location"))[:80], "location": str(o.get("location") or "")[:200]}
+    # what a tap on the event adds, where ioCalendar has any: who of the family it is for, the other people on it, its
+    # calendar, its notes
+    who = [{"name": str(w.get("name") or "")[:40], "color": w.get("color") or None} for w in o.get("who") or [] if isinstance(w, dict) and w.get("name")][:8]
+    more = {"who": who, "people": [str(p)[:60] for p in o.get("people") or []][:8], "calendar": str(o.get("calendar") or "")[:60],
+            "notes": re.sub(r"[ \t]+", " ", str(o.get("notes") or "")).strip()[:400], "recurring": bool(o.get("recurring"))}
+    out.update({k: v for k, v in more.items() if v})
     if out["allDay"]:
         out["day"] = str(o.get("start") or "")[:10]
         out["endDay"] = str(o.get("end") or "")[:10] or None

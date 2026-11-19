@@ -331,9 +331,10 @@ def rows_in_range(cids: list[int], start: dt.datetime | None, end: dt.datetime |
     return db.q(f"SELECT * FROM cal_events WHERE {' AND '.join(where)} ORDER BY range_start", args)
 
 
-def occurrences(cals: list[dict], start: dt.datetime, end: dt.datetime, q: str = "", member_ids: set[int] | None = None) -> list[dict]:
+def occurrences(cals: list[dict], start: dt.datetime, end: dt.datetime, q: str = "", member_ids: set[int] | None = None,
+                notes: bool = False) -> list[dict]:
     """Every occurrence in [start, end) of the events in these calendars, soonest first (member_ids: only those tagged
-    with one of these family members)."""
+    with one of these family members; notes: each with its notes too, which a calendar's grid has no use for)."""
     by_id = {c["id"]: c for c in cals}
     fam = members.family()
     out = []
@@ -355,7 +356,7 @@ def occurrences(cals: list[dict], start: dt.datetime, end: dt.datetime, q: str =
                         "start": ical.iso(o["start"]), "end": ical.iso(o["end"]), "allDay": o["allDay"],
                         "recurrenceId": o["recurrenceId"], "recurring": bool(r["rrule"]) or bool(o["recurrenceId"]),
                         "status": o["status"], "busy": not o["transparent"], "people": o["people"],
-                        "categories": o["categories"], "members": mids, "_sort": ical.to_utc(o["start"], by_id[r["calendar_id"]].get("timezone"))})
+                        "categories": o["categories"], "members": mids, **({"notes": o["notes"]} if notes else {}), "_sort": ical.to_utc(o["start"], by_id[r["calendar_id"]].get("timezone"))})
     out.sort(key=lambda x: (x["_sort"], not x["allDay"], x["title"].lower()))
     for x in out:
         x.pop("_sort")

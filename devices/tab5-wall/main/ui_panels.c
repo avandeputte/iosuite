@@ -66,7 +66,9 @@ static void date_of(time_t t, char *out, size_t n)
 
 void ui_open_event(const wall_event_t *ev)
 {
-    lv_obj_t *c = kit_panel(ev->title, P(860), P(520));
+    bool more = ev->nwho || ev->people[0] || ev->notes[0];
+    lv_obj_t *c = kit_panel(ev->title, P(860), more ? P(620) : P(520));
+    lv_obj_set_scroll_dir(c, LV_DIR_VER);
     char day[11], head[48], when[96];
     if (ev->all_day) {
         strlcpy(day, ev->day, sizeof day);
@@ -104,9 +106,46 @@ void ui_open_event(const wall_event_t *ev)
     lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(dot, ev->has_color ? color_hex(ev->color) : DIM, 0);
     kit_label(r, font_text(32), TEXT, when);
+    if (ev->nwho) {
+        /* who of the family it is for, each in their colour */
+        lv_obj_t *w = hrow(c, 12);
+        for (int i = 0; i < ev->nwho; i++) {
+            lv_obj_t *p = lv_obj_create(w);
+            lv_obj_remove_style_all(p);
+            lv_obj_set_size(p, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_obj_set_flex_flow(p, LV_FLEX_FLOW_ROW);
+            lv_obj_set_flex_align(p, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+            lv_obj_set_style_pad_column(p, P(10), 0);
+            lv_obj_set_style_pad_hor(p, P(18), 0);
+            lv_obj_set_style_pad_ver(p, P(8), 0);
+            lv_obj_set_style_radius(p, P(26), 0);
+            lv_obj_set_style_bg_color(p, lv_color_hex(0x2a2c31), 0);
+            lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
+            lv_obj_t *d = lv_obj_create(p);
+            lv_obj_remove_style_all(d);
+            lv_obj_set_size(d, P(18), P(18));
+            lv_obj_set_style_radius(d, LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
+            lv_obj_set_style_bg_color(d, ev->who[i].has_color ? color_hex(ev->who[i].color) : DIM, 0);
+            kit_label(p, font_text(28), TEXT, ev->who[i].name);
+        }
+    }
+    if (ev->people[0]) {
+        line(c, 22, DIM, "With");
+        line(c, 28, TEXT, ev->people);
+    }
     if (ev->location[0]) {
-        line(c, 28, DIM, "Where");
-        line(c, 32, TEXT, ev->location);
+        line(c, 22, DIM, "Where");
+        line(c, 28, TEXT, ev->location);
+    }
+    if (ev->notes[0]) {
+        line(c, 22, DIM, "Notes");
+        line(c, 26, TEXT, ev->notes);
+    }
+    if (ev->calendar[0] || ev->recurring) {
+        char t[80];
+        snprintf(t, sizeof t, "%s%s%s", ev->calendar, ev->calendar[0] && ev->recurring ? "  ·  " : "", ev->recurring ? "Repeats" : "");
+        line(c, 22, DIM, t);
     }
 }
 
