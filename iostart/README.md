@@ -65,6 +65,13 @@ what the app will show on the start page later (today's events, the newest photo
   owner has Pair again open. Fonts: TRMNL's own and Inter (app/trmnl_fonts, SIL Open Font License).
 - **A dot by each app's name**: green when the app answers its `/api/status`, red when it does not. Bookmarks the
   server cannot reach get a red dot too. The server asks each app once a minute and pings each bookmark every five (HEAD, redirects not followed; never its own address or a link-local one).
+- **Two layouts** (Customize the page › Layout, per account). *A card for each app*: each app with something to show
+  gets a card, as many across as fit at 300px or more (three on a wide screen, one on a phone), so its lines are not
+  cut short; the apps without a card are low tiles that share the free cell after the last card (or a row of their
+  own). A card with nothing to show today (nothing planned, nothing due) becomes a low tile with that one line, and a
+  card again when it has something. *One Today card, the apps in a row*: every app as an icon in one row to open it,
+  and under it a Today card (ioCalendar's events and ioTask's tasks in one list by the hour, ioMoney's week of bills
+  beside them) with ioHealth and ioPix's On this day next to it.
 - **Your own page** (the gear next to the date › Customize the page): untick the tiles and cards you do not need, put the tiles and
   the cards (Birthdays, This week, the photo strip, the bookmarks) in your order, and pick your own photo strip
   ("Default" is the admin's choice). Saved per account, on top of the default the admin set in Settings › Home page.

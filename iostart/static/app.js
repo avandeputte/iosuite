@@ -244,22 +244,38 @@ async function showHome(page) {
   const col = h('div', { class: 'homecol' }), side = h('div', { class: 'homeside' });
   page.append(h('div', { class: 'homegrid' }, col, side));
   drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
-  // the tiles: an app with something to show gets a column of its own; the others share one column beside them, as
-  // many as there are, each shrinking to fit the row's height (with no widget tile to set that height, three to a column)
-  // a low tile of an app in LOW gets one line under its name instead (ioDocs: what is to renew)
+  // the tiles, as the person laid the page out (Customize › Layout):
+  // "cards": an app with something to show gets a card, as many across as fit at a width its lines can be read in; the
+  //   others are low tiles that share one cell (arrangeTiles). A card with nothing to show today turns into a low tile
+  //   with one line ("Nothing planned"), and back when it has something again (drawWidgets).
+  // "today": every app in one row to open it (the dock), and under it what the day holds in a few cards (drawGlance)
+  // a low tile of an app in LOW gets one line under its name (ioDocs: what is to renew)
   const tile = (a, small) => h('a', { class: `app${small ? ' small' : ''}`, href: a.url, 'data-app': a.key, title: a.url },
     h('img', { src: a.icon, alt: '' }), h('span', { class: 'who' }, h('span', { class: 'nmrow' }, appName(a.name, a.color), h('span', { class: 'st' })),
-      small && LOW[a.key] ? h('span', { class: 'line muted small' }) : null),
+      h('span', { class: 'line muted small' })),
     h('div', { class: 'more' }));  // what the app shows here: drawWidgets
-  const big = S.apps.filter((a) => WIDGETS[a.key] && !LOW[a.key]), rest = S.apps.filter((a) => !big.includes(a));
-  const per = big.length ? rest.length : 3, stacks = [];
-  for (let i = 0; i < rest.length; i += per) {
-    const some = rest.slice(i, i + per);
-    stacks.push(h('div', { class: `stack${some.length > 3 ? ' dense' : ''}`, style: { '--n': Math.max(3, some.length) } }, some.map((a) => tile(a, true))));
-  }
+  let glance = null;
   if (!S.apps.length) col.append(h('div', { class: 'empty' }, got.items.length ? 'Every tile is hidden. ' : 'No io app has registered itself in the Shared ioSuite database yet: each one appears here once it has started.',
     got.items.length ? h('button', { class: 'lnk', onclick: customize }, 'Customize the page') : null));
-  else col.append(h('div', { class: 'apps', style: { '--cols': big.length + stacks.length } }, big.map((a) => tile(a, false)), stacks));
+  else if (L.style === 'today') {
+    glance = h('div', { class: 'glance' });
+    const dock = h('div', { class: 'dock' }, S.apps.map((a) => tile(a, true)));
+    col.append(dock, glance);
+    // one row when the tiles fit at 92px or more, else rows of the same length (ten apps: five and five, not seven and three)
+    const fit = () => { const most = Math.max(1, Math.floor((dock.clientWidth + 8) / 100)), rows = Math.ceil(S.apps.length / most); dock.style.setProperty('--per', Math.ceil(S.apps.length / rows)); };
+    new ResizeObserver(fit).observe(dock); fit();
+    drawGlance(glance);
+  } else {
+    // a card that had nothing to show the last time starts as a low tile, so the page does not jump when it loads
+    const was = quietKeys(), apps = h('div', { class: 'apps' }, S.apps.map((a) => {
+      const low = !WIDGETS[a.key] || LOW[a.key] || was.includes(a.key), el = tile(a, low);
+      if (low && WIDGETS[a.key] && !LOW[a.key]) quietTile(el, EMPTY[a.key]);
+      return el;
+    }));
+    col.append(apps);
+    arrangeTiles(apps);
+    new ResizeObserver(() => fitStack(apps)).observe(apps);
+  }
   drawWidgets(page);
   drawAppStatus(page);
   // the week ahead: birthdays from ioContact and the coming days' events from ioCalendar, a card each
@@ -279,7 +295,7 @@ async function showHome(page) {
   for (const k of order) {
     if (k === 'bookmarks' && k === order[order.length - 1]) { side.append(cards[k]()); continue; }
     if (k === 'birthdays' || k === 'week') {
-      if (!agenda || !agenda.isConnected || agenda !== col.lastElementChild) { agenda = h('div', { class: 'agenda' }); col.append(agenda); capAgenda(page.querySelector('.apps'), agenda); }
+      if (!agenda || !agenda.isConnected || agenda !== col.lastElementChild) { agenda = h('div', { class: 'agenda' }); col.append(agenda); capAgenda(page.querySelector('.apps, .glance'), agenda); }
       agenda.append(cards[k]());
     } else col.append(cards[k]());
   }
@@ -288,6 +304,7 @@ async function showHome(page) {
   S.refresh = () => {
     const g = page.querySelector('.greet'); if (g) g.textContent = `${greeting()}, ${first}`;
     drawWidgets(page, true); drawAppStatus(page); drawWeather(wx, true);
+    if (glance) drawGlance(glance, true);
     for (const c of page.querySelectorAll('.card.birthdays.capped')) drawBirthdays(c, true);
     for (const c of page.querySelectorAll('.card.week.capped')) drawWeek(c, true);
     const hc = page.querySelector('.homecard'); if (hc) drawHomeCard(hc, true);
@@ -311,6 +328,8 @@ function liveRefresh(force = false) {
   try { S.refresh(); } catch { /* the next round */ }
 }
 const CARDS = ['home', 'birthdays', 'week', 'strip', 'bookmarks'];
+// how the apps are laid out (Customize › Layout; layout.style, null: cards)
+const STYLES = { cards: 'A card for each app', today: 'One Today card, the apps in a row' };
 /** The cards' order: the viewer's, then any the viewer's list does not name, in the usual order. */
 const cardOrder = (L) => [...(L.cards || []), ...CARDS.filter((k) => !(L.cards || []).includes(k))];
 
@@ -723,8 +742,10 @@ async function customize() {
       kept ? h('option', { value: L.wallPhotos, selected: true }, 'An album no longer there') : null));
   });
   const wallEvery = h('select', { class: 't' }, WALL_EVERY.map((s) => h('option', { value: s, selected: s === (L.wallEvery || WALL_DEFAULT_EVERY) ? true : null }, `Every ${everyText(s)}`)));
+  const style = h('select', { class: 't' }, Object.entries(STYLES).map(([k, t]) => h('option', { value: k, selected: k === (L.style || 'cards') ? true : null }, t)));
   const engines = h('select', { class: 't' }, Object.entries(ENGINES).map(([k, e]) => h('option', { value: k === 'duckduckgo' ? '' : k, selected: (k === 'duckduckgo' ? '' : k) === (L.search || '') ? true : null }, e.name)));
   const body = h('div', null, h('p', { class: 'muted small' }, 'Your own start page, on this account only: untick what you do not need, and put the tiles and the cards in your order. Birthdays and This week share a row when they follow each other.'),
+    h('div', { class: 'grid' }, fld('Layout', style), h('div')),
     h('h3', null, 'Tiles'), sortable(tiles), h('h3', null, 'Cards under the tiles'), sortable(cards),
     h('div', { class: 'grid' }, fld('Photo strip', strip), fld('Web search', engines)),
     h('div', { class: 'grid' }, fld('The photo strip changes to', moves), fld('How often', everies)),
@@ -736,7 +757,7 @@ async function customize() {
   const json = v === 'reset' ? {} : { hidden: [...tiles, ...cards].filter((t) => !t.on).map((t) => t.key), order: tiles.map((t) => t.key), cards: cards.map((c) => c.key), strip: strip.value || null, search: engines.value || null,
     stripMove: moves.value === STRIP_DEFAULT.move ? null : moves.value, stripEvery: +everies.value === STRIP_DEFAULT.every ? null : +everies.value,
     wallBg: wallBg.value === (pix ? 'photos' : 'sky') ? null : wallBg.value, wallEvery: +wallEvery.value === WALL_DEFAULT_EVERY ? null : +wallEvery.value,
-    wallPhotos: wallPhotos.value || null };
+    wallPhotos: wallPhotos.value || null, style: style.value === 'cards' ? null : style.value };
   try { await api('api/me/layout', { method: 'PUT', json }); toast(v === 'reset' ? 'Back to the default' : 'Saved'); if (route().view === 'home') onRoute(); } catch (e) { fail(e); }
 }
 
@@ -869,25 +890,71 @@ const pixPhotoUrl = (pix, id) => `${pix.url}/#/photos?p=${id}`;
 const viewerTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
 
 /* Apps whose tile is a low one in the shared column, with one line under the name rather than a column of its own:
-   draw(d) gives that line's text, or [text, warn]. */
+   draw(d) gives [text, warn, tooltip, idle] (idle: nothing to report). */
 const LOW = { iodocs: drawDocsLine };
 
 function drawWidgets(page, again = false) {
   const tz = viewerTz();
   for (const tile of page.querySelectorAll('.app[data-app]')) {
-    const line = tile.querySelector('.who > .line');
-    if (line) { drawLowLine(tile, line, tz); continue; }
-    const draw = WIDGETS[tile.dataset.app], box = tile.querySelector('.more');
-    if (!draw || !box) continue;
+    const key = tile.dataset.app, draw = WIDGETS[key], box = tile.querySelector('.more'), grid = tile.closest('.apps');
+    if (LOW[key]) { drawLowLine(tile, tile.querySelector('.who > .line'), tz); continue; }
+    if (!draw || !box || !grid) continue;  // in the dock the tiles only open their app: the glance cards show the day
     const why = (text) => { if (box.isConnected) box.replaceChildren(h('div', { class: 'wg' }, h('div', { class: 'muted small wgwhy' }, text))); };
-    fetch(`api/widgets/${tile.dataset.app}?tz=${encodeURIComponent(tz)}`, { credentials: 'same-origin' })
+    // a card again (it has something to show, or to say why not), or a low tile (nothing today); the tiles move when that changes
+    const card = (quiet) => { if (tile.classList.contains('small') === quiet) return; if (quiet) quietTile(tile, EMPTY[key]); else tile.classList.remove('small'); arrangeTiles(grid); };
+    fetch(`api/widgets/${key}?tz=${encodeURIComponent(tz)}`, { credentials: 'same-origin' })
       .then(async (r) => { if (r.ok) return r.json(); let detail = ''; try { detail = (await r.json()).detail || ''; } catch { /* no body */ } throw new Error(detail || `${r.status}`); })
-      .then((d) => { if (!box.isConnected) return; const kids = draw(d); if (kids) box.replaceChildren(h('div', { class: 'wg' }, kids)); else why(EMPTY[tile.dataset.app] || 'Nothing to show'); })
-      .catch((e) => { if (!again || !box.querySelector('.wg .wghead')) why(e.message); });  // the app is down, or not open to this account: the tile says so (a refresh that fails keeps what it showed)
+      .then((d) => {
+        if (!box.isConnected) return;
+        const kids = draw(d);
+        if (kids) box.replaceChildren(h('div', { class: 'wg' }, kids)); else box.replaceChildren();
+        card(!kids);
+        quietKeys(key, !kids);
+      })
+      .catch((e) => { if (again && (tile.classList.contains('small') || box.querySelector('.wg .wghead'))) return; why(e.message); card(false); });  // the app is down, or not open to this account: the tile says so (a refresh that fails keeps what it showed)
   }
 }
 
-const EMPTY = { iopix: 'No photos yet', iocalendar: 'Nothing planned', iotask: 'Nothing due today', iohealth: 'No steps, rings or sleep for today yet', iomoney: 'Nothing due this week', iodocs: 'Nothing to renew' };
+// what a card that has nothing to show says, as a low tile's one line
+const EMPTY = { iopix: 'No photos yet', iocalendar: 'Nothing planned', iotask: 'Nothing due today', iohealth: 'Nothing for today yet', iomoney: 'Nothing due this week', iodocs: 'Nothing to renew' };
+/** A card as a low tile, with its one line. */
+function quietTile(tile, text) {
+  tile.classList.add('small');
+  const line = tile.querySelector('.who > .line');
+  if (line) line.textContent = text || 'Nothing to show';
+}
+/** The apps whose card had nothing to show the last time, kept in this browser (so the next visit starts with them low);
+    with a key, notes how that app's card was this time. */
+function quietKeys(key, quiet) {
+  let keys = [];
+  try { const v = JSON.parse(localStorage.getItem('iostart.quiet') || '[]'); if (Array.isArray(v)) keys = v.filter((k) => typeof k === 'string'); } catch { /* private mode, or not ours */ }
+  if (key == null || keys.includes(key) === quiet) return keys;
+  keys = quiet ? [...keys, key] : keys.filter((k) => k !== key);
+  try { localStorage.setItem('iostart.quiet', JSON.stringify(keys)); } catch { /* private mode */ }
+  return keys;
+}
+/** The cards first and the low tiles after them in one stack, each in the page's order of apps. */
+function arrangeTiles(grid) {
+  const rank = (el) => S.apps.findIndex((a) => a.key === el.dataset.app);
+  const tiles = [...grid.querySelectorAll('.app[data-app]')].sort((a, b) => rank(a) - rank(b));
+  const low = tiles.filter((el) => el.classList.contains('small'));
+  let stack = grid.querySelector(':scope > .stack');
+  if (low.length && !stack) stack = h('div', { class: 'stack' });
+  grid.append(...tiles.filter((el) => !low.includes(el)), ...(low.length ? [stack] : []));
+  if (stack) { if (low.length) stack.append(...low); else stack.remove(); }
+  fitStack(grid);
+}
+/** The stack of low tiles takes the free cell at the end of the last row of cards, as a column of thin tiles; with no
+    cell free (or no card, or one column: a phone) it takes a row of its own, the tiles side by side. */
+function fitStack(grid) {
+  const stack = grid.querySelector(':scope > .stack');
+  if (!stack) return;
+  const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').length, cards = grid.querySelectorAll(':scope > .app').length, n = stack.children.length;
+  const across = cols < 2 || !cards || cards % cols === 0 || n > 6;  // more than six would make their row taller than its cards
+  stack.classList.toggle('across', across);
+  stack.classList.toggle('dense', !across && n > 3);
+  stack.style.setProperty('--n', Math.max(3, n));
+}
 const wgHead = (t, extra) => h('div', { class: 'wghead' }, h('span', null, t), extra ? h('span', { class: 'muted' }, extra) : null);
 
 function drawPixWidget(d) {
@@ -923,14 +990,13 @@ function drawCalendarWidget(d) {
   if (today.length) {
     return [wgHead('Today', d.more ? `+${d.more} more` : null), today.map((o) => evRow(o, evTime(o)))];
   }
-  if (d.next) return [wgHead('Next', evDay(d.next)), evRow(d.next, evTime(d.next))];
-  return [wgHead('Today'), h('div', { class: 'muted small' }, 'Nothing planned')];
+  return d.next ? [wgHead('Next', evDay(d.next)), evRow(d.next, evTime(d.next))] : null;
 }
 
 /** ioTask: what is due today (and what is overdue, first), in each list's colour. */
 function drawTasksWidget(d) {
   const today = d.today || [];
-  if (!today.length) return [wgHead('Today'), h('div', { class: 'muted small' }, 'Nothing due')];
+  if (!today.length) return null;
   const when = (t) => { if (t.late) return 'Late'; if (t.allDay || !t.due) return ''; const s = new Date(t.due); return isNaN(s) ? '' : s.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
   return [wgHead('Due today', [d.overdue ? `${d.overdue} overdue` : null, d.more ? `+${d.more} more` : null].filter(Boolean).join(' · ') || null),
     today.map((t) => evRow(t, when(t)))];
@@ -940,7 +1006,7 @@ function drawTasksWidget(d) {
     subscriptions due in the coming week, the soonest first; three lines in all, as the other tiles. */
 function drawMoneyWidget(d) {
   const bills = d.bills || [], low = d.low || [], behind = d.behind || [];
-  if (!bills.length && !low.length && !behind.length) return [wgHead('This week'), h('div', { class: 'muted small' }, 'Nothing due')];
+  if (!bills.length && !low.length && !behind.length) return null;
   const dayOf = (iso) => new Date(`${iso}T12:00:00`);
   const short = (iso) => { const n = Math.round((dayOf(iso).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000);
     return n <= 0 ? 'Today' : n === 1 ? 'Tmrw' : dayOf(iso).toLocaleDateString([], { weekday: 'short' }); };
@@ -968,13 +1034,51 @@ function drawMoneyWidget(d) {
       h('span', { class: 'wgamt' }, `${b.approximate ? '~' : ''}${money(-b.amount, b.currency)}`)))];
 }
 
+/** The "today" layout's cards under the dock. Today: ioCalendar's events and ioTask's tasks in one list by the hour
+    (what is late first, what has no hour last), with ioMoney's week of bills beside them; then ioHealth and ioPix's On
+    this day, one above the other. Each part is there when its app is on the page and answers; a row opens its app.
+    again: a refresh, which keeps what the cards show when nothing answers. */
+async function drawGlance(el, again = false) {
+  const app = (k) => S.apps.find((a) => a.key === k);
+  const [cal, task, mon, health, pix] = await Promise.all(['iocalendar', 'iotask', 'iomoney', 'iohealth', 'iopix'].map((k) => (app(k) ? widget(k) : null)));
+  if (!el.isConnected || (again && ![cal, task, mon, health, pix].some(Boolean))) return;
+  const head = (k, text, extra) => h('a', { class: 'ghead', href: app(k).url, title: app(k).url }, h('img', { src: app(k).icon, alt: '' }), h('span', null, text), extra ? h('span', { class: 'muted' }, extra) : null);
+  const row = (k, title, kids) => h('a', { class: 'wgev', href: app(k).url, title }, kids);
+  // events and tasks by the hour
+  const rows = [];
+  for (const t of (task && task.today) || []) {
+    const timed = t.due && !t.allDay && !isNaN(new Date(t.due));
+    rows.push({ at: t.late ? -1 : timed ? +new Date(t.due) : Infinity, el: row('iotask', t.title, [h('span', { class: 'tick', style: { borderColor: t.color || 'var(--fg2)' } }),
+      h('span', { class: `wgwhen ${t.late ? 'wgwarn' : 'muted'}` }, t.late ? 'Late' : timed ? evTime({ start: t.due }) : ''), h('span', { class: 'wgtitle' }, t.title)]) });
+  }
+  const events = withoutBirthdays((cal && cal.today) || []);
+  for (const o of events) rows.push({ at: o.allDay ? 0 : +new Date(o.start), el: row('iocalendar', [o.title, o.location].filter(Boolean).join(' · '), [h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }),
+    h('span', { class: 'wgwhen muted' }, evTime(o)), h('span', { class: 'wgtitle' }, o.title), o.location ? h('span', { class: 'wgwhere muted' }, shortPlace(o.location)) : null]) });
+  rows.sort((a, b) => a.at - b.at);
+  if (cal && !events.length && cal.next) rows.push({ el: row('iocalendar', cal.next.title, [h('span', { class: 'dot', style: { background: cal.next.color || 'var(--fg2)' } }),
+    h('span', { class: 'wgwhen muted' }, 'Next'), h('span', { class: 'wgtitle' }, cal.next.title), h('span', { class: 'wgwhere muted' }, `${evDay(cal.next)} ${cal.next.allDay ? '' : evTime(cal.next)}`.trim())]) });
+  const plans = cal || task ? h('div', null, wgHead(cal && task ? 'Plans and tasks' : cal ? 'Plans' : 'Tasks', [cal && cal.more ? `+${cal.more} more` : null, task && task.overdue ? `${task.overdue} overdue` : null].filter(Boolean).join(' · ') || null),
+    rows.length ? rows.map((r) => r.el) : h('div', { class: 'muted small' }, cal && task ? 'Nothing planned or due' : cal ? EMPTY.iocalendar : EMPTY.iotask)) : null;
+  // the week's bills (and what needs a look in ioMoney), as its card has them
+  const mk = mon ? drawMoneyWidget(mon) : null;
+  const bills = mon ? h('a', { class: 'gbills', href: app('iomoney').url, title: app('iomoney').url }, mk || [wgHead('This week'), h('div', { class: 'muted small' }, 'Nothing due')]) : null;
+  if (bills) bills.querySelector('.wghead > span').textContent = 'Bills this week';
+  const today = plans || bills ? h('div', { class: 'card todaycard' }, head(cal ? 'iocalendar' : task ? 'iotask' : 'iomoney', 'Today'), h('div', { class: `todaycols${plans && bills ? '' : ' one'}` }, plans, bills)) : null;
+  const hk = health ? drawHealthWidget(health) : null, pk = pix ? drawPixWidget(pix) : null;
+  const side = [hk ? h('div', { class: 'card' }, head('iohealth', 'Health'), h('div', { class: 'wg' }, hk)) : null,
+    pk ? h('div', { class: 'card' }, head('iopix', pk[0].firstChild.textContent, pk[0].children[1] ? pk[0].children[1].textContent : null), h('div', { class: 'wg' }, pk.slice(1))) : null].filter(Boolean);
+  el.classList.toggle('one', !today || !side.length);
+  el.replaceChildren(...[today, side.length ? h('div', { class: `gside${today ? '' : ' flat'}` }, side) : null].filter(Boolean));
+}
+
 /** A low tile's one line (LOW); an app that is down or closed to this account leaves the line empty. */
 function drawLowLine(tile, line, tz) {
   fetch(`api/widgets/${tile.dataset.app}?tz=${encodeURIComponent(tz)}`, { credentials: 'same-origin' })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
       if (!d || !line.isConnected) return;
-      const [text, warn, title] = LOW[tile.dataset.app](d);
+      const [text, warn, title, idle] = LOW[tile.dataset.app](d);
+      tile.classList.toggle('idle', !!idle);  // nothing to report: the dock leaves the line out
       line.classList.toggle('wgwarn', !!warn); line.classList.toggle('muted', !warn);
       line.replaceChildren(warn ? icon('warn', 's') : '', text);
       tile.title = title || tile.href;
@@ -985,7 +1089,7 @@ function drawLowLine(tile, line, tz) {
 /** ioDocs in its low tile: "Nothing to renew", "2 to renew", "1 expired +2" (short, to fit the narrow tile); the tooltip names them. */
 function drawDocsLine(d) {
   const items = d.items || [], n = items.length + (d.more || 0);
-  if (!n) return ['Nothing to renew'];
+  if (!n) return ['Nothing to renew', false, '', true];
   const expired = items.filter((x) => x.state === 'expired').length;
   const text = expired ? `${expired} expired${n > expired ? ` +${n - expired}` : ''}` : `${n} to renew`;
   const title = items.map((x) => `${x.title}: ${docWhen(x)}`).concat(d.more ? [`+${d.more} more`] : []).join('\n');

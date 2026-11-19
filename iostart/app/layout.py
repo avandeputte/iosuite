@@ -1,4 +1,4 @@
-"""Each person's own start page: which tiles and cards they see, in what order, and which photo strip.
+"""Each person's own start page: which tiles and cards they see, in what order, how the apps are laid out, and which photo strip.
 
 Saved per account in the prt_settings table ("user:<id>:layout", JSON). Every app registered in the suite's list is on the
 page unless the person hides it; the photo strip is the admin's choice (Settings › Home page) unless they pick another.
@@ -15,9 +15,10 @@ STRIP_MOVES = ("shuffle", "page", "off")  # how the photo strip changes by itsel
 STRIP_EVERY = (30, 60, 120, 300, 600, 1800)  # how often, in seconds (null: 60)
 WALL_BGS = ("photos", "sky", "black")  # behind the wall display (null: photos, or the sky without ioPix)
 WALL_EVERY = (20, 60, 300, 900)  # how often its photo changes, in seconds (null: 60)
+STYLES = ("cards", "today")  # how the apps are laid out: a card per app, or one Today card under a row of the apps (null: cards)
 WALL_PHOTOS = re.compile(r"rediscover|onthisday|favorites|album:[1-9][0-9]{0,12}")  # which ioPix photos (null: as the strip)
 EMPTY = {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None,
-         "wallBg": None, "wallEvery": None, "wallPhotos": None}
+         "wallBg": None, "wallEvery": None, "wallPhotos": None, "style": None}
 
 
 def _key(user_id: int) -> str:
@@ -29,7 +30,7 @@ def get(user_id: int) -> dict:
     strip: rediscover|onthisday|off|null, search: a web search engine (ENGINES) | null,
     stripMove: shuffle|page|off|null, stripEvery: seconds (STRIP_EVERY) | null,
     wallBg: photos|sky|black|null, wallEvery: seconds (WALL_EVERY) | null,
-    wallPhotos: rediscover|onthisday|favorites|album:<ioPix album id>|null}."""
+    wallPhotos: rediscover|onthisday|favorites|album:<ioPix album id>|null, style: cards|today|null}."""
     raw = db.get_setting(_key(user_id))
     if not raw:
         return dict(EMPTY)
@@ -46,7 +47,8 @@ def get(user_id: int) -> dict:
             "stripEvery": v.get("stripEvery") if v.get("stripEvery") in STRIP_EVERY else None,
             "wallBg": v.get("wallBg") if v.get("wallBg") in WALL_BGS else None,
             "wallEvery": v.get("wallEvery") if v.get("wallEvery") in WALL_EVERY else None,
-            "wallPhotos": v["wallPhotos"] if isinstance(v.get("wallPhotos"), str) and WALL_PHOTOS.fullmatch(v["wallPhotos"]) else None}
+            "wallPhotos": v["wallPhotos"] if isinstance(v.get("wallPhotos"), str) and WALL_PHOTOS.fullmatch(v["wallPhotos"]) else None,
+            "style": v.get("style") if v.get("style") in STYLES else None}
 
 
 def save(user_id: int, body: dict) -> dict:
@@ -63,6 +65,7 @@ def save(user_id: int, body: dict) -> dict:
     wall_bg = body.get("wallBg") or None
     wall_every = body.get("wallEvery") or None
     wall_photos = body.get("wallPhotos") or None
+    style = body.get("style") or None
     if not isinstance(hidden, list) or not all(apps.is_key(k) or k in SECTIONS for k in hidden):
         raise Invalid(f"hidden: a list of app keys and {', '.join(SECTIONS)}")
     if not isinstance(order, list) or not all(apps.is_key(k) for k in order) or len(set(order)) != len(order):
@@ -83,7 +86,9 @@ def save(user_id: int, body: dict) -> dict:
         raise Invalid(f"wallEvery: {', '.join(map(str, WALL_EVERY))} seconds, or nothing (60)")
     if wall_photos is not None and not (isinstance(wall_photos, str) and WALL_PHOTOS.fullmatch(wall_photos)):
         raise Invalid("wallPhotos: rediscover, onthisday, favorites, album:<id>, or nothing (as the photo strip)")
+    if style is not None and style not in STYLES:
+        raise Invalid(f"style: {', '.join(STYLES)}, or nothing (cards)")
     v = {"hidden": list(dict.fromkeys(hidden)), "order": order, "cards": cards, "strip": strip, "search": search, "stripMove": move, "stripEvery": every,
-         "wallBg": wall_bg, "wallEvery": wall_every, "wallPhotos": wall_photos}
+         "wallBg": wall_bg, "wallEvery": wall_every, "wallPhotos": wall_photos, "style": style}
     db.set_setting(_key(user_id), None if v == EMPTY else json.dumps(v))
     return get(user_id)

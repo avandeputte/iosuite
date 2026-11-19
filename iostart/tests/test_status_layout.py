@@ -99,10 +99,10 @@ def test_ping_never_reaches_this_server_or_metadata_and_never_follows_a_redirect
 
 
 def test_my_layout(client):
-    assert client.get("/api/me/layout").json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None, "wallBg": None, "wallEvery": None, "wallPhotos": None}
-    assert client.get("/api/apps").json()["layout"] == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None, "wallBg": None, "wallEvery": None, "wallPhotos": None}
+    assert client.get("/api/me/layout").json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None, "wallBg": None, "wallEvery": None, "wallPhotos": None, "style": None}
+    assert client.get("/api/apps").json()["layout"] == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None, "wallBg": None, "wallEvery": None, "wallPhotos": None, "style": None}
     r = client.put("/api/me/layout", json={"hidden": ["ionote", "week", "ionote"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday"})
-    assert r.status_code == 200 and r.json() == {"hidden": ["ionote", "week"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday", "search": None, "stripMove": None, "stripEvery": None, "wallBg": None, "wallEvery": None, "wallPhotos": None}
+    assert r.status_code == 200 and r.json() == {"hidden": ["ionote", "week"], "order": ["iocalendar", "iopix"], "cards": ["strip", "birthdays"], "strip": "onthisday", "search": None, "stripMove": None, "stripEvery": None, "wallBg": None, "wallEvery": None, "wallPhotos": None, "style": None}
     assert client.put("/api/me/layout", json={"cards": ["strip", "strip"]}).status_code == 400
     assert client.put("/api/me/layout", json={"cards": ["iopix"]}).status_code == 400
     assert client.get("/api/apps").json()["layout"]["order"] == ["iocalendar", "iopix"]
@@ -124,8 +124,11 @@ def test_my_layout(client):
         assert client.put("/api/me/layout", json={"wallPhotos": bad}).status_code == 400, bad
     assert client.put("/api/me/layout", json={"wallPhotos": "album:12"}).json()["wallPhotos"] == "album:12"
     assert client.put("/api/me/layout", json={"wallPhotos": "favorites"}).json()["wallPhotos"] == "favorites"
+    assert client.put("/api/me/layout", json={"style": "mosaic"}).status_code == 400
+    assert client.put("/api/me/layout", json={"style": "today"}).json()["style"] == "today"
+    assert client.put("/api/me/layout", json={"style": "cards"}).json()["style"] == "cards"
     assert client.put("/api/me/layout", json=[]).status_code == 400
-    assert client.put("/api/me/layout", json={}).json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None, "wallBg": None, "wallEvery": None, "wallPhotos": None}
+    assert client.put("/api/me/layout", json={}).json() == {"hidden": [], "order": [], "cards": [], "strip": None, "search": None, "stripMove": None, "stripEvery": None, "wallBg": None, "wallEvery": None, "wallPhotos": None, "style": None}
     # another account has its own
     testing.add_account(client, {"name": "kid", "password": "secret123", "role": "viewer"})
     client.put("/api/me/layout", json={"hidden": ["iohealth"]})
