@@ -7,7 +7,8 @@
  * api.c       HTTP to the start page with the device's app password
  * feed.c      the start page's wall feed (/api/wall/feed) every minute, and its photos (/api/wall/photo/<id>.jpg),
  *             decoded by the P4's JPEG engine
- * ui*.c       the screens (LVGL): the wall, setting up, settings, the panels that open over the wall
+ * ui*.c       the screens (LVGL): the wall, the views a swipe away from it, setting up, settings, the panels that
+ *             open over the wall
  * alarm.c     timers and alarms, and the sound (the board's speaker)
  * ota.c       a newer firmware from GitHub, over the air
  * power.c     the battery's level, on a board that measures it
@@ -66,6 +67,9 @@ void settings_load(void);
 void settings_save(void);
 void settings_forget_sign_in(void);
 void settings_reset(void);
+/** The views (ui_views.c) not swiped to, a bit each; kept beside the rest, so adding it did not ask for a new set-up. */
+extern uint32_t VIEWS_OFF;
+void settings_save_views(void);
 
 /* ------------------------------------------------------------------ net.c */
 
@@ -240,6 +244,19 @@ void ui_show_wall(void);
 void ui_wall_feed_changed(void); /* FEED was replaced */
 void ui_wall_photo(const lv_image_dsc_t *img, const char *caption); /* a new photo to fade in; NULL: none */
 void ui_wall_tick(void);         /* every second: the clock, timers */
+void ui_wall_viewing(bool on);   /* a view is over the wall: its own parts go, the photo darkens */
+
+/* the views a swipe away from the wall (ui_views.c) */
+#define VIEWS 6
+void ui_views_init(lv_obj_t *parent);
+void ui_views_swipe(int dir);    /* 1: the next one, -1: the one before */
+void ui_views_home(void);        /* back to the wall */
+bool ui_views_showing(void);
+void ui_views_reset(void);
+void ui_views_tick(void);
+const char *ui_views_name(int i);
+bool ui_views_has(int i);        /* the start page has it for this person */
+void views_poll(void);           /* on the feed's task, after each feed */
 void ui_toast(const char *text);
 void ui_show_settings(void);
 void ui_open_event(const wall_event_t *ev);

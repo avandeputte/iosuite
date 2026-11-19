@@ -1,10 +1,10 @@
 /* The wall: as the start page's #/wall lays it out, on the Tab5's 1280 × 720 in landscape (every size goes through
  * P(), which brings it to another board's screen). A big clock and the date top left, the weather top right; today
- * and the coming days bottom left (a swipe or a tap on Week: the whole week); today's tasks, the Home Assistant
+ * and the coming days bottom left (a tap on Week: the whole week); today's tasks, the Home Assistant
  * things on the wall and the next hours bottom right. Behind it an ioPix photo every so often, a sky in the colours
  * of the hour and the weather, or black.
  *
- * Touch: an event opens its details; a task's circle ticks it off; a Home Assistant tile switches it; a tap on the
+ * Touch: a swipe to the left or the right goes to the views beside the wall (ui_views.c); an event opens its details; a task's circle ticks it off; a Home Assistant tile switches it; a tap on the
  * photo shows the next one and the bar (add, timers, alarms, favorite, settings); holding it makes it a favorite. */
 #include <string.h>
 #include "esp_log.h"
@@ -22,13 +22,14 @@
 static lv_obj_t *scr;
 static lv_obj_t *sky, *img[2], *dim, *shade_top, *shade_bottom;
 static int img_top = -1;
-static lv_obj_t *clock_lbl, *ampm_lbl, *date_lbl, *chips;
+static lv_obj_t *top_left, *clock_lbl, *ampm_lbl, *date_lbl, *chips;
 static lv_obj_t *wx_box, *wx_icon, *wx_temp, *wx_text, *wx_rain, *wx_days;
 static lv_obj_t *agenda, *agenda_list, *tab_today, *tab_week;
 static lv_obj_t *right, *tasks_box, *ha_box, *hours_box;
 static lv_obj_t *caption, *status_pill, *bar, *fav_btn;
 static lv_timer_t *bar_timer;
 static bool week_view;
+static bool viewing;   /* a view (ui_views.c) is over the wall */
 static int shown_min = -1, shown_mday = -1;
 
 /* ------------------------------------------------------------------ small parts */
@@ -247,6 +248,18 @@ static void on_background(lv_event_t *e)
     }
 }
 
+/* A swipe to the left or the right, wherever it starts (LVGL hands a gesture to the screen): the next view or the one
+ * before (ui_views.c). The finger's lift is then not a tap as well. */
+static void on_swipe(lv_event_t *e)
+{
+    lv_indev_t *in = lv_indev_active();
+    lv_dir_t d = lv_indev_get_gesture_dir(in);
+    if (d != LV_DIR_LEFT && d != LV_DIR_RIGHT) return;
+    lv_indev_wait_release(in);
+    if (!lv_obj_has_flag(bar, LV_OBJ_FLAG_HIDDEN)) lv_obj_add_flag(bar, LV_OBJ_FLAG_HIDDEN);
+    ui_views_swipe(d == LV_DIR_LEFT ? 1 : -1);
+}
+
 /* ------------------------------------------------------------------ the agenda */
 
 static void on_event_row(lv_event_t *e)
@@ -403,13 +416,6 @@ static void on_tab(lv_event_t *e)
 {
     week_view = (intptr_t)lv_event_get_user_data(e) == 1;
     draw_agenda();
-}
-
-static void on_agenda_gesture(lv_event_t *e)
-{
-    lv_dir_t d = lv_indev_get_gesture_dir(lv_indev_active());
-    if (d == LV_DIR_LEFT && !week_view) { week_view = true; draw_agenda(); }
-    else if (d == LV_DIR_RIGHT && week_view) { week_view = false; draw_agenda(); }
 }
 
 static lv_obj_t *tab(lv_obj_t *parent, const char *text, intptr_t which)
@@ -743,6 +749,7 @@ static void draw_chips(void)
 void ui_wall_tick(void)
 {
     if (!scr || lv_screen_active() != scr) return;
+    ui_views_tick();
     time_t now = time(NULL);
     struct tm t;
     localtime_r(&now, &t);
@@ -806,6 +813,7 @@ static void fade_done(lv_anim_t *a)
  * weather, one behind the agenda and the tasks. */
 enum { SH_ALL, SH_TOP, SH_BOTTOM, SH_N };
 static const int SH_PLAIN[SH_N] = {0, 140, 190};   /* no photo: the sky, or black */
+static const int SH_VIEW[SH_N] = {205, 0, 0};      /* under a view: the photo far back, evenly */
 static int sh_now[SH_N] = {0, 140, 190}, sh_from[SH_N], sh_to[SH_N];
 
 static void shades_set(const int v[SH_N])
@@ -863,6 +871,14 @@ static int between(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v
 
 static void shades_for(const lv_image_dsc_t *im)
 {
+    if (viewing) {
+        shades_go(SH_VIEW);
+        return;
+    }
+    if (!im) {
+        shades_go(SH_PLAIN);
+        return;
+    }
     int h = im->header.h;
     int all = brightness(im, 0, h), top = brightness(im, 0, h * 45 / 100), bottom = brightness(im, h * 38 / 100, h);
     int to[SH_N] = {
@@ -877,7 +893,7 @@ void ui_wall_photo(const lv_image_dsc_t *im, const char *cap)
 {
     if (!scr) return;
     if (!im) {
-        shades_go(SH_PLAIN);
+        shades_for(NULL);
         lv_obj_add_flag(img[0], LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(img[1], LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(caption, "");
@@ -904,6 +920,19 @@ void ui_wall_photo(const lv_image_dsc_t *im, const char *cap)
 
 /* ------------------------------------------------------------------ the whole */
 
+void ui_wall_viewing(bool on)
+{
+    if (!scr) return;
+    viewing = on;
+    lv_obj_t *parts[] = {top_left, wx_box, agenda, right, caption};
+    for (size_t i = 0; i < sizeof parts / sizeof parts[0]; i++) {
+        if (on) lv_obj_add_flag(parts[i], LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_remove_flag(parts[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    shades_for(img_top >= 0 ? lv_image_get_src(img[img_top]) : NULL);
+    if (!on) ui_wall_feed_changed();
+}
+
 void ui_wall_feed_changed(void)
 {
     if (!scr) return;
@@ -913,7 +942,7 @@ void ui_wall_feed_changed(void)
     draw_tasks();
     draw_ha();
     bool none = !FEED->has_tasks && !(FEED->has_home && (FEED->nha || FEED->nalerts)) && !FEED->nhours;
-    if (none) lv_obj_add_flag(right, LV_OBJ_FLAG_HIDDEN);
+    if (none || viewing) lv_obj_add_flag(right, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_remove_flag(right, LV_OBJ_FLAG_HIDDEN);
     ui_wall_tick();
 }
@@ -925,6 +954,7 @@ static void build(void)
     lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
     lv_obj_add_event_cb(scr, on_background, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_event_cb(scr, on_background, LV_EVENT_LONG_PRESSED, NULL);
+    lv_obj_add_event_cb(scr, on_swipe, LV_EVENT_GESTURE, NULL);
 
     sky = box(scr);
     lv_obj_set_size(sky, WALL_W, WALL_H);
@@ -961,7 +991,7 @@ static void build(void)
     shades_set(SH_PLAIN);
 
     /* the clock, the date, the chips: top left */
-    lv_obj_t *tl = column(scr, 0);
+    lv_obj_t *tl = top_left = column(scr, 0);
     lv_obj_set_pos(tl, P(48), P(20));
     lv_obj_t *cr = row(tl, 14);
     lv_obj_set_flex_align(cr, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
@@ -992,7 +1022,6 @@ static void build(void)
     lv_obj_set_size(agenda, P(660), WALL_H - P(280) - P(20));   /* down to the screen's edge, whatever its height */
     lv_obj_set_pos(agenda, P(40), P(280));
     lv_obj_add_flag(agenda, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(agenda, on_agenda_gesture, LV_EVENT_GESTURE, NULL);
     lv_obj_t *tabs = row(agenda, 6);
     tab_today = tab(tabs, "Today", 0);
     tab_week = tab(tabs, "Week", 1);
@@ -1020,6 +1049,8 @@ static void build(void)
 
     caption = label(scr, font_text(22), DIM, "");
     lv_obj_align(caption, LV_ALIGN_BOTTOM_RIGHT, -P(16), -P(4));
+
+    ui_views_init(scr);   /* over the wall's own parts, under the status and the bar */
 
     status_pill = label(scr, font_text(24), TEXT, "");
     lv_obj_set_style_bg_color(status_pill, lv_color_hex(0x40140f), 0);
@@ -1050,6 +1081,7 @@ static void build(void)
 void ui_show_wall(void)
 {
     if (!scr) build();
+    ui_views_reset();
     shown_min = shown_mday = -1;
     lv_screen_load(scr);
     ui_wall_feed_changed();
