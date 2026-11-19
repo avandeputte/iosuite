@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wall display for the Tab5 — ioThing suite</title>
+<meta name="description" content="Put the start page's wall on an M5Stack Tab5: clock, weather, agenda, tasks, Home Assistant and photos. Install the firmware from Chrome over USB-C.">
+<link rel="canonical" href="https://iosuite.iothing.net/wall/">
+<link rel="icon" type="image/svg+xml" href="/img/icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+<script type="module" src="https://unpkg.com/esp-web-tools@10.5.2/dist/web/install-button.js?module"></script>
+<style>
+.wsteps{max-width:44em;margin:24px 0 8px;padding-left:1.3em;line-height:1.6}
+.wsteps li{margin:0 0 12px}
+.wflash{margin:28px 0 12px;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.wnote{color:var(--muted);max-width:44em}
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="nav wrap" aria-label="Main">
+    <a class="brand" href="/">
+      <img src="/img/icon.svg" alt="" width="34" height="34">
+      <b><span class="io">io</span>Thing <span class="suite">suite</span></b>
+    </a>
+    <a class="link" href="/#apps">All apps</a>
+    <a class="link" href="/#install">Other ways to install</a>
+    <a class="link" href="https://github.com/avandeputte/iosuite/tree/main/devices/tab5-wall" rel="noopener">The firmware's code</a>
+    <a class="gh" href="https://github.com/avandeputte/iosuite" rel="noopener">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      GitHub
+    </a>
+  </nav>
+</header>
+
+<main id="top">
+  <section class="chero">
+    <div class="wrap">
+      <span class="eyebrow">m5stack tab5 · esp32-p4</span>
+      <h1>The wall, on a Tab5</h1>
+      <p class="lede">The start page's wall on its own screen: the clock, the weather and the hours ahead, today's and the week's events, birthdays, tasks to tick off, your Home Assistant tiles and your ioPix photos. Add a task or an event from it, set a timer, wake up to its alarm clock.</p>
+
+      <ol class="wsteps">
+        <li>Connect the Tab5 to this computer with a USB-C cable that carries data, and open this page in <b>Chrome or Edge</b> on a computer (they can write to a USB device; Safari and Firefox cannot).</li>
+        <li>Put the Tab5 in download mode: hold its reset button for about two seconds, until the green light inside blinks fast, then let go.</li>
+        <li>Press <b>Install</b>, pick the Tab5's port (often “USB JTAG/serial debug unit”) and wait about a minute. When it says it is done, press the reset button once.</li>
+        <li>On the Tab5, pick your Wi-Fi, type your start page's address, and let it in: scan its code with your phone (or open your start page at <code>#/pair</code> and type the code). It can also sign in with your name and password.</li>
+      </ol>
+
+      <div class="wflash">
+        <esp-web-install-button manifest="manifest.json">
+          <button slot="activate" class="btn btn-primary" type="button">Install</button>
+          <span slot="unsupported" class="cwarn">This browser cannot write to a USB device. Open this page in Chrome or Edge on a computer.</span>
+          <span slot="not-allowed" class="cwarn">USB needs a secure page: open https://iosuite.iothing.net/wall/.</span>
+        </esp-web-install-button>
+        <a class="btn btn-ghost" href="iowall-full.bin" download>Download the firmware</a>
+      </div>
+      <p class="wnote" id="ver"></p>
+      <p class="wnote">Installing erases the Tab5 (its own demo, and anything else on it). Once it is signed in, it updates itself at night; Settings on the device turns that off. To put M5Stack's own firmware back, use M5Burner.</p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="frow">
+        <span class="fbrand"><img src="/img/icon.svg" alt=""><span><span class="io">io</span>Thing suite</span></span>
+        <a href="/">Home</a>
+        <a href="/docs/">Docs</a>
+                <a href="https://github.com/avandeputte/iosuite" rel="noopener">ioSuite on GitHub</a>
+      </div>
+      <p>Free and open source software, licensed under the GNU GPL v3 or later. An independent project. M5Stack and Tab5 are trademarks of M5Stack Technology; Chrome of Google.</p>
+    </div>
+  </footer>
+</main>
+<script>
+fetch("manifest.json").then(r => r.ok ? r.json() : null).then(m => {
+  const el = document.getElementById("ver");
+  el.textContent = m ? "Firmware version " + m.version + "." : "The firmware is not published yet.";
+}).catch(() => {});
+</script>
+</body>
+</html>
