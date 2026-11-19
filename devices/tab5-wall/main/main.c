@@ -13,13 +13,16 @@ void app_main(void)
     if (S.posix[0]) clock_set_zone(S.posix);   /* the clock in local time before the network is up */
 
     boot_step(BOOT_SCREEN);
+    /* as M5Stack's own firmware sets the screen up: two whole-screen buffers in the PSRAM, so a change is drawn and
+     * sent in one go (small buffers in internal memory sent a screen in dozens of strips, each turned by itself:
+     * a second or two per touch) */
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
-        .buffer_size = BSP_LCD_H_RES * CONFIG_BSP_LCD_DRAW_BUF_HEIGHT,
-        .double_buffer = CONFIG_BSP_LCD_DRAW_BUF_DOUBLE,
+        .buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES,
+        .double_buffer = true,
         .flags = {
             .buff_dma = true,
-            .buff_spiram = false,
+            .buff_spiram = true,
             .sw_rotate = true,   /* turned on its side by the P4's pixel processor (LVGL_PORT_ENABLE_PPA) */
         },
     };
