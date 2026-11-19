@@ -701,6 +701,19 @@ static void draw_chips(void)
         else lv_label_set_text_fmt(l, "%d:%02d", (int)(left / 60), (int)(left % 60));
         if (TIMER[i].label[0]) label(c, font_text(22), DIM, TIMER[i].label);
     }
+    int pct;
+    if (power_on_battery(&pct)) {
+        /* running on the battery: how full it is; red when it is nearly empty */
+        lv_obj_t *c = row(chips, 8);
+        lv_obj_set_style_pad_hor(c, P(14), 0);
+        lv_obj_set_style_pad_ver(c, P(4), 0);
+        lv_obj_set_style_radius(c, P(24), 0);
+        lv_obj_set_style_bg_color(c, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(c, LV_OPA_40, 0);
+        lv_color_t col = pct <= 15 ? lv_color_hex(0xff6b5e) : TEXT;
+        label(c, font_symbols(20), col, pct > 80 ? LV_SYMBOL_BATTERY_FULL : pct > 55 ? LV_SYMBOL_BATTERY_3 : pct > 30 ? LV_SYMBOL_BATTERY_2 : pct > 10 ? LV_SYMBOL_BATTERY_1 : LV_SYMBOL_BATTERY_EMPTY);
+        lv_label_set_text_fmt(label(c, font_text(22), col, ""), "%d%%", pct);
+    }
     time_t next = alarm_next();
     if (next) {
         lv_obj_t *c = row(chips, 8);
@@ -754,7 +767,7 @@ void ui_wall_tick(void)
         }
         if (t.tm_min % 10 == 0) paint_sky();
     }
-    bool any = alarm_next() != 0;
+    bool any = alarm_next() != 0 || power_on_battery(NULL);
     for (int i = 0; i < TIMERS; i++) any |= TIMER[i].on;
     static bool had;
     if (any || had) draw_chips();

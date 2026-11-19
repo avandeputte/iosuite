@@ -224,7 +224,10 @@ static void tick(lv_timer_t *t)
     alarm_tick();
     ui_wall_tick();
     static int n;
-    if (++n % 10 == 0) ui_apply_brightness();
+    if (++n % 10 == 0) {
+        ui_apply_brightness();
+        power_tick();
+    }
 }
 
 /* any touch: the night's dim screen lights up; the first touch on a dark screen does nothing else */
