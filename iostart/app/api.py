@@ -13,7 +13,7 @@ import zipfile
 
 from iosuite_shared.access import json_body
 
-from app import access, apps, config, siteicons, bookmarkcheck, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, weather, widgets
+from app import access, apps, config, siteicons, bookmarkcheck, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, wall, weather, widgets
 
 router = APIRouter()
 
@@ -514,6 +514,80 @@ def widget_image(key: str, kind: str, item_id: str, request: Request, p: str = "
         raise HTTPException(e.status, str(e))
     return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
                     headers={"Cache-Control": "private, max-age=86400"})
+
+
+# ------------------------------------------------------------------ the wall display on a device (app/wall.py)
+
+def _wall(fn, *a, **kw):
+    try:
+        return fn(*a, **kw)
+    except widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+    except wall.PairError as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.get("/api/wall/feed", dependencies=[access.signed_in])
+def wall_feed(request: Request, tz: str = ""):
+    """Everything the wall display shows, in one compact answer for a device of its own (devices/tab5-wall): the time
+    zone (IANA and POSIX), the weather and its next hours, today's and the coming days' events (times as epoch
+    seconds, the place before its first comma), birthdays, today's tasks, the Home Assistant entities on the wall, the
+    photos to show and what the viewer may change. tz: the device's zone (IANA), else the server's. A part is null when
+    its app is not there or did not answer (errors says why)."""
+    return _wall(wall.feed, request, tz)
+
+
+@router.get("/api/wall/photo/{photo_id}.jpg", dependencies=[access.signed_in])
+def wall_photo(photo_id: str, request: Request, w: int = 1280, h: int = 720):
+    """An ioPix photo cut to fill w × h (at most 1920 × 1200), as a baseline JPEG."""
+    body = _wall(wall.photo, request, photo_id, w, h)
+    return Response(body, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
+
+@router.post("/api/wall/tasks/{task_id}/done", dependencies=[access.signed_in])
+def wall_task_done(task_id: str, request: Request):
+    """Ticks off one of today's tasks in ioTask, as the viewer."""
+    return _wall(wall.task_done, request, task_id)
+
+
+@router.post("/api/wall/photos/{photo_id}/favorite", dependencies=[access.signed_in])
+async def wall_favorite(photo_id: str, request: Request):
+    """Body {on: bool (default true)}: the photo in (or out of) the viewer's ioPix favorites."""
+    b = await json_body(request)
+    return await run_in_threadpool(_wall, wall.favorite, request, photo_id, b.get("on", True) is not False)
+
+
+@router.post("/api/wall/pair", dependencies=[access.public])
+async def wall_pair(request: Request):
+    """A device asks to be let in: {label?} → {code, token, approveUrl, expires, every}. It shows the code (and a QR
+    code of approveUrl) and asks GET /api/wall/pair/{token} every `every` seconds."""
+    try:
+        b = await json_body(request)
+    except HTTPException:
+        b = {}
+    return wall.pair_start(b.get("label") or "", wall.base_url(request))
+
+
+@router.get("/api/wall/pair/{token}", dependencies=[access.public])
+def wall_pair_poll(token: str):
+    """202 {waiting: true} until someone approves the code; then once {password, name}: the device's own ioStart app
+    password; 404 when the code expired."""
+    got = _wall(wall.pair_poll, token)
+    if got is None:
+        return Response('{"waiting": true}', status_code=202, media_type="application/json")
+    return got
+
+
+@router.get("/api/wall/pair/code/{code}", dependencies=[access.signed_in])
+def wall_pair_info(code: str):
+    """The approval page (#/pair/<code>): the device waiting for this code, {code, label, age}."""
+    return _wall(wall.pair_info, code)
+
+
+@router.post("/api/wall/pair/code/{code}", dependencies=[access.signed_in])
+def wall_pair_approve(code: str, request: Request):
+    """The signed-in person lets the device in: it gets an app password of theirs (Settings › Account lists it)."""
+    return _wall(wall.pair_approve, code, request.state.user)
 
 
 # the server (version, updates, the log, restart): iosuite_shared's server_router, mounted in main.py

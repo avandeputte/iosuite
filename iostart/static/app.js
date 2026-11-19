@@ -204,6 +204,7 @@ function route() {
   if (a === 'settings') return { view: 'settings', tab: b || 'account', sub: c };
   if (a === 'bookmarks' || (a === 'settings' && b === 'bookmarks')) return { view: 'bookmarks' };
   if (a === 'wall') return { view: 'wall' };
+  if (a === 'pair') return { view: 'pair', code: b || '' };
   if (BM_APP && !a) return { view: 'bookmarks' };  // the Bookmarks app opens on them
   return { view: 'home' };
 }
@@ -218,7 +219,7 @@ async function onRoute() {
   haStreamStop();  // the view opens its own stream of Home Assistant changes when it needs one
   $('#topbar').append(userMenu());  // out of the old page before it goes; showHome takes it into the new one
   $('#main').replaceChildren(page);
-  try { await ({ home: showHome, settings: showSettings, wall: showWall, bookmarks: showBookmarks })[r.view](page, r); } catch (e) { fail(e); }
+  try { await ({ home: showHome, settings: showSettings, wall: showWall, bookmarks: showBookmarks, pair: showPair })[r.view](page, r); } catch (e) { fail(e); }
 }
 
 // ------------------------------------------------------------------ the start page
@@ -1499,6 +1500,37 @@ async function wallAgenda(el, has) {
     }
   }
   el.replaceChildren(...kids);
+}
+
+// ------------------------------------------------------------------ a wall display signing in (#/pair/<code>)
+/* A wall display of its own (devices/tab5-wall: an M5Stack Tab5) shows a code and a QR code of this page. Approving it
+   gives the display an app password of the person's (Settings › Account lists it under the display's name; removing
+   it there signs the display out). */
+async function showPair(page, r) {
+  page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Sign in a wall display')));
+  const box = h('div', { class: 'box' }); page.append(box);
+  const ask = (msg) => {
+    const code = h('input', { class: 't', placeholder: 'The code on the display, e.g. K7QM-4ZPA', autocomplete: 'off', autocapitalize: 'characters', value: r.code || '' });
+    const go = () => { const c = code.value.replace(/[^a-z0-9]/gi, '').toUpperCase(); if (c) location.hash = `#/pair/${c}`; };
+    code.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+    box.replaceChildren(h('h2', null, icon('wall'), 'The code on the display'), msg ? h('p', { class: 'err' }, msg) : null,
+      h('div', { class: 'multi' }, code, h('button', { class: 'pillbtn noic', onclick: go }, 'Next')),
+      h('p', { class: 'muted small' }, 'The display shows the code when it starts without a sign-in, with a QR code of this page.'));
+  };
+  if (!r.code) { ask(); return; }
+  let p;
+  try { p = await api(`api/wall/pair/code/${encodeURIComponent(r.code)}`); } catch (e) { ask(e.message); return; }
+  const code = `${p.code.slice(0, 4)}-${p.code.slice(4)}`;
+  box.replaceChildren(h('h2', null, icon('wall'), p.label),
+    h('p', null, `The display showing ${code} asks to show your start page: the time, the weather, your calendar, tasks, birthdays and photos, as the wall display does here, and lets a tap tick off a task, add one, or switch what Home Assistant lets you switch.`),
+    h('p', { class: 'muted small' }, `It gets an app password of yours, named “${p.label}”. Settings › Account lists it; removing it there signs the display out.`),
+    h('div', { class: 'row' }, h('button', { class: 'pillbtn noic', onclick: async (e) => {
+      e.target.disabled = true;
+      try {
+        await api(`api/wall/pair/code/${encodeURIComponent(p.code)}`, { method: 'POST', json: {} });
+        box.replaceChildren(h('h2', null, icon('wall'), p.label), h('p', null, 'Done: the display signs in within a few seconds.'), h('p', null, h('a', { class: 'lnk', href: '#/' }, 'Back to the start page')));
+      } catch (err) { e.target.disabled = false; fail(err); }
+    } }, 'Let it in'), ' ', h('a', { class: 'lnk', href: '#/' }, 'Not now')));
 }
 
 // ------------------------------------------------------------------ settings

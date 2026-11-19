@@ -25,8 +25,9 @@ log = logging.getLogger("iostart")
 # what a visitor may still fetch when sign-in is required: the app shell and its files, and the API docs
 OPEN_PATHS = ("/", "/bookmarks", "/manifest.webmanifest", "/bookmarks.webmanifest", "/api/docs", "/api/openapi.json")
 # /mcp signs in on its own (Auth.mcp_gate); the sync protocols under /dav answer 401 with a Basic challenge themselves
-# (a sync app shows that as "wrong password"), and the Nextcloud sign-in flow starts before anyone is signed in
-OPEN_PREFIXES = ("/static/", "/mcp", "/dav/")
+# (a sync app shows that as "wrong password"), and the Nextcloud sign-in flow starts before anyone is signed in; a wall
+# display asks for its pairing code before it has a sign-in (approving one takes a signed-in person: its route says so)
+OPEN_PREFIXES = ("/static/", "/mcp", "/dav/", "/api/wall/pair")
 
 
 @asynccontextmanager

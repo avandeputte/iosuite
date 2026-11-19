@@ -19,6 +19,7 @@ dependencies = [
   "defusedxml<1",                 # an uploaded SVG icon
   "websockets<16",                # Home Assistant's live feed (app/ha_feed.py)
   "mcp<3",                        # the suite's one MCP server at /mcp (and its client, to pass calls on to every app)
+  "pillow<13",                     # the wall display device's photos, cut to its screen (app/wall.py)
   "httpx2<3",                     # the suite on one address: every app's requests passed on (app/frontdoor.py); the MCP client's own library
 ]
 

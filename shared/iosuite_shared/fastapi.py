@@ -187,8 +187,10 @@ class Auth:
             authlog.warning("%s from %s refused: %d s to wait after repeated wrong passwords", "Basic sign-in as %r" % name if name else "bearer token", self.proxy.source(request), wait)
             return JSONResponse({"detail": f"Too many attempts; try again in {wait} seconds"}, status_code=429, headers={"Retry-After": str(wait)})
         user, scope = apppasswords.authenticate_scoped(name or None, pw, self.app)
-        if not user and (request.url.path == MCP_PATH or request.url.path.startswith(MCP_PATH + "/")):
-            # the suite's one MCP server: an ioStart app password reaches every app's /mcp (apppasswords.HUB)
+        if not user and not request.url.path.startswith(apppasswords.HUB_NEVER):
+            # an ioStart app password without a limit is the person's suite-wide sign-in (apppasswords.HUB): the start
+            # page passes it on when it asks an app on a device's behalf (the wall display), and the suite's one MCP
+            # server passes it on to every app's /mcp; never for the sync protocols, which have passwords of their own
             user, scope = apppasswords.authenticate_hub(name or None, pw, self.app), ""
         if not user:
             wait = users.attempt_failed(visitor, name)

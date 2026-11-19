@@ -132,7 +132,8 @@ def test_switched_off_app_offers_nothing(client, suite_mcp):
 
 
 def test_hub_password_rules(client, suite_mcp, task_port):
-    """Only an ioStart app password without a limit reaches another app's /mcp; nothing else of that app."""
+    """Only an ioStart app password without a limit reaches another app (its /mcp, its API: the start page passes it
+    on for the wall display); never that app's sync protocols."""
     import httpx
     alex = users.find("alex")
     full = apppasswords.create(alex["id"], "iostart", "x")
@@ -143,5 +144,8 @@ def test_hub_password_rules(client, suite_mcp, task_port):
     assert httpx.post(base + "/mcp", headers={**H, "Authorization": f"Bearer {dav}"}, json=body).status_code == 401
     assert httpx.post(base + "/mcp", headers={**H, "Authorization": "Bearer iostart-00000000-nope"}, json=body).status_code == 401
     assert apppasswords.authenticate_hub(None, full, "iostart") is None  # the start page checks its own the usual way
-    # outside /mcp an ioStart password is nothing to ioTask
-    assert httpx.get(base + "/api/whoami", headers={"Authorization": f"Bearer {full}"}).status_code == 401
+    # its API takes it too, as the same person; a scoped one stays the start page's alone; the sync protocols never
+    r = httpx.get(base + "/api/whoami", headers={"Authorization": f"Bearer {full}"})
+    assert r.status_code == 200 and r.json()["name"] == "alex", r.text
+    assert httpx.get(base + "/api/whoami", headers={"Authorization": f"Bearer {dav}"}).status_code == 401
+    assert httpx.request("PROPFIND", base + "/dav/", headers={"Authorization": f"Bearer {full}"}).status_code == 401

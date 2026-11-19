@@ -31,10 +31,12 @@ DAV = "dav"
 READ = "read"
 READ_NEVER = ("/mcp", "/dav", "/.well-known/")
 SCOPES = ("", DAV, READ)
-# The start page is the suite's one MCP server (ioStart's /mcp offers every app's tools): an ioStart app password with
-# no limit (scope '') also signs in at every other app's /mcp, as the same person with their role in that app. That is
-# how the start page passes a call on, and an assistant may as well connect to an app's /mcp with it directly.
+# The start page is the suite's front door: an ioStart app password with no limit (scope '') also signs in at every
+# other app, as the same person with their role in that app (not at the sync protocols: HUB_NEVER). That is how the start
+# page passes a request on for a device that has only that password (its MCP server, the wall display), and an assistant
+# may as well connect to an app's /mcp with it directly. A scoped one ('dav', 'read') stays the start page's alone.
 HUB = "iostart"
+HUB_NEVER = ("/dav", "/.well-known/")
 
 
 def create(user_id: int, app: str, label: str, scope: str = "") -> str:
@@ -87,8 +89,8 @@ def authenticate(name: str | None, password: str, app: str):
 
 
 def authenticate_hub(name: str | None, password: str, app: str):
-    """The account, with its role in `app`, for an ioStart app password without a limit (HUB): what an app's /mcp
-    takes besides its own. None for anything else (an account password is not tried here: the app's own check did)."""
+    """The account, with its role in `app`, for an ioStart app password without a limit (HUB): what every app takes
+    besides its own (but at HUB_NEVER). None for anything else (an account password is not tried here: the app's own check did)."""
     if app == HUB:
         return None
     user, scope = authenticate_scoped(name, password, HUB, accounts=False)
