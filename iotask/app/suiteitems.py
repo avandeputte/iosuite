@@ -37,9 +37,19 @@ def get(local, kind, item_id):
 
 def tile(local, tz, n, kind):
     """{today: [task], more, overdue}: the open tasks due today or before (the viewer's today), the overdue ones first
-    as ioTask sorts them, up to n, each with its list's colour; overdue is how many of them all are late."""
-    n = n or 3
+    as ioTask sorts them, up to n, each with its list's colour; overdue is how many of them all are late.
+    kind "week": {week: [task], more}, the open tasks due on the six days after today, the soonest first, up to n (12)."""
     q = {"due": "today", "status": "open", "limit": 200, "tz": tz or None}
+    if kind == "week":
+        n = n or 12
+        lists, soon, due = local.both(lambda: local.get("/api/lists"), lambda: local.get("/api/tasks", {**q, "due": "week"}),
+                                      lambda: local.get("/api/tasks", q))
+        colors = {c["id"]: c.get("color") for c in lists.get("items", [])}
+        by_today = {t.get("id") for t in due.get("items", [])}  # due today or before: the tile's own list
+        items = sorted((t for t in soon.get("items", []) if t.get("id") not in by_today and t.get("due")), key=lambda t: str(t["due"]))
+        return {"week": [{"id": t.get("id"), "title": t.get("title") or "(no title)", "due": t.get("due"), "allDay": bool(t.get("dueAllDay")),
+                          "color": colors.get(t.get("listId"))} for t in items[:n]], "more": max(0, len(items) - n)}
+    n = n or 3
     lists, due, over = local.both(lambda: local.get("/api/lists"), lambda: local.get("/api/tasks", q),
                                   lambda: local.get("/api/tasks", {**q, "due": "overdue"}))
     colors = {c["id"]: c.get("color") for c in lists.get("items", [])}
