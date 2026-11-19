@@ -274,6 +274,143 @@ def test_the_address_for_a_device(monkeypatch):
     assert trmnlserver.address() is None
 
 
+def _hhmm(hours: float) -> str:
+    """The time of day `hours` from now in the tests' zone, as HH:MM."""
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    return (dt.datetime.now(ZoneInfo(TZ)) + dt.timedelta(hours=hours)).strftime("%H:%M")
+
+
+def test_quiet_hours(client, paired):
+    """TRMNL's "sleep mode": in the quiet hours the device is told to sleep until they end, and keeps its picture."""
+    out, key, dev = paired
+    look = lambda why="timer": out.get("/api/display", headers=device(key=key, **{"Update-Source": why})).json()  # noqa: E731
+    client.put(f"/api/trmnl/devices/{dev}", json={"playlist": [{"layout": "full", "screens": [k]} for k in ("today", "tasks", "calendar")]})
+    first = look()
+    assert first["refresh_rate"] == 900 and client.get("/api/trmnl").json()["devices"][0]["quiet"] is None
+    r = client.put(f"/api/trmnl/devices/{dev}", json={"quiet": {"from": _hhmm(-1), "to": _hhmm(2)}})
+    assert r.status_code == 200 and r.json()["quiet"]["show"] == "last" and r.json()["quietNow"] is True
+    d = look()
+    assert 7000 < d["refresh_rate"] <= 7300 and d["filename"] == first["filename"]  # asleep until the quiet ends, its screen as it was
+    assert look()["filename"] == first["filename"]
+    assert picture(out, d["image_url"]).size == (800, 480)
+    # a press of its button shows the screen it is at, now, and it sleeps on until the morning
+    b = look("button")
+    assert b["filename"].startswith("plugin-") and b["filename"].split("-")[1] == first["filename"].split("-")[1] and 7000 < b["refresh_rate"] <= 7300
+    # or a line that says until when
+    assert client.put(f"/api/trmnl/devices/{dev}", json={"quiet": {"from": _hhmm(-1), "to": _hhmm(2), "show": "notice"}}).json()["quiet"]["show"] == "notice"
+    n = look()
+    assert n["filename"].startswith("screen-") and look()["filename"] == n["filename"] and 7000 < n["refresh_rate"] <= 7300
+    assert grays(picture(out, look()["image_url"])) == 2
+    # outside them, and without them, the playlist goes on where it was
+    assert client.put(f"/api/trmnl/devices/{dev}", json={"quiet": {"from": _hhmm(3), "to": _hhmm(5)}}).json()["quietNow"] is False
+    after = look()
+    assert after["refresh_rate"] == 900 and after["filename"].startswith("plugin-") and after["filename"].split("-")[1] != first["filename"].split("-")[1]
+    assert client.put(f"/api/trmnl/devices/{dev}", json={"quiet": None}).json()["quiet"] is None
+    for bad in ({"from": "22:00"}, {"from": "25:00", "to": "07:00"}, {"from": "07:00", "to": "07:00"}, {"from": "22:00", "to": "07:00", "show": "loud"}, "night"):
+        assert client.put(f"/api/trmnl/devices/{dev}", json={"quiet": bad}).status_code == 400, bad
+
+
+def test_when_the_quiet_ends():
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    z = ZoneInfo("UTC")
+    d = {"owner": None, "settings": {"quiet": {"from": "22:00", "to": "07:00"}}}
+    at = lambda h, m=0: dt.datetime(2026, 11, 19, h, m, tzinfo=z)  # noqa: E731
+    assert trmnlserver.quiet_left(d, at(23, 30)) == 7.5 * 3600 + 30   # through midnight
+    assert trmnlserver.quiet_left(d, at(6)) == 3600 + 30              # the quiet that began yesterday
+    assert trmnlserver.quiet_left(d, at(7)) is None and trmnlserver.quiet_left(d, at(12)) is None and trmnlserver.quiet_left(d, at(21, 59)) is None
+    assert trmnlserver.quiet_left(d, at(12), ahead=True) == 19 * 3600 + 30  # the button's sleep: until tomorrow morning
+    day = {"owner": None, "settings": {"quiet": {"from": "13:00", "to": "15:00"}}}  # a nap
+    assert trmnlserver.quiet_left(day, at(14)) == 3600 + 30 and trmnlserver.quiet_left(day, at(15)) is None and trmnlserver.quiet_left(day, at(12)) is None
+    assert trmnlserver.quiet_left(day, at(16), ahead=True) == 23 * 3600 + 30
+    assert trmnlserver.quiet_left({"owner": None, "settings": {}}, at(23)) is None
+
+
+def test_the_button(client, paired, monkeypatch):
+    """The firmware's special functions: the answer names the one a double press runs; asked with a
+    special_function header (true: the one set; a name: the TRMNL X's menu), it carries the action the firmware
+    checks for."""
+    out, key, dev = paired
+    told = []
+    monkeypatch.setattr(trmnlserver.push, "notify", lambda uid, kind, title, body="", **kw: told.append((kind, title, kw.get("url"))) or 1)
+    ask = lambda fn=None: out.get("/api/display", headers=device(key=key, **({"special_function": fn} if fn else {}))).json()  # noqa: E731
+    which = lambda d: d["filename"].split("-")[1]  # noqa: E731
+    client.put(f"/api/trmnl/devices/{dev}", json={"playlist": [{"layout": "full", "screens": [k]} for k in ("today", "tasks", "calendar")]})
+    one = ask()
+    assert one["special_function"] == "sleep" and "action" not in one and client.get("/api/trmnl").json()["buttons"][0] == "sleep"
+    # sleep (the default): the screen stays, for eight hours, or until the quiet hours end when there are some
+    s = ask("true")
+    assert s["action"] == "sleep" and s["refresh_rate"] == trmnlserver.SLEEP_FOR and s["filename"] == one["filename"]
+    client.put(f"/api/trmnl/devices/{dev}", json={"quiet": {"from": _hhmm(3), "to": _hhmm(5)}})
+    assert 17900 < ask("sleep")["refresh_rate"] <= 18100
+    client.put(f"/api/trmnl/devices/{dev}", json={"quiet": None})
+    # identify: which screen this is, by its name
+    assert client.put(f"/api/trmnl/devices/{dev}", json={"button": "identify", "name": "Kitchen"}).json()["button"] == "identify"
+    i = ask("true")
+    assert i["special_function"] == "identify" and i["action"] == "identify" and i["filename"].startswith("screen-")
+    assert picture(out, i["image_url"]).size == (800, 480) and ask("identify")["filename"] != i["filename"]  # drawn again every time
+    two = ask()
+    assert which(two) not in (which(one), which(i))  # the playlist went on from where it was
+    # by name, whatever the button is set to: start again, one back, hold
+    r = ask("restart_playlist")
+    assert r["action"] == "restart_playlist" and which(r) == which(one)
+    ask()
+    assert ask("rewind")["action"] == "rewind" and which(ask()) == which(two)  # the device showed the one before; the next is the one it was at
+    h = ask("guest_mode")
+    assert h["action"] == "guest_mode" and which(h) == which(two) and client.get("/api/trmnl").json()["devices"][0]["hold"] is True
+    assert which(ask()) == which(two) and which(ask()) == which(two)  # held: it stays
+    assert ask("toggle_hold")["action"] == "guest_mode" and client.get("/api/trmnl").json()["devices"][0]["hold"] is False
+    assert which(ask()) != which(two)
+    assert client.put(f"/api/trmnl/devices/{dev}", json={"hold": True}).json()["hold"] is True  # or from Settings
+    assert client.put(f"/api/trmnl/devices/{dev}", json={"hold": False}).json()["hold"] is False
+    # send to me: a notification that opens the picture; add Wi-Fi: the device does that itself
+    assert ask("send_to_me")["action"] == "send_to_me" and told and told[-1][0] == "trmnl" and told[-1][1].startswith("Kitchen: ")
+    assert f"api/trmnl/devices/{dev}/preview.png" in (told[-1][2] or f"api/trmnl/devices/{dev}/preview.png")
+    assert ask("add_wifi")["action"] == "add_wifi"
+    # none: nothing is armed, and a press is an ordinary look
+    client.put(f"/api/trmnl/devices/{dev}", json={"button": "none"})
+    n = ask("true")
+    assert n["special_function"] == "none" and "action" not in n
+    assert client.put(f"/api/trmnl/devices/{dev}", json={"button": "fireworks"}).status_code == 400
+    assert "action" not in ask("fireworks")  # a function this server does not know: an ordinary look
+
+
+def test_the_rest_of_what_the_firmware_reads(client, paired, monkeypatch):
+    out, key, dev = paired
+    told = []
+    monkeypatch.setattr(trmnlserver.push, "notify", lambda uid, kind, title, body="", **kw: told.append(title) or 1)
+    ask = lambda **h: out.get("/api/display", headers=device(key=key, **h)).json()  # noqa: E731
+    d = ask()
+    assert d["maximum_compatibility"] is False and d["verbose_logging"] == "info" and d["reset_firmware"] is False and d["update_firmware"] is False
+    r = client.put(f"/api/trmnl/devices/{dev}", json={"clean": True, "verbose": True, "refresh": 86400}).json()
+    assert r["clean"] is True and r["verbose"] is True and r["refresh"] == 86400
+    d = ask()
+    assert d["maximum_compatibility"] is True and d["verbose_logging"] == "debug" and d["refresh_rate"] == 86400
+    # what it shows now, for a client that only looks: the same picture, and the playlist stays
+    c = out.get("/api/current_screen", headers=device(key=key))
+    assert c.status_code == 200 and c.json()["status"] == 200 and c.json()["filename"] == d["filename"]
+    assert out.get("/api/current_screen", headers=device(key=key)).json()["filename"] == d["filename"]
+    assert picture(out, c.json()["image_url"]).size == (800, 480)
+    assert out.get("/api/current_screen", headers=device(key="x" * 20)).status_code == 404
+    # charging, and a battery that runs low: told once, and again only after it was charged
+    ask(**{"Battery-Charging": "1", "USB-Connected": "true"})
+    assert client.get("/api/trmnl").json()["devices"][0]["charging"] is True and not told
+    ask(**{"Battery-Voltage": "3.1", "Battery-Charging": "0"})
+    ask(**{"Battery-Voltage": "3.08", "Battery-Charging": "0"})
+    assert len(told) == 1 and "battery at 9%" in told[0]
+    ask(**{"Battery-Voltage": "4.0", "Battery-Charging": "0"})
+    ask(**{"Battery-Voltage": "3.1", "Battery-Charging": "0"})
+    assert len(told) == 2
+    # reset: once, at its next look; it may then come back for a new key
+    assert client.put(f"/api/trmnl/devices/{dev}", json={"reset": True}).json()["resetting"] is True
+    assert ask()["reset_firmware"] is True and ask()["reset_firmware"] is False
+    after = client.get("/api/trmnl").json()["devices"][0]
+    assert after["resetting"] is False and after["pairing"] is True
+    again = out.get("/api/setup", headers=device())
+    assert again.status_code == 200 and again.json()["api_key"] != key
+
+
 def test_pictures_to_look_at(client, apps_answer):
     """TRMNL_DUMP=<folder>: what devices get, written there to look at (the README's pictures)."""
     where = os.environ.get("TRMNL_DUMP")

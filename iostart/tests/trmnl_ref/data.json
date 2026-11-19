@@ -373,5 +373,117 @@
   "behind": [
    "Chase"
   ]
+ },
+ "weather": {
+  "screen": "weather",
+  "name": "Weather",
+  "weekday": "Thursday",
+  "date": "November 19",
+  "date_short": "Thu, Nov 19",
+  "updated": "8:05 AM",
+  "place": "Bayside",
+  "temp": "48\u00b0",
+  "text": "Mostly cloudy",
+  "icon": 2,
+  "feels": "44\u00b0",
+  "hi": "52\u00b0",
+  "lo": "41\u00b0",
+  "rain": "60%",
+  "note": "Rain from 1 PM",
+  "wind": "12 mph",
+  "humidity": "71%",
+  "uv": "2",
+  "hours": [
+   {
+    "time": "9 AM",
+    "icon": 2,
+    "temp": "48\u00b0",
+    "rain": ""
+   },
+   {
+    "time": "10 AM",
+    "icon": 3,
+    "temp": "49\u00b0",
+    "rain": ""
+   },
+   {
+    "time": "11 AM",
+    "icon": 3,
+    "temp": "51\u00b0",
+    "rain": ""
+   },
+   {
+    "time": "12 PM",
+    "icon": 2,
+    "temp": "52\u00b0",
+    "rain": "25%"
+   },
+   {
+    "time": "1 PM",
+    "icon": 5,
+    "temp": "52\u00b0",
+    "rain": "55%"
+   },
+   {
+    "time": "2 PM",
+    "icon": 5,
+    "temp": "51\u00b0",
+    "rain": "70%"
+   },
+   {
+    "time": "3 PM",
+    "icon": 5,
+    "temp": "49\u00b0",
+    "rain": "65%"
+   },
+   {
+    "time": "4 PM",
+    "icon": 2,
+    "temp": "47\u00b0",
+    "rain": "30%"
+   }
+  ],
+  "days": [
+   {
+    "day": "Today",
+    "icon": 5,
+    "text": "Showers",
+    "hi": "52\u00b0",
+    "lo": "41\u00b0",
+    "rain": "60%"
+   },
+   {
+    "day": "Fri",
+    "icon": 0,
+    "text": "Sunny",
+    "hi": "55\u00b0",
+    "lo": "44\u00b0",
+    "rain": ""
+   },
+   {
+    "day": "Sat",
+    "icon": 3,
+    "text": "Intermittent clouds",
+    "hi": "50\u00b0",
+    "lo": "39\u00b0",
+    "rain": ""
+   },
+   {
+    "day": "Sun",
+    "icon": 6,
+    "text": "Thunderstorms",
+    "hi": "43\u00b0",
+    "lo": "31\u00b0",
+    "rain": "80%"
+   },
+   {
+    "day": "Mon",
+    "icon": 7,
+    "text": "Snow",
+    "hi": "36\u00b0",
+    "lo": "27\u00b0",
+    "rain": "65%"
+   }
+  ]
  }
 }

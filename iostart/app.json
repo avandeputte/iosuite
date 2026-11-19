@@ -11,5 +11,12 @@
   "compose": {
     "name": "home",
     "what": "start page"
-  }
+  },
+  "notifications": [
+    {
+      "kind": "trmnl",
+      "label": "TRMNL screens",
+      "hint": "When one of your TRMNL screens runs low on battery, or sends you what it shows"
+    }
+  ]
 }
