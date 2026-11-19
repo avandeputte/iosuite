@@ -122,6 +122,17 @@ typedef struct {
     char day[11], end_day[11];
     uint32_t color;
     bool has_color;
+    /* what a tap on it adds, where ioCalendar has any */
+    struct {
+        char name[32];
+        uint32_t color;
+        bool has_color;
+    } who[6];              /* the family members it is for */
+    int nwho;
+    char people[160];      /* the other people on it, "A, B" */
+    char calendar[48];
+    char notes[400];
+    bool recurring;
 } wall_event_t;
 
 typedef struct {
