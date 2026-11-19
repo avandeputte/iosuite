@@ -1,6 +1,6 @@
 # the board, from the environment (../CMakeLists.txt sets it): this file is also read on its own, for what it requires
 if("$ENV{WALL_BOARD}" STREQUAL "waveshare7b")
-    set(BOARD_PACKAGE esp32_p4_wifi6_touch_lcd_7b)
+    set(BOARD_PACKAGE waveshare__esp32_p4_wifi6_touch_lcd_7b)   # its full name: the short one is not found below
 else()
     set(BOARD_PACKAGE m5stack_tab5)
 endif()
