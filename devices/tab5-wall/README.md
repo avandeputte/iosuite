@@ -34,7 +34,7 @@ from the [release](https://github.com/avandeputte/iosuite/releases/tag/wall-late
 
 ## Build it
 
-ESP-IDF 5.4 (`.github/workflows/tab5-wall.yml` builds it with 5.4.2):
+ESP-IDF 5.4 (`.github/workflows/tab5-wall.yml` builds it with 5.4.4; 5.4.2 lacks what the USB host component the board package pulls in needs):
 
 ```sh
 cd devices/tab5-wall
