@@ -1,5 +1,6 @@
 /* ioWall for the M5Stack Tab5: the start page's wall on the wall. */
 #include "bsp/esp-bsp.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "wall.h"
 
@@ -26,6 +27,7 @@ void app_main(void)
         return;
     }
     bsp_display_backlight_on();
+    ESP_LOGI(TAG_WALL, "screen up; internal memory free: %u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
 
     alarm_start();   /* before the screens: the volume, and a ring's sound */
     ui_lock();

@@ -23,6 +23,8 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
 CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+# HTTPS works in the PSRAM, the internal memory is the screen's and the Wi-Fi link's
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 CONFIG_ESP_HTTP_CLIENT_ENABLE_BASIC_AUTH=y
 CONFIG_ESP_HTTPS_OTA_ALLOW_HTTP=y
 CONFIG_LWIP_SNTP_MAX_SERVERS=2
@@ -71,10 +73,15 @@ CONFIG_LV_USE_DEMO_BENCHMARK=n
 CONFIG_LV_CACHE_DEF_SIZE=4194304
 CONFIG_LV_IMAGE_HEADER_CACHE_DEF_CNT=16
 
-# the board package: rotation by the P4's pixel processor, buffers for a 720 x 1280 panel turned on its side
+# the board package: rotation by the P4's pixel processor, buffers for a 720 x 1280 panel turned on its side.
+# The two draw buffers and the rotation's own buffer are each 720 x height pixels of internal DMA memory, of which
+# about 330 KB is left once the firmware is loaded. At 80 rows they asked for 346 KB: the third could not be had and
+# the board package's assert restarted the device over and over (a black screen). 30 rows: 3 x 43 KB.
 CONFIG_LVGL_PORT_ENABLE_PPA=y
-CONFIG_BSP_LCD_DRAW_BUF_HEIGHT=80
+CONFIG_BSP_LCD_DRAW_BUF_HEIGHT=30
 CONFIG_BSP_LCD_DRAW_BUF_DOUBLE=y
+# a part that fails to start (the speaker, say) returns its error instead of restarting the whole device
+CONFIG_BSP_ERROR_CHECK=n
 
 # updates over the air: a new firmware that crashes before a minute of running is rolled back
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
