@@ -1,49 +1,58 @@
+{%- comment -%} The hours' temperatures as a band from hour to hour: its upper edge at each hour's y (0 the warmest, 100 the coolest), stretched over the hours (image--fill). {%- endcomment -%}
+{%- capture curve -%}<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 100" preserveAspectRatio="none"><polygon points="{%- for h in hours limit: 8 -%}{%- if forloop.first -%}0,{{ h.y | times: 0.8 | plus: 3 }} {% endif -%}{{ forloop.index0 | times: 10 | plus: 5 }},{{ h.y | times: 0.8 | plus: 3 }} {% if forloop.last -%}{{ forloop.index | times: 10 }},{{ h.y | times: 0.8 | plus: 3 }} {{ forloop.index | times: 10 }},{{ h.y | times: 0.8 | plus: 17 }} {% endif -%}{%- endfor -%}{%- assign back = hours | slice: 0, 8 | reverse -%}{%- for h in back -%}{{ forloop.rindex0 | times: 10 | plus: 5 }},{{ h.y | times: 0.8 | plus: 17 }} {% if forloop.last -%}0,{{ h.y | times: 0.8 | plus: 17 }}{%- endif -%}{%- endfor -%}"/></svg>{%- endcapture -%}
 <div class="layout layout--row layout--top layout--stretch-x">
   {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
   {%- unless missing %}
   <div class="grid grid--cols-12 w--full">
-    <div class="col--span-4 flex flex--col flex--left gap">
-      <div class="flex flex--col flex--left gap--small">
-        <div class="flex flex--row flex--left gap">
-          <img class="image w--16 h--16" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}">
-          <span class="value value--xxlarge">{{ temp }}</span>
+    <div class="col--span-4 flex flex--col flex--left gap lg:gap--large">
+      <div class="flex flex--col flex--left gap--small lg:gap--base">
+        <div class="flex flex--row flex--left gap lg:gap--large">
+          <img class="image w--16 h--16 lg:w--24 lg:h--24" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}">
+          <span class="value value--xxlarge lg:value--xxxlarge">{{ temp }}</span>
         </div>
-        <span class="title">{{ text }}</span>
-        {%- if hi != "" %}<span class="label">High {{ hi }} &middot; Low {{ lo }}</span>{% endif %}
-        {%- if feels != "" %}<span class="label">Feels like {{ feels }}</span>{% endif %}
-        {%- if note != "" %}<span class="label label--inverted">{{ note }}</span>{% endif %}
+        <span class="title lg:title--large">{{ text }}</span>
+        {%- if hi != "" %}<span class="label lg:label--large">High {{ hi }} &middot; Low {{ lo }}</span>{% endif %}
+        {%- if feels != "" %}<span class="label lg:label--large">Feels like {{ feels }}</span>{% endif %}
+        {%- if note != "" %}<span class="label label--inverted lg:label--large">{{ note }}</span>{% endif %}
       </div>
-      <div class="flex flex--col flex--left gap--xsmall">
-        {%- if wind != "" %}<span class="label label--small label--gray">Wind {{ wind }}</span>{% endif %}
-        {%- if humidity != "" %}<span class="label label--small label--gray">Humidity {{ humidity }}</span>{% endif %}
-        {%- if uv != "" %}<span class="label label--small label--gray">UV index {{ uv }}</span>{% endif %}
+      <div class="flex flex--col flex--left gap--xsmall lg:gap--small">
+        {%- if wind != "" %}<span class="label label--small label--gray lg:label--base">Wind {{ wind }}</span>{% endif %}
+        {%- if humidity != "" %}<span class="label label--small label--gray lg:label--base">Humidity {{ humidity }}</span>{% endif %}
+        {%- if uv != "" %}<span class="label label--small label--gray lg:label--base">UV index {{ uv }}</span>{% endif %}
       </div>
     </div>
-    <div class="col--span-8 flex flex--col flex--left gap">
+    <div class="col--span-8 flex flex--col flex--left gap lg:gap--large">
       {%- if hours.size > 0 %}
-      <div class="flex flex--col flex--left gap--small w--full">
-        <span class="label label--underline">The next hours</span>
-        <div class="flex flex--row flex--between w--full">
-        {%- for h in hours limit: 8 %}
-        <div class="flex flex--col flex--center gap--xsmall">
-          <span class="label label--small">{{ h.time }}</span>
-          <img class="image w--10 h--10" src="data:image/svg+xml;base64,{{ wx_open | append: wx[h.icon] | append: '</svg>' | base64_encode }}">
-          <span class="title title--small">{{ h.temp }}</span>
-          <span class="label label--small label--gray">{% if h.rain != "" %}{{ h.rain }}{% else %}&nbsp;{% endif %}</span>
+      <div class="flex flex--col flex--left gap--small lg:gap--base">
+        <span class="label label--underline lg:label--xlarge">The next hours</span>
+        <div class="flex flex--row flex--left gap--none">
+          {%- for h in hours limit: 8 %}
+          <div class="flex flex--col flex--center gap--xsmall w--16 lg:w--20 lg:gap--small">
+            <span class="label label--small lg:label--base" data-pixel-perfect="true">{{ h.time }}</span>
+            <img class="image w--10 h--10 lg:w--14 lg:h--14" src="data:image/svg+xml;base64,{{ wx_open | append: wx[h.icon] | append: '</svg>' | base64_encode }}">
+          </div>
+          {%- endfor %}
         </div>
-        {%- endfor %}
-      </div>
+        <img class="image image--fill w--full h--8 lg:h--20" src="data:image/svg+xml;base64,{{ curve | base64_encode }}">
+        <div class="flex flex--row flex--left gap--none">
+          {%- for h in hours limit: 8 %}
+          <div class="flex flex--col flex--center gap--xsmall w--16 lg:w--20 lg:gap--small">
+            <span class="title title--small lg:title--large lg:text--bold" data-pixel-perfect="true">{{ h.temp }}</span>
+            <span class="label label--small label--gray lg:label--base" data-pixel-perfect="true">{% if h.rain != "" %}{{ h.rain }}{% else %}&nbsp;{% endif %}</span>
+          </div>
+          {%- endfor %}
+        </div>
       </div>
       {%- endif %}
-      <div class="flex flex--col flex--left gap--small w--full">
-        <span class="label label--underline">The coming days</span>
+      <div class="flex flex--col flex--left gap--small w--full lg:gap--base">
+        <span class="label label--underline lg:label--xlarge">The coming days</span>
         {%- for d in days %}
         <div class="grid grid--cols-12 w--full">
-          <div class="col--span-2 flex flex--row flex--left"><span class="title title--small">{{ d.day }}</span></div>
-          <div class="col--span-1 flex flex--row flex--left"><img class="image w--8 h--8" src="data:image/svg+xml;base64,{{ wx_open | append: wx[d.icon] | append: '</svg>' | base64_encode }}"></div>
-          <div class="col--span-5 flex flex--row flex--left"><span class="label" data-clamp="1">{{ d.text }}</span></div>
-          <div class="col--span-2 flex flex--row flex--left"><span class="label label--gray">{{ d.rain }}</span></div>
-          <div class="col--span-2 flex flex--row flex--right"><span class="label">{{ d.hi }} / {{ d.lo }}</span></div>
+          <div class="col--span-2 flex flex--row flex--left"><span class="title title--small lg:title--base lg:text--bold">{{ d.day }}</span></div>
+          <div class="col--span-1 flex flex--row flex--left"><img class="image w--8 h--8 lg:w--12 lg:h--12" src="data:image/svg+xml;base64,{{ wx_open | append: wx[d.icon] | append: '</svg>' | base64_encode }}"></div>
+          <div class="col--span-5 flex flex--row flex--left"><span class="label lg:label--large" data-clamp="1">{{ d.text }}</span></div>
+          <div class="col--span-2 flex flex--row flex--left"><span class="label label--gray lg:label--large">{{ d.rain }}</span></div>
+          <div class="col--span-2 flex flex--row flex--right"><span class="label lg:label--large">{{ d.hi }} / {{ d.lo }}</span></div>
         </div>
         {%- endfor %}
       </div>

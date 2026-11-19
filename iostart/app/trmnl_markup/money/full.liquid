@@ -1,30 +1,45 @@
+{%- assign few = false %}{%- if bills.size < 10 %}{%- assign few = true %}{%- endif %}
 <div class="layout layout--row layout--top layout--stretch-x">
   {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
   {%- unless missing %}
   <div class="grid grid--cols-12 w--full">
-    <div class="col--span-8 flex flex--col flex--left gap--small">
-      <span class="label label--underline">Bills this week</span>
-      {%- for b in bills limit: 10 %}
+    <div class="col--span-7 flex flex--col flex--left flex--top gap--small {% if few %}lg:gap--medium{% else %}lg:gap--base{% endif %}">
+      <span class="label label--underline lg:label--xlarge">Bills this week</span>
+      {%- for b in bills %}
       <div class="flex flex--row flex--between w--full">
-        <span class="title title--small" data-clamp="1">{{ b.day }} &middot; {{ b.name }}</span>
-        <span class="title title--small">{{ b.amount }}</span>
+        <span class="title title--small {% if few %}lg:title--large{% else %}lg:text--xlarge{% endif %} lg:text--bold" data-clamp="1">{{ b.day }} &middot; {{ b.name }}</span>
+        <span class="title title--small {% if few %}lg:title--large{% else %}lg:text--xlarge{% endif %} lg:text--bold">{{ b.amount }}</span>
       </div>
       {%- endfor %}
-      {%- if bills.size == 0 %}<span class="description">No bills due this week</span>{% endif %}
-      {%- if more > 0 %}<span class="label label--small label--gray">and {{ more }} more</span>{% endif %}
+      {%- if bills.size == 0 %}<span class="description lg:description--xlarge">No bills due this week</span>{% endif %}
+      {%- if more > 0 %}<span class="label label--small label--gray lg:label--large">and {{ more }} more</span>{% endif %}
     </div>
-    <div class="col--span-4 flex flex--col flex--left gap">
+    <div class="col--span-5 flex flex--col flex--left flex--top gap lg:gap--xlarge">
       {%- if total != "" %}
       <div class="item">
         <div class="meta"></div>
         <div class="content">
-          <span class="value value--small" data-fit-value="true">{{ total }}</span>
-          <span class="label">due this week</span>
+          <span class="value value--small lg:value--large" data-fit-value="true">{{ total }}</span>
+          <span class="label lg:label--xlarge">due this week</span>
         </div>
       </div>
       {%- endif %}
-      {%- for l in low %}<span class="label label--small label--inverted" data-clamp="1">{{ l }}</span>{% endfor %}
-      {%- if behind.size > 0 %}<span class="label label--small label--gray" data-clamp="2">Not up to date: {{ behind | join: ", " }}</span>{% endif %}
+      {%- if days.size > 0 %}
+      <div class="flex flex--col flex--left gap--small lg:gap--base">
+        <span class="label label--underline lg:label--xlarge">Day by day</span>
+        <img class="image image--fill w--full h--24 lg:h--56" src="{{ days_img }}">
+        <div class="flex flex--row flex--left gap--none">
+          {%- for d in days %}
+          <div class="flex flex--col flex--center gap--none w--11 lg:w--14">
+            <span class="title title--small lg:title--base lg:text--bold" data-pixel-perfect="true">{{ d.day }}</span>
+            <span class="label label--small lg:label--base" data-pixel-perfect="true">{% if d.amount != "" %}{{ d.amount }}{% else %}&nbsp;{% endif %}</span>
+          </div>
+          {%- endfor %}
+        </div>
+      </div>
+      {%- endif %}
+      {%- for l in low %}<span class="label label--small label--inverted lg:label--large" data-clamp="1">{{ l }}</span>{% endfor %}
+      {%- if behind.size > 0 %}<span class="label label--small label--gray lg:label--large" data-clamp="2">Not up to date: {{ behind | join: ", " }}</span>{% endif %}
     </div>
   </div>
   {%- endunless %}

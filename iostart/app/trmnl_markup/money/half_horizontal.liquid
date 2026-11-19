@@ -2,18 +2,18 @@
   {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
   {%- unless missing %}
   <div class="grid grid--cols-12 w--full">
-    <div class="col--span-8 flex flex--col flex--left gap--xsmall">
-      {%- for b in bills limit: 4 %}
-      <div class="flex flex--row flex--between w--full">
-        <span class="label" data-clamp="1">{{ b.day }} &middot; {{ b.name }}</span>
-        <span class="label value--tnums">{{ b.amount }}</span>
+    <div class="col--span-8 flex flex--col flex--left gap--xsmall lg:gap--small">
+      {%- for b in bills limit: 8 %}
+      <div class="flex flex--row flex--between w--full{% if forloop.index > 4 %} hidden lg:flex{% endif %}">
+        <span class="label lg:label--large" data-clamp="1">{{ b.day }} &middot; {{ b.name }}</span>
+        <span class="label value--tnums lg:label--large">{{ b.amount }}</span>
       </div>
       {%- endfor %}
       {%- if bills.size == 0 %}<span class="description">No bills due this week</span>{% endif %}
     </div>
-    <div class="col--span-4 flex flex--col flex--left gap--small">
-      {%- if total != "" %}<span class="value value--small" data-fit-value="true">{{ total }}</span><span class="label label--small">due this week</span>{% endif %}
-      {%- for l in low limit: 1 %}<span class="label label--small label--inverted" data-clamp="1">{{ l }}</span>{% endfor %}
+    <div class="col--span-4 flex flex--col flex--left gap--small lg:gap--base">
+      {%- if total != "" %}<span class="value value--small lg:value--base" data-fit-value="true">{{ total }}</span><span class="label label--small lg:label--base">due this week</span>{% endif %}
+      {%- for l in low limit: 1 %}<span class="label label--small label--inverted lg:label--base" data-clamp="1">{{ l }}</span>{% endfor %}
     </div>
   </div>
   {%- endunless %}

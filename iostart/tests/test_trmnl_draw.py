@@ -2,10 +2,15 @@
 
 tests/trmnl_ref has the suite's screens as Chromium rendered them with TRMNL's framework (its plugins.css and
 plugins.js, github.com/usetrmnl/trmnl-framework) from data.json: every screen in every size on a black-and-white
-TRMNL (800 x 480), the full screens in 4 grays, the quadrants in 16 grays, and a few on the TRMNL X (1872 x 1404,
-where the framework sets everything in Inter). The pictures drawn here may differ from those in a few pixels in a
-hundred: the edges of letters (a browser blurs a letter that falls between two pixels, this sets it on whole ones),
-never where things are. No database is needed."""
+TRMNL (800 x 480), the full screens in 4 grays, the quadrants in 16 grays, and on the TRMNL X (1872 x 1404, where
+the framework sets everything in Inter and the markup's lg: classes count) every full screen and a few of the other
+sizes. The pictures drawn here may differ from those in a few pixels in a hundred: the edges of letters (a browser
+blurs a letter that falls between two pixels, this sets it on whole ones), never where things are. No database is
+needed.
+
+To render the references again: each page with the framework's plugins.css and plugins.js in Chromium, the screen's
+class screen--<bits>bit; for the TRMNL X also screen--v2 screen--lg screen--density-2x, in a window of 1872 x 1404
+at a device scale of 1 (the framework magnifies the screen itself)."""
 import io
 import json
 import os
@@ -65,13 +70,57 @@ def test_as_trmnl_draws_it(screen, size, bits, most, elsewhere):
     assert apart(img, ref) <= (0.04 if (screen, size, bits) in ORPHAN else elsewhere)
 
 
-@pytest.mark.parametrize("screen,size,bits,most", [("today", "full", 4, 0.02), ("health", "full", 4, 0.02), ("calendar", "quadrant", 4, 0.02),
-                                                   ("money", "half_vertical", 4, 0.02), ("tasks", "full", 1, 0.03), ("weather", "full", 4, 0.02)])
+# on the TRMNL X: every full screen, health in every size (the rings), and one of each other size
+LARGER = ([(s, "full", 4, 0.02) for s in trmnl.SCREENS] + [("health", z, 4, 0.02) for z in trmnl.SIZES if z != "full"]
+          + [("today", "half_horizontal", 4, 0.02), ("money", "half_vertical", 4, 0.02), ("weather", "half_vertical", 4, 0.02), ("calendar", "quadrant", 4, 0.02),
+             ("tasks", "full", 1, 0.03)])
+
+
+@pytest.mark.parametrize("screen,size,bits,most", LARGER)
 def test_the_larger_trmnl(screen, size, bits, most):
     img, ref = drawn(screen, size, bits, 1.8, (1872, 1404)), reference(f"{screen}-{size}-x{bits}")
     assert img.size == (1872, 1404)
     assert trmnldraw.same(img, ref) <= most
-    assert apart(img, ref, 2) <= 0.005
+    # among the quadrants is the calendar's, where a header is left alone (ORPHAN) on this screen
+    assert apart(img, ref, 2) <= (0.04 if size == "quadrant" else 0.005)
+
+
+def test_classes_for_the_large_screen():
+    """lg:x counts on the TRMNL X alone, where it takes the place of the plain class of its group; lg:flex and
+    lg:block show there what `hidden` hides elsewhere."""
+    cls = {"title", "title--small", "lg:title--large", "lg:text--bold", "gap--small", "lg:gap--xlarge", "w--16", "lg:w--20", "h--8", "flex", "hidden", "lg:flex"}
+    assert trmnldraw.classes(cls, False) == {"title", "title--small", "gap--small", "w--16", "h--8", "flex", "hidden"}
+    assert trmnldraw.classes(cls, True) == {"title", "title--large", "text--bold", "gap--xlarge", "w--20", "h--8", "flex"}
+    row = '<div class="layout layout--col layout--top"><span class="label">one</span><span class="label hidden lg:block">two</span></div>'
+    ink = lambda img: sum(img.point(lambda v: 255 if v < 128 else 0).histogram()[255:])  # noqa: E731
+    one = '<div class="layout layout--col layout--top"><span class="label">one</span></div>'
+    small, large = (lambda m: trmnldraw.Drawer(1.0, 1).screen([m], "full")), (lambda m: trmnldraw.Drawer(1.8, 4).screen([m], "full", 1872, 1404))
+    assert ink(small(row)) == ink(small(one)) and ink(large(row)) > ink(large(one)) * 1.5
+
+
+def test_text_on_whole_pixels():
+    """data-pixel-perfect: on a screen without grays a text set in the middle of its place is made as wide as that
+    is even or odd, so its letters start on a whole pixel as the framework has them."""
+    for text in ("Fri", "Sat", "12,880", "I"):
+        d = trmnldraw.Drawer(1.0, 1)
+        span = trmnldraw.Node("span", {"class": "label", "data-pixel-perfect": "true"})
+        span.text = text
+        span.st = trmnldraw._style(span, 1.0, 1, False)
+        w = d.size(span, 64)[0]
+        assert w == int(w) and w % 2 == 0, text
+        assert d.size(span, 63)[0] % 2 == 1, text
+        for other in (trmnldraw.Drawer(1.0, 4), trmnldraw.Drawer(1.8, 1)):  # with grays, or magnified: the text keeps its width
+            span.st = trmnldraw._style(span, other.s, other.bits, other.dense)
+            assert other.size(span, 63 * other.s)[0] == other.size(span, 64 * other.s)[0]
+
+
+def test_progress_bar():
+    """The framework's progress bar (no screen has one at the moment; the health screen had, before its rings)."""
+    bar = lambda pct: (f'<div class="layout layout--col layout--top layout--stretch-x"><div class="progress-bar progress-bar--small"><div class="content">'  # noqa: E731
+                       f'<span class="label label--small">Move</span><span class="label label--small">{pct}%</span></div><div class="track"><div class="fill" style="width: {pct}%"></div></div></div></div>')
+    ink = lambda img: sum(img.point(lambda v: 255 if v < 128 else 0).histogram()[255:])  # noqa: E731
+    low, high = (trmnldraw.Drawer(1.0, 1).screen([bar(p)], "full") for p in (20, 80))
+    assert low.size == (800, 480) and ink(high) > ink(low) > 0
 
 
 def test_every_layout_takes_its_screens():
@@ -131,6 +180,22 @@ def test_glyphs():
     ring = trmnldraw.glyph(svg('<g fill="none" stroke="#000" stroke-width="2"><path d="M4 4h16v16H4z"/></g>'), 24, 24)
     assert ring.getpixel((12, 12)) < 10 and ring.getpixel((12, 4)) == 255
     assert trmnldraw.glyph("https://example.com/x.png", 24, 24) is None and trmnldraw.glyph("", 24, 24) is None
+    # what the graphs are written in: bars (rect), a band (polygon), and a ring's arc (a circle's stroke in one dash
+    # from the top, turned there by rotate)
+    bars = trmnldraw.glyph(svg('<rect x="0" y="12" width="12" height="12"/><polygon points="12,0 24,0 24,24 12,24"/>'), 24, 24)
+    assert abs(ink(bars) - (144 + 288)) <= 4 and bars.getpixel((6, 6)) < 10 and bars.getpixel((6, 18)) == 255 and bars.getpixel((18, 6)) == 255
+    arc = lambda dash: trmnldraw.glyph(svg(f'<g fill="none" stroke="#000"><circle cx="12" cy="12" r="8" stroke-width="4" stroke-dasharray="{dash} 400" transform="rotate(-90 12 12)"/></g>'), 96, 96)  # noqa: E731
+    quarter, half = arc(12.566), arc(25.133)
+    assert abs(ink(half) / ink(quarter) - 2) < 0.1
+    assert quarter.getpixel((48 + 23, 48 - 23)) == 255 and quarter.getpixel((48 - 23, 48 - 23)) < 10 and quarter.getpixel((48 + 23, 48 + 23)) < 10  # from twelve o'clock to three
+    assert half.getpixel((48 + 23, 48 + 23)) == 255 and half.getpixel((48 - 23, 48 + 23)) < 10
+    # a graph gives its proportions up and is stretched over an img that fills its place; elsewhere it keeps them
+    wide = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" preserveAspectRatio="none"><rect x="0" y="0" width="10" height="10"/></svg>'
+    wide = "data:image/svg+xml;base64," + base64.b64encode(wide.encode()).decode()
+    assert ink(trmnldraw.glyph(wide, 80, 20, True)) == 1600 and abs(ink(trmnldraw.glyph(wide, 80, 20)) - 400) <= 4
+    # a picture that starts between two pixels (a dense screen): a pixel more, the ink shared between the two at its edges
+    off = trmnldraw.glyph(wide, 20, 20, True, (0.5, 0.0))
+    assert off.size == (21, 20) and 90 < off.getpixel((0, 10)) < 190 and off.getpixel((10, 10)) == 255 and 90 < off.getpixel((20, 10)) < 190
     # every glyph of the weather is drawn, each its own, and they are the start page's (static/app.js)
     m = trmnl.markup("weather")["shared"]
     parts = re.search(r"\{%- capture wx_all -%\}(.*?)\{%- endcapture -%\}", m, re.S).group(1).split("|")
@@ -147,15 +212,22 @@ def test_glyphs():
 def test_what_the_markup_uses_is_known():
     """Every class in the suite's markup is one the drawing knows (and was held against TRMNL's framework above): a
     new one has to be added to app/trmnldraw.py and to the references, or it is drawn as a plain box."""
-    known = {"column", "columns", "content", "description", "fill", "flex", "flex--between", "flex--center", "flex--col", "flex--left", "flex--right", "flex--row",
-             "gap", "gap--small", "gap--xsmall", "grid", "grid--cols-12", "group-header", "image", "instance", "item", "label", "label--gray", "label--inverted",
-             "label--outline", "label--small", "label--underline", "layout", "layout--center", "layout--col", "layout--row", "layout--stretch-x", "layout--top",
-             "meta", "progress-bar", "progress-bar--small", "progress-bar--xsmall", "title", "title--small", "title_bar", "track", "value", "value--large",
-             "value--small", "value--tnums", "value--xlarge", "value--xxlarge", "w--full"}
+    known = {"block", "column", "columns", "content", "description", "description--xlarge", "description--xxlarge", "flex", "flex--between", "flex--center",
+             "flex--col", "flex--left", "flex--right", "flex--row", "flex--top", "gap", "gap--base", "gap--large", "gap--medium", "gap--none", "gap--small",
+             "gap--xlarge", "gap--xsmall", "grid", "grid--cols-12", "group-header", "hidden", "image", "image--fill", "instance", "item", "label", "label--base",
+             "label--gray", "label--inverted", "label--large", "label--outline", "label--small", "label--underline", "label--xlarge", "layout", "layout--center",
+             "layout--col", "layout--row", "layout--stretch-x", "layout--top", "meta", "text--bold", "text--xlarge", "text--xxlarge", "title", "title--base",
+             "title--large", "title--small", "title--xlarge", "title_bar", "value", "value--base", "value--large", "value--small", "value--tnums", "value--xlarge",
+             "value--xxlarge", "value--xxxlarge", "w--full"}
+    large = {"block", "flex"}  # what may follow lg: (the classes for the TRMNL X): these two, a size of text, a gap, a width, a height
     used = set()
     for screen in trmnl.SCREENS:
         m = trmnl.markup(screen)
         for part in m.values():
             for cls in re.findall(r'class="([^"]*)"', part):
-                used |= {c for c in re.sub(r"\{[%{].*?[%}]\}", " ", cls).split() if not c.startswith("col--span-") and not re.fullmatch(r"[wh]--\d+", c)}
-    assert used <= known, sorted(used - known)
+                used |= {c for c in re.sub(r"\{[%{].*?[%}]\}", " ", cls).split() if not c.startswith("col--span-") and not re.fullmatch(r"(lg:)?[wh]--\d+", c)}
+    plain = {c for c in used if ":" not in c}
+    sized = {c[3:] for c in used if c.startswith("lg:")}
+    assert all(c.startswith("lg:") for c in used - plain), sorted(used - plain)  # no sm: or md:, which the drawing does not read
+    assert plain | sized <= known, sorted((plain | sized) - known)
+    assert all(c in large or trmnldraw._family(c) or c == "text--bold" for c in sized), sorted(sized)

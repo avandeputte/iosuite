@@ -5,18 +5,23 @@
 What TRMNL's framework does with CSS and its plugins.js, this does for the part of the framework the suite's screens
 use, to the pixel where it could be measured against Chromium (tests/test_trmnl_draw.py lists what is covered):
 
-    view, layout (row/col, top, center, stretch-x), grid + col--span-N, flex (row/col, left/center/right/between),
-    gap, w--full, item/meta/content, columns with data-overflow (columns filled in turn, a group's header repeated
-    in gray where the group goes on, "and N more"), progress-bar, title_bar, value/title/label/description in the
-    sizes used, label--gray/--inverted/--outline/--underline, data-clamp, data-fit-value, the mashup layouts, and
-    an img sized with w--N h--N whose src is an SVG in a data: address, drawn by the small part of SVG the suite's
-    glyphs are written in (glyph: circle, path with M L H V A Z, g with fill and stroke).
+    view, layout (row/col, top, center, stretch-x), grid + col--span-N, flex (row/col, left/center/right/between,
+    top), gap in its sizes, w--full, w--N on a box, hidden, item/meta/content, columns with data-overflow (columns
+    filled in turn, a group's header repeated in gray where the group goes on, "and N more"), progress-bar,
+    title_bar, value/title/label/description in the sizes used, text--xlarge/--xxlarge/--bold,
+    label--gray/--inverted/--outline/--underline, data-clamp, data-fit-value, data-pixel-perfect, the mashup
+    layouts, the classes for the large screen (lg:x, see classes()), and an img sized with w--N h--N or w--full
+    (image--fill: stretched) whose src is an SVG in a data: address, drawn by the small part of SVG the suite's
+    glyphs and graphs are written in (glyph: circle with a dashed stroke turned by rotate, rect, polygon, path with
+    M L H V A Z, g with fill and stroke, preserveAspectRatio="none").
 
 The fonts are the framework's own (app/trmnl_fonts: TRMNL12/16/21 and Inter, SIL Open Font License), the grays are
 its dither patterns for 1-bit and 2-bit screens and plain grays from 4 bits up. A denser screen (the TRMNL X: 1.8 of
 its pixels to one of the framework's) is laid out at the framework's size and drawn larger, in Inter throughout, as
-the framework does there. A class this does not know is laid out as a plain box, so markup using more of the
-framework needs it added here (the test compares every screen).
+the framework does there: lengths in the framework's pixels fall between the screen's, so letters are set where
+they fall (drawn four times as large and brought down, a browser's way) and pictures on whole pixels of the
+framework's. A class this does not know is laid out as a plain box, so markup using more of the framework needs it
+added here (the test compares every screen).
 """
 import base64
 import functools
@@ -29,7 +34,7 @@ import zlib
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, features
 
-RAQM = features.check("raqm")  # for tabular figures (value--tnums); without it the figures keep their own widths
+RAQM = features.check("raqm")  # sets a font's features: tabular figures (value--tnums); without it the figures keep their own widths
 FONTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trmnl_fonts")
 W, H = 800, 480          # the framework's own screen, in its pixels; another screen is this times its scale
 GAP = 10
@@ -60,6 +65,7 @@ class Node:
         self.tag = tag
         self.attrs = dict(attrs or {})
         self.cls = set((self.attrs.get("class") or "").split())
+        self.own = {c for c in self.cls if ":" not in c}  # its plain classes, whatever the screen (cls: what counts on this one)
         self.kids = []
         self.text = ""
         self.parent = parent
@@ -119,9 +125,60 @@ def _walk(n):
         yield from _walk(k)
 
 
+# ---- the classes that count on this screen -----------------------------------------------------------------------
+
+STEPS = {"xxsmall", "xsmall", "small", "base", "large", "xlarge", "xxlarge", "xxxlarge", "mega", "giga"}
+
+
+def _family(c: str):
+    """The group a class belongs to where an element takes one of the group (a size of text, a gap, a width...), or None."""
+    if c == "gap" or c.startswith("gap--"):
+        return "gap"
+    m = re.fullmatch(r"([wh])--(?:\d+(?:\.5)?|full)", c)
+    if m:
+        return m.group(1)
+    base, _, step = c.partition("--")
+    if base in ("title", "label", "value", "description", "text", "progress-bar") and step in STEPS:
+        return base
+    return None
+
+
+def classes(cls, large: bool) -> set:
+    """An element's classes as they count on this screen. The framework's classes for one size of screen (lg:gap--large:
+    on a large screen, the TRMNL X) take the place of the element's plain class of the same group there and are
+    nothing elsewhere; lg:flex and lg:block show there what `hidden` hides elsewhere. The suite's markup has no sm: or
+    md: (the TRMNL itself is md: its look is the plain classes)."""
+    out = {c for c in cls if ":" not in c}
+    if not large:
+        return out
+    for c in cls:
+        if not c.startswith("lg:"):
+            continue
+        c = c[3:]
+        if c in ("flex", "block"):
+            out.discard("hidden")
+            continue
+        group = _family(c)
+        if group:
+            out = {o for o in out if _family(o) != group}
+        out.add(c)
+    return out
+
+
 # ---- fonts and text ----------------------------------------------------------------------------------------------
 
-@functools.lru_cache(maxsize=256)
+@functools.lru_cache(maxsize=8)
+def _rise(name: str):
+    """How far a font's line rises above and falls below the baseline, as parts of its size (the font file's hhea
+    table, which is what a browser on Linux lays lines out by)."""
+    with open(os.path.join(FONTS, name + ".ttf"), "rb") as f:
+        data = f.read()
+    tables = {data[12 + 16 * i:16 + 16 * i]: struct.unpack(">II", data[20 + 16 * i:28 + 16 * i]) for i in range(struct.unpack(">H", data[4:6])[0])}
+    em = struct.unpack(">H", data[tables[b"head"][0] + 18:tables[b"head"][0] + 20])[0]
+    up, down = struct.unpack(">hh", data[tables[b"hhea"][0] + 4:tables[b"hhea"][0] + 8])
+    return up / em, -down / em
+
+
 @functools.lru_cache(maxsize=256)
 def _font(name: str, size: float, weight: int = 0, optical: float = 0):
     f = ImageFont.truetype(os.path.join(FONTS, name + ".ttf"), size)
@@ -143,11 +200,16 @@ TEXT = {
 # and on a denser screen (the TRMNL X: 1872 x 1404, 1.8 of its pixels to one of the framework's), where the framework
 # sets everything in Inter
 TEXT_DENSE = {
-    **TEXT, "value--small": ("Inter", 26, 29, 475),
-    "title": ("Inter", 21, 25.2, 400), "title--small": ("Inter", 16, 19.2, 700),
+    **TEXT, "value--small": ("Inter", 26, 29, 475), "value--xxxlarge": ("Inter", 128, 128, 300),
+    "title": ("Inter", 21, 25.2, 400), "title--small": ("Inter", 16, 19.2, 700), "title--large": ("Inter", 30, 36, 425),
+    "title--xlarge": ("Inter", 35, 42, 400),
     "label": ("Inter", 16, 20, 500), "label--small": ("Inter", 13, 13, 500), "label--small-bold": ("Inter", 13, 13, 500),
-    "description": ("Inter", 13, 15.6, 400), "bar": ("Inter", 16, 22, 700),
+    "label--large": ("Inter", 21, 25.2, 500), "label--xlarge": ("Inter", 26, 31.2, 475),
+    "description": ("Inter", 13, 15.6, 400), "description--xlarge": ("Inter", 21, 25.2, 500), "description--xxlarge": ("Inter", 24, 28.8, 475),
+    "bar": ("Inter", 16, 22, 700),
 }
+# text--SIZE on any text of a dense screen: the size and the line of the letters, whatever the element is
+TEXT_SIZE = {"text--xlarge": (26, 29), "text--xxlarge": (38, 42)}
 
 
 class Style:
@@ -166,6 +228,8 @@ class Style:
         self.grow = False       # takes what is left on its parent's main axis
         self.shrink = False     # in a row: gives way when the row is too wide
         self.text = None        # a key of TEXT
+        self.spec = None        # (font file, size, line height, weight): the key's, as text--SIZE and text--bold change it
+        self.stretch = False    # a picture drawn over its whole box (image--fill), not in its own proportions
         self.color = "black"    # black | white | gray
         self.bg = None          # light | dark | black | white
         self.radius = 0.0
@@ -173,12 +237,13 @@ class Style:
         self.underline = False
         self.clamp = 0
         self.fit = False
+        self.even = False       # data-pixel-perfect: a whole number of pixels wide, even or odd as its place is
         self.align = "left"
         self.halo = False
         self.hidden = False
         self.line = 0           # the border's gray
         self.foot = False       # a title bar with the rounder foot it has where there are grays
-        self.feat = None        # font features (tabular figures)
+        self.feat = None        # font features (tabular figures; no forms that follow the neighbours)
         self.kind = "box"       # box | text | icon | columns | grid | track | fill
 
 
@@ -186,9 +251,12 @@ def _style(n: Node, s: float, bits: int = 1, dense: bool = False) -> Style:
     st = Style()
     c, p = n.cls, n.parent
     px = lambda v: v * s  # noqa: E731
-    if n.tag == "img" and not n.up("title_bar"):  # a picture of its own size (w--N h--N: N times 4 of the framework's pixels)
+    T = TEXT_DENSE if dense else TEXT
+    st.hidden = "hidden" in c
+    if n.tag == "img" and not n.up("title_bar"):  # a picture of its own size (w--N h--N: N times 4 of the framework's pixels; w--full: as wide as its place)
         side = lambda axis: next((px(4 * float(x[3:])) for x in c if re.fullmatch(axis + r"--\d+(\.5)?", x)), None)  # noqa: E731
-        st.kind, st.w, st.h = "image", side("w") or side("h") or px(24), side("h") or side("w") or px(24)
+        st.kind, st.full, st.stretch = "image", "w--full" in c, "image--fill" in c
+        st.w, st.h = None if st.full else side("w") or side("h") or px(24), side("h") or side("w") or px(24)
         return st
     if n.tag == "img":
         big = bits >= 2 and n.up("view--full") is not None  # where there are grays, the full view's bar has a larger mark
@@ -205,28 +273,37 @@ def _style(n: Node, s: float, bits: int = 1, dense: bool = False) -> Style:
         else:
             for base in ("value", "title", "label", "description"):
                 if base in c:
-                    sized = [k for k in TEXT if k.startswith(base + "--") and k in c]
+                    sized = [k for k in T if k.startswith(base + "--") and k in c]
                     st.text = sized[0] if sized else base
                     break
             else:
                 st.text = "label"
+        st.spec = T[st.text]
+        if dense and not bar:
+            for k, (size, line) in TEXT_SIZE.items():
+                if k in c:
+                    st.spec = (st.spec[0], size, line, st.spec[3])
+            if "text--bold" in c:
+                st.spec = st.spec[:3] + (700,)
         in_item = n.up("item") is not None
-        if st.text in ("label--small", "label--small-bold"):
+        # the room around the letters is the plain class's: a size for the large screen changes the letters alone
+        if "label" in n.own and "label--small" in n.own:
             st.pt, st.pb = (px(2), px(1)) if in_item else (px(1), px(1))
-        if st.text == "description":
+        if "description" in n.own and not any(_family(x) == "description" for x in n.own):
             st.pt = px(1)
         if st.text == "label--small" and bits >= 2 and p is not None and "content" in p.cls and p.parent is not None and "progress-bar" in p.parent.cls:
             st.text = "label--small-bold"
+            st.spec = T[st.text]
         if "label--gray" in c:
             st.color = "gray"
         if "label" in c and in_item and bits >= 2:  # where there are grays, what stands under an item's title is dark gray
             st.color = "dim"
         if "label--inverted" in c:
             st.color, st.bg, st.radius, st.pl, st.pr = "white", "black", px(4), px(5), px(5)
-            if st.text == "label":  # the full-size label has a pixel of black above and below its line
+            if not any(_family(x) == "label" for x in n.own):  # the full-size label has a pixel of black above and below its line
                 st.pt, st.pb = px(1), px(1)
         if "label--outline" in c:
-            st.border, st.radius, st.pl, st.pr, st.pt = 1, px(4), px(2), px(2), 0
+            st.border, st.radius, st.pl, st.pr, st.pt = (px(1) if dense else 1), px(4), px(2), px(2), 0  # a line of one of the framework's pixels
         if "label--underline" in c:
             st.underline = True
         if "group-header" in c:
@@ -236,8 +313,13 @@ def _style(n: Node, s: float, bits: int = 1, dense: bool = False) -> Style:
         except ValueError:
             st.clamp = 0
         st.fit = n.attrs.get("data-fit-value") == "true"
-        if "value--tnums" in c and RAQM:
-            st.feat = ["tnum"]
+        st.even = n.attrs.get("data-pixel-perfect") == "true"
+        if RAQM and st.spec[0] == "Inter":
+            # the framework has font-variant-ligatures: none, which leaves out the forms a letter takes from its
+            # neighbours too (Inter raises @ and : beside capitals and figures)
+            st.feat = ["-liga", "-clig", "-calt"] + (["tnum"] if "value--tnums" in c else [])
+        elif RAQM and "value--tnums" in c:
+            st.feat = ["tnum"]  # the pixel typefaces have figures of one width too
         st.shrink = st.shrink or bool(st.clamp) or st.fit
         if "w--full" in c:
             st.full = True
@@ -319,11 +401,14 @@ def _style(n: Node, s: float, bits: int = 1, dense: bool = False) -> Style:
         if "flex--between" in c:
             st.jc = "between"
         st.shrink = True
-    for g, v in (("gap--xsmall", 5), ("gap--small", 7), ("gap--medium", 16), ("gap--large", 20), ("gap--none", 0)):
+    for g, v in (("gap--xsmall", 5), ("gap--small", 7), ("gap--base", 10), ("gap--medium", 16), ("gap--large", 20), ("gap--xlarge", 30), ("gap--none", 0)):
         if g in c and st.kind in ("box", "grid", "columns"):
             st.gap = px(v)
     if "w--full" in c:
         st.full = True
+    wide = next((x for x in c if re.fullmatch(r"w--\d+", x)), None)  # a box of a set width: N times 4 of the framework's pixels
+    if wide and st.kind == "box":
+        st.w = px(4 * int(wide[3:]))
     return st
 
 
@@ -336,11 +421,14 @@ class Drawer:
 
     # -- text ----
     def font(self, n: Node, shrink: int = 0):
-        name, size, lh, weight = self.T[n.st.text]
-        size, lh = size - shrink, lh - shrink
+        name, size, lh, weight = n.st.spec
+        size, lh = size - shrink, math.floor((lh - shrink) * 64) / 64  # a browser counts lengths in 64ths of a pixel
         # where the baseline is in a line, worked out at the framework's own size as a browser does (whole pixels
         # there), then scaled: on a denser screen the page is laid out first and magnified after
-        asc, desc = _font(name, size, weight, size).getmetrics()
+        if name == "Inter":  # each to its nearest whole pixel, as a browser does (FreeType, which Pillow asks, rounds both up)
+            asc, desc = (math.floor(v * size + 0.5) for v in _rise(name))
+        else:
+            asc, desc = _font(name, size, weight, size).getmetrics()
         n.base = (math.floor((lh - (asc + desc)) / 2) + asc) * self.s
         # a pixel typeface at whole sizes; Inter at the very size (a denser screen: 16 becomes 28.8)
         return _font(name, size * self.s if name == "Inter" else round(size * self.s), weight, size), lh * self.s
@@ -356,7 +444,7 @@ class Drawer:
         width = lambda t: font.getlength(t, features=st.feat)  # noqa: E731
         if st.fit:  # a number that does not fit is set smaller until it does
             shrink = 0
-            while width(text) > aw and self.T[st.text][1] - shrink > 8:
+            while width(text) > aw and st.spec[1] - shrink > 8:
                 shrink += 1
                 font, lh = self.font(n, shrink)
                 width = lambda t: font.getlength(t, features=st.feat)  # noqa: E731
@@ -403,8 +491,15 @@ class Drawer:
         inner = max(0.0, aw - st.pl - st.pr - 2 * b)
         if st.kind == "text":
             cw, ch = self._text(n, inner)
+            if st.even and self.bits <= 2 and not self.dense and cw:
+                # data-pixel-perfect, where there are no grays to soften a letter that falls between two pixels: the
+                # framework makes the text a whole number of pixels wide, even where its place is even and odd where
+                # that is odd, so that set in the middle it starts on a whole pixel. (Not on a magnified screen,
+                # where the framework's pixels are not the screen's.)
+                cw = math.ceil(cw - 1e-6)
+                cw += (cw - round(aw)) % 2
         elif st.kind in ("icon", "image"):
-            return st.w, st.h
+            return (aw if st.w is None else st.w), st.h
         elif st.kind in ("track", "fill"):
             cw, ch = inner, 0
         elif st.kind == "columns":
@@ -417,7 +512,8 @@ class Drawer:
         else:
             ks = self.kids(n)
             sz = [self.size(k, inner, st.ai == "stretch") for k in ks]
-            cw = max([w for w, _ in sz], default=0)
+            # a picture as wide as its place (w--full) takes the width the others come to, and adds none of its own
+            cw = max([w for k, (w, _) in zip(ks, sz) if not (k.st.kind == "image" and k.st.w is None)], default=0)
             ch = sum(h for _, h in sz) + st.gap * max(0, len(sz) - 1) + sum(k.st.mt + k.st.mb for k in ks)
         w = st.w if st.w is not None else aw if (full or st.full) else min(aw, cw + st.pl + st.pr + 2 * b)
         h = st.h if st.h is not None else ch + st.pt + st.pb + 2 * b
@@ -460,7 +556,7 @@ class Drawer:
 
     def _grid(self, n: Node, inner: float):
         cols = next((int(x.split("-")[-1]) for x in n.cls if x.startswith("grid--cols-") and x.split("-")[-1].isdigit()), max(1, len(self.kids(n))))
-        colw = round((inner - n.st.gap * (cols - 1)) / cols)  # whole pixels a column, the gap takes the rest
+        colw = round((inner - n.st.gap * (cols - 1)) / cols / self.s) * self.s  # whole pixels (the framework's) a column, the gap takes the rest
         gap = (inner - cols * colw) / (cols - 1) if cols > 1 else 0
         return colw, gap
 
@@ -482,7 +578,7 @@ class Drawer:
         head = lambda k: "group-header" in k.cls  # noqa: E731
         best = None
         for count in range(1, most + 1):
-            colw = round((inner - gap * (count - 1)) / count)
+            colw = round((inner - gap * (count - 1)) / count / self.s) * self.s
             hs = [self.size(k, colw, True)[1] for k in src]
             cols, y, hidden, group, i = [[]], 0.0, 0, None, 0
             while i < len(src):
@@ -624,9 +720,10 @@ class Drawer:
         X, Y = _r(x), _r(y)
         Wd, Ht = max(0, _r(x + w) - X), max(0, _r(y + h) - Y)
         if st.bg and Wd and Ht and st.kind != "fill":
-            self.fill(img, _rounded(Wd, Ht, _radius(n, self.s), _corners(n)), (X, Y), st.bg, st.border)
+            self.fill(img, _rounded(Wd, Ht, _radius(n, self.s), _corners(n)), (X, Y), st.bg, _r(st.border))
         if st.border and Wd and Ht:
-            ring = ImageChops.subtract(_rounded(Wd, Ht, st.radius), _inset(_rounded(Wd - 2 * st.border, Ht - 2 * st.border, max(0, st.radius - st.border)), Wd, Ht, st.border))
+            b = max(1, _r(st.border))
+            ring = ImageChops.subtract(_rounded(Wd, Ht, st.radius), _inset(_rounded(Wd - 2 * b, Ht - 2 * b, max(0, st.radius - b)), Wd, Ht, b))
             img.paste(st.line, (X, Y), ring)
         if st.kind == "track":
             for k in n.kids:  # the fill, inside the track's rounded shape
@@ -639,7 +736,13 @@ class Drawer:
             self._icon(img, X, Y, _r(w), st.halo)
             return
         if st.kind == "image":
-            mask = glyph(n.attrs.get("src") or "", max(1, _r(w)), max(1, _r(h)))
+            src, at = n.attrs.get("src") or "", (0.0, 0.0)
+            if self.dense:  # a browser sets a picture on whole pixels of the framework's, which fall between the screen's
+                s = self.s
+                left, top, right, foot = (_r(v / s + 1e-6) * s for v in (x, y, x + w, y + h))
+                X, Y = math.floor(left), math.floor(top)
+                at, Wd, Ht = (round((left - X) * 8) / 8, round((top - Y) * 8) / 8), round((right - left) * 8) / 8, round((foot - top) * 8) / 8
+            mask = glyph(src, max(1, Wd), max(1, Ht), st.stretch, at)
             if mask is not None:
                 img.paste(0, (X, Y), mask)
             return
@@ -673,6 +776,9 @@ class Drawer:
             lx = left if st.align == "left" else x + w - st.pr - tw
             base = top + i * lh + n.base
             pos = (_r(lx), _r(base))
+            if self.dense and not st.halo:
+                self._fine(img, line, font, st, lx, base)
+                continue
             if st.color == "gray" and self.bits < 4:
                 mask = Image.new("L", (Wd, Ht), 0)
                 ImageDraw.Draw(mask).text((pos[0] - X, pos[1] - Y), line, font=font, fill=255, anchor="ls", features=st.feat)
@@ -682,6 +788,27 @@ class Drawer:
             if st.halo:  # white around the letters, so they stand out from the bar's pattern
                 d.text(pos, line, font=font, fill=255, anchor="ls", stroke_width=max(1, round((1 if self.dense else 2) * self.s)), stroke_fill=255, features=st.feat)
             d.text(pos, line, font=font, fill={"black": 0, "white": 255, "gray": 0x77, "dim": 0x55}[st.color], anchor="ls", features=st.feat)
+
+    def _fine(self, img: Image.Image, line: str, font, st: Style, x: float, base: float):
+        """A line of letters on a dense screen, as a browser sets them there: each letter where it falls along the
+        line, between pixels too, with stems of their own width. Drawn four times as large and brought down, since
+        FreeType at the size itself fits every stem and every step to whole pixels, which makes the letters heavier
+        and shifts them."""
+        k = 4
+        name, _, _, weight = st.spec
+        big = _font(name, font.size * k, weight, font.size / self.s)
+        base = _r(_r(base / self.s + 1e-6) * self.s)  # the baseline on a whole pixel of the framework's (a half goes down the page), then on one of the screen's
+        X, Y = math.floor(x), math.floor(base)
+        fx, fy = (x - X) * k, (base - Y) * k
+        l, t, r, b = big.getbbox(line, anchor="ls", features=st.feat)
+        x0, y0, x1, y1 = math.floor((l + fx) / k) - 1, math.floor((t + fy) / k) - 1, math.ceil((r + fx) / k) + 1, math.ceil((b + fy) / k) + 1
+        mask = Image.new("L", ((x1 - x0) * k, (y1 - y0) * k), 0)
+        ImageDraw.Draw(mask).text((fx - x0 * k, fy - y0 * k), line, font=big, fill=255, anchor="ls", features=st.feat)
+        mask = mask.resize((x1 - x0, y1 - y0), Image.BOX)
+        if st.color == "gray" and self.bits < 4:
+            self.fill(img, mask, (X + x0, Y + y0), "dark")
+        else:
+            img.paste({"black": 0, "white": 255, "gray": 0x77, "dim": 0x55}[st.color], (X + x0, Y + y0), mask)
 
     def _icon(self, img: Image.Image, X: int, Y: int, size: int, halo: bool):
         """The suite's mark (common.liquid's SVG: four tiles, a narrow one and the sun)."""
@@ -707,6 +834,8 @@ class Drawer:
         root.kids = parse(markup)
         for k in root.kids:
             k.parent = root
+        for n in _walk(root):
+            n.cls = classes(n.cls, self.dense)  # a dense screen is the large one (the TRMNL X)
         for n in _walk(root):
             n.st = _style(n, s, self.bits, self.dense)
         full = size == "full"
@@ -778,11 +907,12 @@ class Drawer:
 # ---- a glyph: the SVG of an img's data: address ------------------------------------------------------------------
 
 class _Svg(html.parser.HTMLParser):
-    """The shapes of a small SVG, in order: (kind, numbers, fill?, stroke width, round caps?)."""
+    """The shapes of a small SVG, in order: (kind, numbers, fill?, stroke width, round caps?, more). kind: circle
+    (cx, cy, r; more: its dashes and where they start, when it has stroke-dasharray) or line (points)."""
 
     def __init__(self):
         super().__init__()
-        self.box, self.shapes, self.inherit = (0.0, 0.0, 24.0, 24.0), [], [{}]
+        self.box, self.shapes, self.inherit, self.stretch = (0.0, 0.0, 24.0, 24.0), [], [{}], False
 
     def handle_starttag(self, tag, attrs):
         a = {**self.inherit[-1], **{k: v for k, v in attrs if v is not None}}
@@ -790,17 +920,34 @@ class _Svg(html.parser.HTMLParser):
             nums = [float(x) for x in re.findall(r"-?\d*\.?\d+", a.get("viewbox") or "")]
             if len(nums) == 4 and nums[2] > 0 and nums[3] > 0:
                 self.box = tuple(nums)
+            self.stretch = (a.get("preserveaspectratio") or "").strip() == "none"
         if tag in ("svg", "g"):
             self.inherit.append({k: v for k, v in a.items() if k in ("fill", "stroke", "stroke-width", "stroke-linecap")})
             return
         fill = a.get("fill", "#000") != "none"
         width = float(a.get("stroke-width") or 1) if a.get("stroke", "none") != "none" else 0.0
         caps = a.get("stroke-linecap") == "round"
-        if tag == "circle":
-            self.shapes.append(("circle", [float(a.get(k) or 0) for k in ("cx", "cy", "r")], fill, width, caps))
-        elif tag == "path":
-            for line, closed in _path(a.get("d") or ""):
-                self.shapes.append(("line", line, fill, width, caps or closed))
+        num = lambda k: float(a.get(k) or 0)  # noqa: E731
+        try:
+            if tag == "circle":
+                dash = [float(x) for x in re.findall(r"\d*\.?\d+", a.get("stroke-dasharray") or "")]
+                turn = re.match(r"\s*rotate\(\s*(-?\d*\.?\d+)", a.get("transform") or "")  # about the circle's own middle
+                more = (dash, float(turn.group(1)) if turn else 0.0) if len(dash) >= 2 and sum(dash) > 0 else None
+                self.shapes.append(("circle", [num("cx"), num("cy"), num("r")], fill, width, caps, more))
+            elif tag == "rect":
+                x, y, w, h = num("x"), num("y"), num("width"), num("height")
+                if w > 0 and h > 0:
+                    self.shapes.append(("line", [(x, y), (x + w, y), (x + w, y + h), (x, y + h), (x, y)], fill, width, True, None))
+            elif tag == "polygon":
+                nums = [float(x) for x in re.findall(r"-?\d*\.?\d+", a.get("points") or "")]
+                pts = list(zip(nums[0::2], nums[1::2]))
+                if len(pts) > 2:
+                    self.shapes.append(("line", pts + [pts[0]], fill, width, True, None))
+            elif tag == "path":
+                for line, closed in _path(a.get("d") or ""):
+                    self.shapes.append(("line", line, fill, width, caps or closed, None))
+        except ValueError:
+            pass
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
@@ -905,9 +1052,13 @@ def _arc(x1, y1, rx, ry, turn, large, sweep, x2, y2) -> list:
 
 
 @functools.lru_cache(maxsize=256)
-def glyph(src: str, w: int, h: int):
-    """The ink of an img whose src is an SVG in a data: address, as a mask w x h (None when it is not one): drawn
-    eight times as large and brought down, so its edges are as soft as a browser's."""
+def glyph(src: str, w: float, h: float, fill: bool = False, at=(0.0, 0.0)):
+    """The ink of an img whose src is an SVG in a data: address, as a mask (None when it is not one): drawn eight
+    times as large and brought down, so its edges are as soft as a browser's. w x h: the picture's box, which may
+    lie between pixels (at: how far into the mask's first pixel it starts; the mask is as many whole pixels as hold
+    it). The drawing keeps its proportions in the middle of the box; an SVG that gives them up
+    (preserveAspectRatio="none") in an img that fills its box (fill: image--fill) is stretched over all of it, which
+    is how a graph is as wide as its place."""
     m = re.match(r"data:image/svg\+xml;base64,(.*)", src or "", re.S)
     if not m:
         return None
@@ -920,28 +1071,45 @@ def glyph(src: str, w: int, h: int):
     k = 8
     bx, by, bw, bh = p.box
     f = min(w / bw, h / bh) * k  # the whole drawing, in the middle (preserveAspectRatio's default)
-    ox, oy = (w * k - bw * f) / 2 - bx * f, (h * k - bh * f) / 2 - by * f
-    big = Image.new("L", (w * k, h * k), 0)
+    fx, fy = (w * k / bw, h * k / bh) if fill and p.stretch else (f, f)
+    ox, oy = (w * k - bw * fx) / 2 - bx * fx + at[0] * k, (h * k - bh * fy) / 2 - by * fy + at[1] * k
+    size = (math.ceil(at[0] + w - 1e-9), math.ceil(at[1] + h - 1e-9))
+    big = Image.new("L", (size[0] * k, size[1] * k), 0)
     d = ImageDraw.Draw(big)
-    at = lambda x, y: (x * f + ox, y * f + oy)  # noqa: E731
-    for kind, nums, fill, width, caps in p.shapes:
+    at = lambda x, y: (x * fx + ox, y * fy + oy)  # noqa: E731
+    for kind, nums, inside, width, caps, more in p.shapes:
         sw = width * f
         if kind == "circle":
             (cx, cy), r = at(nums[0], nums[1]), nums[2] * f
-            if fill:
+            if inside:
                 d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=255)
-            if sw:
+            if sw and more and nums[2] > 0:  # dashes along it, from three o'clock (turned by its transform), clockwise
+                dash, turn = more
+                dash = dash if len(dash) % 2 == 0 else dash * 2
+                around, gone, i = 2 * math.pi * nums[2], 0.0, 0
+                while gone < around:
+                    if i % 2 == 0 and dash[i % len(dash)] > 0:
+                        a0 = turn + 360 * gone / around
+                        a1 = turn + 360 * min(around, gone + dash[i % len(dash)]) / around
+                        d.arc((cx - r - sw / 2, cy - r - sw / 2, cx + r + sw / 2, cy + r + sw / 2), a0, a1, fill=255, width=max(1, round(sw)))
+                        if caps:
+                            for a in (a0, a1):
+                                ex, ey = cx + r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a))
+                                d.ellipse((ex - sw / 2, ey - sw / 2, ex + sw / 2, ey + sw / 2), fill=255)
+                    gone += dash[i % len(dash)]
+                    i += 1
+            elif sw:
                 d.ellipse((cx - r - sw / 2, cy - r - sw / 2, cx + r + sw / 2, cy + r + sw / 2), outline=255, width=max(1, round(sw)))
             continue
         pts = [at(x, y) for x, y in nums]
-        if fill and len(set(pts)) > 2:
+        if inside and len(set(pts)) > 2:
             d.polygon(pts, fill=255)
         if sw:
             d.line(pts, fill=255, width=max(1, round(sw)), joint="curve")
             if caps:
                 for x, y in (pts[0], pts[-1]):
                     d.ellipse((x - sw / 2, y - sw / 2, x + sw / 2, y + sw / 2), fill=255)
-    return big.resize((w, h), Image.LANCZOS)
+    return big.resize(size, Image.LANCZOS)
 
 
 def _r(v: float) -> int:

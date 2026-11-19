@@ -1,12 +1,12 @@
-<div class="layout layout--col layout--top layout--stretch-x gap--small">
+<div class="layout layout--col layout--top layout--stretch-x gap--small lg:gap--base">
   <div class="flex flex--row flex--between w--full">
-    <span class="title">{{ date_short }}</span>
-    {%- if weather %}<span class="title">{{ weather.temp }}</span>{% endif %}
+    <span class="title lg:title--large">{{ date_short }}</span>
+    {%- if weather %}<span class="title lg:title--large">{{ weather.temp }}</span>{% endif %}
   </div>
-  {%- for e in events limit: 3 %}
-  <span class="label" data-clamp="1">{{ e.time }} &middot; {{ e.title }}</span>
+  {%- for e in events limit: 6 %}
+  <span class="label lg:label--large{% if forloop.index > 3 %} hidden lg:block{% endif %}" data-clamp="1">{{ e.time }} &middot; {{ e.title }}</span>
   {%- endfor %}
-  {%- if events.size == 0 %}<span class="label label--small" data-clamp="2">{% if next != "" %}{{ next }}{% else %}Nothing more today{% endif %}</span>{% endif %}
+  {%- if events.size == 0 %}<span class="label label--small lg:label--base" data-clamp="2">{% if next != "" %}{{ next }}{% else %}Nothing more today{% endif %}</span>{% endif %}
 </div>
 <div class="title_bar">
   <img class="image" src="{{ iosuite_icon }}">

@@ -6,6 +6,7 @@ import io
 import json
 import re
 import zipfile
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -23,6 +24,7 @@ def test_wording():
     assert trmnl.in_days(0) == "today" and trmnl.in_days(1) == "tomorrow" and trmnl.in_days(12) == "in 12 days" and trmnl.in_days(-7) == "7 days ago"
     assert trmnl.money(-2450, "USD") == "-$2,450.00" and trmnl.money(9.5, "CHF") == "9.50 CHF"
     assert trmnl.minutes(431) == "7 h 11 min" and trmnl.minutes(45) == "45 min"
+    assert [trmnl.short(v) for v in (85.4, -701, 1000, 1234, 2450, 9960, 12000)] == ["85", "701", "1k", "1.2k", "2.5k", "10k", "12k"]
 
 
 def test_screens(client, apps_answer):
@@ -47,6 +49,9 @@ def test_screens(client, apps_answer):
     assert health["rings"][0] == {"name": "Move", "value": "180", "goal": "500", "unit": "kcal", "pct": 36}
     money = client.get(f"/api/trmnl/money?tz={TZ}").json()
     assert money["bills"] == [{"day": "Today", "name": "Con Edison", "amount": "$142.17"}] and money["behind"] == ["Chase"]
+    # the graph: the week from today, what falls due each day against the heaviest day
+    assert len(money["days"]) == 7 and money["days"][0] == {"day": dt.datetime.now(ZoneInfo(TZ)).strftime("%a"), "amount": "142", "pct": 100}
+    assert all(d == {"day": d["day"], "amount": "", "pct": 0} for d in money["days"][1:])
     for d in (today, cal, tasks, docs, health, money):
         assert len(json.dumps(d).encode()) <= trmnl.LIMIT
     assert client.get("/api/trmnl/nothing").status_code == 404
@@ -82,7 +87,7 @@ def test_weather_screen(client, apps_answer, monkeypatch):
             a["DailyForecasts"] = [{**a["DailyForecasts"][0], "Date": (today + dt.timedelta(days=i)).isoformat(),
                                     "Day": {"Icon": 12 if i else 2, "IconPhrase": "Showers" if i else "Mostly sunny", "PrecipitationProbability": 60 if i else 5}} for i in range(5)]
         if "hourly" in path:
-            a = [{**a[0], "DateTime": (today + dt.timedelta(hours=i + 1)).isoformat()} for i in range(12)]
+            a = [{**a[0], "DateTime": (today + dt.timedelta(hours=i + 1)).isoformat(), "Temperature": {"Value": 14.0 - i}} for i in range(12)]
         return a
     monkeypatch.setattr(weather, "_get", get)
     client.post("/api/weather/settings", json={"key": "abc", "units": "imperial", "locationKey": "349727", "locationName": "New York, United States"})
@@ -92,6 +97,8 @@ def test_weather_screen(client, apps_answer, monkeypatch):
     assert w["icon"] == trmnl.WX.index("sun") and w["wind"] == "6 mph" and w["humidity"] == "40%" and w["uv"] == "3"
     assert w["hi"] == "64°" and w["lo"] == "50°" and w["rain"] == "" and w["note"].startswith("Rain ")
     assert len(w["hours"]) == 8 and w["hours"][0]["icon"] == trmnl.WX.index("rain") and w["hours"][0]["rain"] == "70%" and w["hours"][0]["time"].endswith(("AM", "PM"))
+    ys = [h["y"] for h in w["hours"]]  # the curve: from the warmest hour (0) down to the coolest (100)
+    assert ys[0] == 0 and ys[-1] == 100 and ys == sorted(ys)
     assert [d["day"] for d in w["days"]][0] == "Today" and len(w["days"]) == 5 and w["days"][0]["rain"] == "" and w["days"][1] | {"day": ""} == {
         "day": "", "icon": trmnl.WX.index("rain"), "text": "Showers", "hi": "64°", "lo": "50°", "rain": "60%"}
     assert len(json.dumps(trmnl.fit(w)).encode()) <= trmnl.LIMIT
@@ -141,6 +148,22 @@ def test_markup_renders():
             if screen == "weather":  # each glyph is a whole picture of its own, written out by Liquid
                 pics = re.findall(r'src="data:image/svg\+xml;base64,([^"]+)"', html)
                 assert pics and all(base64.b64decode(x).startswith(b"<svg ") and base64.b64decode(x).endswith(b"</svg>") for x in pics), size
+    # the pictures Liquid writes from the numbers: the rings (an arc as long as the day is far), the bars, the curve
+    pics = lambda screen, size, data: [base64.b64decode(x).decode() for x in re.findall(  # noqa: E731
+        r'src="data:image/svg\+xml;base64,([^"]+)"', env.parse(trmnl.markup(screen)["shared"] + trmnl.markup(screen)[size]).render(sample | data))]
+    rings = {"rings": [{"name": "Move", "value": "300", "goal": "600", "unit": "kcal", "pct": 50}, {"name": "Stand", "value": "0", "goal": "12", "unit": "h", "pct": 0}],
+             "week": [{"day": "Fri", "steps": "8,214", "pct": 64}, {"day": "Sat", "steps": "12,880", "pct": 100}]}
+    for size in trmnl.SIZES:
+        ring = pics("health", size, rings)[0]
+        assert ring.count("<circle") == 3 and 'stroke-dasharray="163.36 400"' in ring and 'transform="rotate(-90 60 60)"' in ring, size  # half of 2 pi 52
+    week = pics("health", "full", rings)[1]
+    assert week.count("<rect") == 2 and 'y="36" width="7" height="64"' in week and 'preserveAspectRatio="none"' in week
+    days = pics("money", "full", {"total": "$50.00", "days": [{"day": "Thu", "amount": "40", "pct": 100}, {"day": "Fri", "amount": "", "pct": 0}]})
+    assert len(days) == 2 and days[0].count("<rect") == 2 and 'height="100"' in days[0]  # and the suite's mark in the bar
+    hours = [{"time": f"{i + 1} PM", "icon": 5, "temp": "66°", "rain": "", "y": 25 * i} for i in range(5)]
+    curve = [x for x in pics("weather", "full", forecast | {"hours": hours}) if "<polygon" in x]
+    points = re.search(r'points="([^"]+)"', curve[0]).group(1).split()
+    assert len(curve) == 1 and len(points) == 2 * (len(hours) + 2) and points[0] == "0,3.0" and points[1] == "5,3.0" and points[5] == "45,83.0"
 
 
 @pytest.fixture()

@@ -2,18 +2,21 @@
   {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
   {%- unless missing %}
   <div class="grid grid--cols-12 w--full">
-    <div class="col--span-4 flex flex--col flex--left gap--small">
-      <span class="value value--large" data-fit-value="true">{{ steps }}</span>
-      <span class="label">steps today</span>
-      {%- if sleep != "" %}<span class="label label--small">{{ sleep }} asleep</span>{% endif %}
+    {%- if rings.size > 0 %}
+    <div class="col--span-4 flex flex--row flex--center"><img class="image w--36 h--36 lg:w--72 lg:h--72" src="{{ rings_img }}"></div>
+    {%- endif %}
+    <div class="col--span-4 flex flex--col flex--left gap--small lg:gap--base">
+      <span class="value value--large lg:value--xlarge" data-fit-value="true">{{ steps }}</span>
+      <span class="label lg:label--large">steps today</span>
+      {%- if sleep != "" %}<span class="label label--small lg:label--base">{{ sleep }} asleep</span>{% endif %}
     </div>
-    <div class="col--span-8 flex flex--col flex--left gap--xsmall">
-      {%- for r in rings %}
-      <div class="progress-bar progress-bar--small w--full">
-        <div class="content"><span class="label label--small">{{ r.name }}</span><span class="label label--small">{{ r.value }}{% if r.goal != "" %} / {{ r.goal }}{% endif %} {{ r.unit }}</span></div>
-        <div class="track"><div class="fill" style="width: {{ r.pct }}%"></div></div>
-      </div>
-      {%- endfor %}
+    <div class="col--span-4 flex flex--col flex--left gap--small lg:gap--medium">
+        {%- for r in rings %}
+        <div class="flex flex--row flex--between w--full">
+          <span class="title title--small lg:title--base lg:text--bold">{{ r.name }}</span>
+          <span class="label label--small lg:label--large">{{ r.value }}{% if r.goal != "" %} / {{ r.goal }}{% endif %} {{ r.unit }}</span>
+        </div>
+        {%- endfor %}
     </div>
   </div>
   {%- endunless %}

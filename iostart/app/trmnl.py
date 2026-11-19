@@ -146,14 +146,14 @@ def _ask(request, key: str, **kw):
 
 
 def _weather(w: dict | None, today: dt.date) -> dict | None:
-    """{temp, text, hi, lo, rain, days: [{day, hi, lo, text}]} from the wall feed's weather (already in the suite's
+    """{temp, text, icon, hi, lo, rain, days: [{day, hi, lo, text}]} from the wall feed's weather (already in the suite's
     units), or None."""
     if not w:
         return None
     deg = (lambda v: "" if v is None else f"{v}°")
     days = w.get("days") or []
     first = next((d for d in days if d.get("date") == today.isoformat()), None)
-    return {"temp": deg(w.get("temp")), "text": w.get("text") or "",
+    return {"temp": deg(w.get("temp")), "text": w.get("text") or "", "icon": _glyph(w.get("icon")),
             "hi": deg(first.get("max")) if first else "", "lo": deg(first.get("min")) if first else "",
             "rain": f"{first['rain']}%" if first and first.get("rain") else "",
             "days": [{"day": dt.date.fromisoformat(d["date"]).strftime("%a"), "hi": deg(d.get("max")), "lo": deg(d.get("min")),
@@ -278,19 +278,40 @@ def _health(request, z, now, h24):
             "average": thousands(sum(done) / len(done)) if done else ""}
 
 
+BILLS = 14  # the bills a screen lists at most (the large screen's full view)
+
+
+def short(v) -> str:
+    """An amount in the few letters a graph's foot has room for: 85, 1.2k, 12k."""
+    v = abs(v or 0)
+    if v < 1000:
+        return f"{round(v)}"
+    return f"{v / 1000:.1f}".rstrip("0").rstrip(".") + "k" if v < 9950 else f"{round(v / 1000)}k"
+
+
 def _money(request, z, now, h24):
-    m = _ask(request, "iomoney", tz=str(now.tzinfo), n=8)
+    """The week's bills, and for the graph what falls due on each of its days (days: [{day, amount, pct}], pct of
+    the heaviest day; empty when the bills are in more than one currency, which no sum can say)."""
+    m = _ask(request, "iomoney", tz=str(now.tzinfo), n=40)
     if m is None:
-        return {"bills": [], "more": 0, "total": "", "low": [], "behind": [], "missing": "ioMoney does not answer"}
+        return {"bills": [], "days": [], "more": 0, "total": "", "low": [], "behind": [], "missing": "ioMoney does not answer"}
     today = now.date()
-    bills = []
+    bills, due = [], {}
     for b in m.get("bills") or []:
         try:
-            day = day_name(dt.date.fromisoformat(str(b.get("day"))[:10]), today)
+            on = dt.date.fromisoformat(str(b.get("day"))[:10])
+            day = day_name(on, today)
+            due[on] = due.get(on, 0) + abs(b.get("amount") or 0)
         except ValueError:
             day = ""
         bills.append({"day": day[:3] if day not in ("Today", "Tomorrow") else day, "name": (b.get("name") or "")[:40],
                       "amount": ("~" if b.get("approximate") else "") + money(abs(b.get("amount") or 0), b.get("currency") or m.get("currency"))})
+    days = []
+    if m.get("total") is not None and due:
+        top = max(due.values()) or 1
+        for i in range(7):
+            on = today + dt.timedelta(days=i)
+            days.append({"day": on.strftime("%a"), "amount": short(due[on]) if due.get(on) else "", "pct": round(100 * due.get(on, 0) / top)})
     low = []
     for a in m.get("low") or []:
         try:
@@ -298,7 +319,8 @@ def _money(request, z, now, h24):
         except ValueError:
             on = ""
         low.append(f"{a.get('name')}: under {money(a.get('floor'), a.get('currency'))}" + (f" on {on}" if on else ""))
-    return {"bills": bills, "more": m.get("more") or 0, "total": money(abs(m["total"]), m.get("currency")) if m.get("total") is not None else "",
+    return {"bills": bills[:BILLS], "days": days, "more": (m.get("more") or 0) + max(0, len(bills) - BILLS),
+            "total": money(abs(m["total"]), m.get("currency")) if m.get("total") is not None else "",
             "low": low[:3], "behind": [a.get("institution") or a.get("name") for a in m.get("behind") or []][:3]}
 
 
@@ -308,7 +330,7 @@ def _glyph(icon) -> int:
 
 def _forecast(request, z, now, h24):
     """The start page's weather (app/weather.py, as the wall display reads it: wall._weather): now, the next eight
-    hours, five days. Everyone signed in may see it, as on the start page."""
+    hours (y: each one's place on the curve of their temperatures), five days. Everyone signed in may see it, as on the start page."""
     w = wall._weather(z)
     if w is None:
         on = weather.settings()["enabled"]
@@ -334,6 +356,9 @@ def _forecast(request, z, now, h24):
         days.append({"day": "Today" if day == today else day.strftime("%a"), "icon": _glyph(d.get("icon")), "text": (d.get("text") or "")[:40],
                      "hi": deg(d.get("max")), "lo": deg(d.get("min")), "rain": pct(d.get("rain"))})
     first = next((d for d in w.get("days") or [] if d.get("date") == today.isoformat()), None) or {}
+    hours = (w.get("hours") or [])[:8]
+    temps = [h["temp"] for h in hours if h.get("temp") is not None]
+    warm, cool = max(temps, default=0), min(temps, default=0)  # the hours' curve: y is how far down from the warmest (0) to the coolest (100)
     r = w.get("rain") or {}
     note = ""
     if r.get("from"):
@@ -344,8 +369,8 @@ def _forecast(request, z, now, h24):
             "feels": deg(round(feels)) if feels is not None else "", "hi": deg(first.get("max")), "lo": deg(first.get("min")), "rain": pct(first.get("rain")),
             "note": note, "wind": f"{round(wind)} {'mph' if imperial else 'km/h'}" if wind is not None else "",
             "humidity": f"{round(c['humidity'])}%" if c.get("humidity") is not None else "", "uv": str(round(c["uv"])) if c.get("uv") is not None else "",
-            "hours": [{"time": clock(dt.datetime.fromtimestamp(h["t"], z), h24), "icon": _glyph(h.get("icon")), "temp": deg(h.get("temp")), "rain": pct(h.get("rain"))}
-                      for h in (w.get("hours") or [])[:8]],
+            "hours": [{"time": clock(dt.datetime.fromtimestamp(h["t"], z), h24), "icon": _glyph(h.get("icon")), "temp": deg(h.get("temp")), "rain": pct(h.get("rain")),
+                       "y": round(100 * (warm - h["temp"]) / (warm - cool)) if h.get("temp") is not None and warm > cool else 50} for h in hours],
             "days": days[:5]}
 
 

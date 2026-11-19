@@ -1,12 +1,12 @@
-<div class="layout layout--col layout--center gap--small">
+<div class="layout layout--col layout--center gap--small lg:gap--base">
   {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
   {%- unless missing %}
-  <div class="flex flex--row flex--center gap">
-    <img class="image w--12 h--12" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}">
-    <span class="value value--xlarge">{{ temp }}</span>
+  <div class="flex flex--row flex--center gap lg:gap--large">
+    <img class="image w--12 h--12 lg:w--20 lg:h--20" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}">
+    <span class="value value--xlarge lg:value--xxlarge">{{ temp }}</span>
   </div>
-  <span class="label">{{ text }}{% if hi != "" %} &middot; {{ hi }} / {{ lo }}{% endif %}</span>
-  {%- if note != "" %}<span class="label label--small label--inverted">{{ note }}</span>{% endif %}
+  <span class="label lg:label--large">{{ text }}{% if hi != "" %} &middot; {{ hi }} / {{ lo }}{% endif %}</span>
+  {%- if note != "" %}<span class="label label--small label--inverted lg:label--base">{{ note }}</span>{% endif %}
   {%- endunless %}
 </div>
 <div class="title_bar">
