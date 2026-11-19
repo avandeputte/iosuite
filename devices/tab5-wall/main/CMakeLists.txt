@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "main.c" "settings.c" "net.c" "api.c" "feed.c" "alarm.c" "ota.c"
+    SRCS "main.c" "settings.c" "net.c" "api.c" "feed.c" "alarm.c" "ota.c" "boot.c"
          "ui.c" "ui_wall.c" "ui_setup.c" "ui_panels.c" "icons.c"
     INCLUDE_DIRS "."
     EMBED_FILES "fonts/Inter-Regular.ttf" "fonts/Inter-SemiBold.ttf" "fonts/InterDisplay-Light.ttf"
@@ -8,3 +8,5 @@ idf_component_register(
 )
 # text is cut to fit its buffer on purpose throughout (a long title, a long address)
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-format-truncation)
+# boot.c keeps what a panic said, to show it at the next start
+target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=esp_panic_handler")

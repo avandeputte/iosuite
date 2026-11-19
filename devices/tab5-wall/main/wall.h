@@ -10,6 +10,7 @@
  * ui*.c       the screens (LVGL): the wall, setting up, settings, the panels that open over the wall
  * alarm.c     timers and alarms, and the sound (the Tab5's speaker)
  * ota.c       a newer firmware from GitHub, over the air
+ * boot.c      what stopped the last start, shown on the screen
  *
  * LVGL is not thread-safe: every LVGL call outside its own callbacks happens between ui_lock() and ui_unlock().
  */
@@ -198,8 +199,11 @@ typedef struct {
     bool can_add_task, can_add_event, can_fav, can_home;
 } wall_feed_t;
 
-/** The feed the screens show (read it holding the UI lock); never NULL once feed_start ran. */
+/** The feed the screens show (read it holding the UI lock); never NULL once feed_init ran. */
 extern wall_feed_t *FEED;
+/** Before any screen: an empty feed and the task behind feed_run. */
+void feed_init(void);
+/** Asking the start page, and the photos: once the network is set up. */
 void feed_start(void);
 /** Ask again now (after a change made here, or a tap on Refresh). */
 void feed_refresh(void);
@@ -290,5 +294,15 @@ void ota_check_now(bool install);
 ota_state_t ota_state(void);
 const char *ota_text(void);
 const char *wall_version(void);
+
+/* ------------------------------------------------------------------ boot.c */
+
+typedef enum { BOOT_BEGIN, BOOT_SCREEN, BOOT_SOUND, BOOT_ROTATE, BOOT_UI, BOOT_WIFI, BOOT_FEED, BOOT_OTA, BOOT_RUNNING } boot_step_t;
+
+void boot_begin(void);              /* first thing: reads what the last run left */
+void boot_step(boot_step_t s);      /* the step now starting */
+bool boot_skip(boot_step_t s);      /* the last run stopped in this step: leave it out */
+void boot_report(bool can_go_on);   /* the last stop, on the screen */
+void boot_running(void);
 
 #define TAG_WALL "wall"
