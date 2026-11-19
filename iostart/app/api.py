@@ -3,7 +3,7 @@
 Clients authenticate with the web session cookie (the suite's, shared by every io app on the domain), HTTP Basic or
 `Authorization: Bearer <app password>`, as in the other io apps."""
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.concurrency import run_in_threadpool
 import asyncio
 import io
@@ -11,9 +11,10 @@ import json
 import os
 import zipfile
 
+from iosuite_shared import prefix
 from iosuite_shared.access import json_body
 
-from app import access, apps, config, siteicons, bookmarkcheck, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, trmnl, trmnlpush, wall, weather, widgets
+from app import access, apps, config, siteicons, bookmarkcheck, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, trmnl, trmnlpush, trmnlserver, wall, weather, widgets
 
 router = APIRouter()
 
@@ -592,11 +593,16 @@ def wall_pair_approve(code: str, request: Request):
 
 # ------------------------------------------------------------------ TRMNL e-ink screens (app/trmnl.py, app/trmnlpush.py)
 
+def _trmnl_state(request: Request, got: dict) -> dict:
+    return {**got, **trmnlserver.state(request.state.user), "server": wall.base_url(request)}
+
+
 @router.get("/api/trmnl", dependencies=[access.signed_in])
 def trmnl_settings(request: Request):
     """Settings › TRMNL: the screens this person may put on a TRMNL, which of them the start page pushes and how the
-    last push went, their time zone and clock, and the address TRMNL reaches the start page at (for the plugin files)."""
-    return {**trmnlpush.state(request.state.user), "server": wall.base_url(request)}
+    last push went, their time zone and clock, the address TRMNL reaches the start page at (for the plugin files),
+    their TRMNL devices that ask this server itself (app/trmnlserver.py) and the address such a device is given."""
+    return _trmnl_state(request, trmnlpush.state(request.state.user))
 
 
 @router.put("/api/trmnl", dependencies=[access.signed_in])
@@ -604,7 +610,85 @@ async def trmnl_save(request: Request):
     """{tz?, clock? (12|24), hooks?: {screen: webhook URL | ''}}: which screens the start page pushes to TRMNL's cloud
     and where. The first address makes the app password they are read with; the last one removed revokes it."""
     b = await json_body(request)
-    return {**await run_in_threadpool(trmnlpush.configure, request.state.user, b), "server": wall.base_url(request)}
+    return _trmnl_state(request, await run_in_threadpool(trmnlpush.configure, request.state.user, b))
+
+
+# A TRMNL device set to this server (app/trmnlserver.py). It has no account and cannot pass Cloudflare Access: the four
+# below answer without a sign-in (main.py: is_open), to a device's own key. The paths are TRMNL's firmware's.
+
+def _device(fn, *a):
+    try:
+        return fn(*a)
+    except trmnlserver.NotFound as e:
+        return JSONResponse({"status": 404, "message": str(e), "detail": str(e)}, status_code=404)
+
+
+@router.get("/api/setup", dependencies=[access.public])
+def trmnl_device_setup(request: Request):
+    """A TRMNL device's first question (header ID: its MAC address): its key, and the code its screen shows until
+    someone types it in Settings › TRMNL. {status: 200, api_key, friendly_id, image_url, message}."""
+    return _device(trmnlserver.setup, request.headers, prefix.base_url(request))
+
+
+@router.get("/api/display", dependencies=[access.public])
+def trmnl_device_display(request: Request):
+    """What a TRMNL device shows next (headers ID and Access-Token, and what it says of its battery and signal):
+    {status: 0, image_url, filename, refresh_rate, ...}, as TRMNL's firmware reads it."""
+    return _device(trmnlserver.display, request.headers, prefix.base_url(request))
+
+
+@router.post("/api/log", dependencies=[access.public])
+async def trmnl_device_log(request: Request):
+    """A TRMNL device's own log lines (headers ID and Access-Token): the last few are kept with the device."""
+    try:
+        b = await json_body(request)
+    except HTTPException:
+        b = {}
+    return _device(lambda: trmnlserver.add_log(request.headers, b) or {"status": 200})
+
+
+@router.get("/api/trmnl/image/{key}.png", dependencies=[access.public])
+def trmnl_device_image(key: str):
+    """The picture an answer of /api/display named (the key in its address is its secret, new with every answer)."""
+    got = _device(trmnlserver.image, key)
+    return got if isinstance(got, JSONResponse) else Response(got, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+def _mine(fn, *a):
+    try:
+        return fn(*a)
+    except trmnlserver.NotFound as e:
+        raise HTTPException(404, str(e))
+
+
+@router.post("/api/trmnl/devices", dependencies=[access.signed_in])
+async def trmnl_device_claim(request: Request):
+    """{code}: the signed-in person takes the TRMNL device whose screen shows this code; it shows their screens from
+    its next look."""
+    b = await json_body(request)
+    return await run_in_threadpool(_mine, trmnlserver.claim, request.state.user, b.get("code"))
+
+
+@router.put("/api/trmnl/devices/{dev_id}", dependencies=[access.signed_in])
+async def trmnl_device_save(dev_id: int, request: Request):
+    """{name?, refresh? (seconds), bits? (1|2|4), playlist? [{layout, screens}], pair? (true: let the device ask for a
+    new key for ten minutes, after a reset)}."""
+    b = await json_body(request)
+    return await run_in_threadpool(_mine, trmnlserver.configure, request.state.user, dev_id, b)
+
+
+@router.delete("/api/trmnl/devices/{dev_id}", dependencies=[access.signed_in])
+def trmnl_device_remove(dev_id: int, request: Request):
+    _mine(trmnlserver.remove, request.state.user, dev_id)
+    return {"ok": True}
+
+
+@router.get("/api/trmnl/devices/{dev_id}/preview.png", dependencies=[access.signed_in])
+def trmnl_device_preview(dev_id: int, request: Request, at: int = 0, layout: str = "", screens: str = ""):
+    """What the device shows, drawn now: entry `at` of its playlist, or (while it is edited) `layout` with `screens`
+    (comma-separated, one for each place of the layout)."""
+    body = _mine(trmnlserver.preview, request.state.user, dev_id, at, layout, [k for k in screens.split(",") if k])
+    return Response(body, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
 @router.post("/api/trmnl/{screen}/send", dependencies=[access.signed_in])

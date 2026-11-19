@@ -19,12 +19,13 @@ dependencies = [
   "defusedxml<1",                 # an uploaded SVG icon
   "websockets<16",                # Home Assistant's live feed (app/ha_feed.py)
   "mcp<3",                        # the suite's one MCP server at /mcp (and its client, to pass calls on to every app)
-  "pillow<13",                     # the wall display device's photos, cut to its screen (app/wall.py)
+  "pillow<13",                     # the wall display device's photos, cut to its screen (app/wall.py); the TRMNL screens drawn (app/trmnldraw.py)
+  "python-liquid<4",               # the TRMNL screens' markup, filled in for a TRMNL device that asks this server (app/trmnlserver.py)
   "httpx2<3",                     # the suite on one address: every app's requests passed on (app/frontdoor.py); the MCP client's own library
 ]
 
 [project.optional-dependencies]
-test = ["pytest<10", "httpx<1", "pyflakes<4", "python-liquid<4"]
+test = ["pytest<10", "httpx<1", "pyflakes<4"]
 
 [project.urls]
 Homepage = "https://github.com/avandeputte/iosuite/tree/main/iostart"
@@ -33,4 +34,4 @@ Homepage = "https://github.com/avandeputte/iosuite/tree/main/iostart"
 include = ["app*"]
 
 [tool.setuptools.package-data]
-app = ["trmnl_markup/*.liquid", "trmnl_markup/*/*.liquid"]
+app = ["trmnl_markup/*.liquid", "trmnl_markup/*/*.liquid", "trmnl_fonts/*"]

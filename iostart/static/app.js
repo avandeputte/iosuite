@@ -1568,7 +1568,7 @@ async function setTrmnl(el) {
   const clock = h('select', { class: 't', onchange: () => save({ clock: +clock.value }) }, [[12, '12 hours (6:00 PM)'], [24, '24 hours (18:00)']].map(([v, t]) => h('option', { value: v, selected: v === d.clock ? true : null }, t)));
   const list = h('div', { class: 'trmnl-list' });
   async function save(b) {
-    try { d = { ...d, ...await api('api/trmnl', { method: 'PUT', json: { tz, ...b } }) }; toast('Saved'); draw(); } catch (e) { fail(e); }
+    try { d = { ...d, ...await api('api/trmnl', { method: 'PUT', json: { tz, ...b } }) }; toast('Saved'); draw(); drawDevices(); } catch (e) { fail(e); }
   }
   function draw() {
     list.replaceChildren(...d.screens.map((x) => {
@@ -1589,13 +1589,118 @@ async function setTrmnl(el) {
     }));
     if (!d.screens.length) list.replaceChildren(h('p', { class: 'muted' }, 'None of the apps these screens show is in your suite yet.'));
   }
+  // -- a TRMNL that asks the start page itself (app/trmnlserver.py): no TRMNL account, plugin or webhook
+  const LAYOUT = { full: 'One screen', '1Lx1R': 'Two, side by side', '1Tx1B': 'Two, one above the other', '1Lx2R': 'One left, two right',
+    '2Lx1R': 'Two left, one right', '2Tx1B': 'Two above, one below', '1Tx2B': 'One above, two below', '2x2': 'Four' };
+  const EVERY = (sec) => (sec >= 3600 ? `${sec / 3600} hour${sec > 3600 ? 's' : ''}` : `${sec / 60} minutes`);
+  const GRAYS = { 1: 'Black and white', 2: '4 grays', 4: '16 grays' };
+  const devs = h('div', { class: 'trmnl-list' });
+  const shown = {};  // device id -> the playlist entry its picture shows
+  const copy = (text) => h('button', { class: 'iconbtn', title: 'Copy', onclick: async () => { try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { toast(text); } } }, icon('copy', 's'));
+  function seen(t) {
+    if (!t) return 'not seen yet';
+    const m = Math.round((Date.now() / 1000 - t) / 60);
+    return m < 2 ? 'seen just now' : m < 90 ? `seen ${m} minutes ago` : `seen ${when(t)}`;
+  }
+  function signal(r) { return r == null ? null : `signal ${r >= -60 ? 'strong' : r >= -72 ? 'good' : r >= -82 ? 'weak' : 'very weak'}`; }
+  async function device(x, b, quiet) {
+    try {
+      const r = await api(`api/trmnl/devices/${x.id}`, { method: 'PUT', json: b });
+      d.devices = d.devices.map((o) => (o.id === x.id ? r : o));
+      if (!quiet) toast('Saved');
+      drawDevices();
+    } catch (e) { fail(e); }
+  }
+  function drawDevices() {
+    const mine = d.screens.map((s) => s.key);
+    const name = (k) => (d.screens.find((s) => s.key === k) || { name: k }).name;
+    devs.replaceChildren(...d.devices.map((x) => {
+      const at = Math.min(shown[x.id] || 0, x.playlist.length - 1);
+      const set = (list) => device(x, { playlist: list });
+      const title = h('input', { class: 't', value: x.name, maxlength: 60, 'aria-label': 'Name', onchange: () => device(x, { name: title.value }) });
+      const facts = [x.model, `${x.width} × ${x.height}`, x.battery == null ? null : `battery ${x.battery}%`, signal(x.rssi), seen(x.seen), x.firmware ? `firmware ${x.firmware}` : null].filter(Boolean).join(' · ');
+      const every = h('select', { class: 't', onchange: () => device(x, { refresh: +every.value }) }, d.refreshes.map((v) => h('option', { value: v, selected: v === x.refresh ? true : null }, EVERY(v))));
+      const bits = x.canBits.length > 1 ? h('select', { class: 't', onchange: () => device(x, { bits: +bits.value }) }, x.canBits.map((v) => h('option', { value: v, selected: v === x.bits ? true : null }, GRAYS[v] || `${v} bits`))) : null;
+      const rows = x.playlist.map((it, i) => {
+        const places = (d.layouts.find((l) => l.key === it.layout) || { places: [] }).places;
+        const lay = h('select', { class: 't', 'aria-label': 'Layout', onchange: () => {
+          const n = d.layouts.find((l) => l.key === lay.value).places.length;
+          const fill = it.screens.concat(mine.filter((k) => !it.screens.includes(k)), mine).slice(0, n);  // the ones not shown yet first
+          shown[x.id] = i;
+          set(x.playlist.map((o, j) => (j === i ? { layout: lay.value, screens: fill } : o)));
+        } }, d.layouts.map((l) => h('option', { value: l.key, selected: l.key === it.layout ? true : null }, LAYOUT[l.key] || l.key)));
+        const picks = places.map((_, j) => {
+          const sel = h('select', { class: 't', 'aria-label': `Screen ${j + 1}`, onchange: () => {
+            shown[x.id] = i;
+            set(x.playlist.map((o, k) => (k === i ? { ...o, screens: o.screens.map((v, m) => (m === j ? sel.value : v)) } : o)));
+          } }, mine.map((k) => h('option', { value: k, selected: k === it.screens[j] ? true : null }, name(k))));
+          return sel;
+        });
+        const move = (to) => { const l = x.playlist.slice(); l.splice(to, 0, l.splice(i, 1)[0]); shown[x.id] = to; set(l); };
+        return h('div', { class: 'trmnl-row' + (i === at ? ' on' : '') },
+          h('button', { class: 'trmnl-nr', title: 'Show this one below', onclick: () => { shown[x.id] = i; drawDevices(); } }, String(i + 1)),
+          h('div', { class: 'trmnl-picks' }, lay, picks),
+          h('button', { class: 'iconbtn', title: 'Earlier', disabled: i === 0 ? true : null, onclick: () => move(i - 1) }, icon('up', 's')),
+          h('button', { class: 'iconbtn', title: 'Later', disabled: i === x.playlist.length - 1 ? true : null, onclick: () => move(i + 1) }, icon('down', 's')),
+          h('button', { class: 'iconbtn', title: 'Take it out', disabled: x.playlist.length === 1 ? true : null, onclick: () => { shown[x.id] = Math.max(0, at - (i <= at ? 1 : 0)); set(x.playlist.filter((_, j) => j !== i)); } }, icon('close', 's')));
+      });
+      const add = h('button', { class: 'pillbtn', disabled: x.playlist.length >= 12 || !mine.length ? true : null, onclick: () => {
+        const used = x.playlist.flatMap((o) => o.screens);
+        shown[x.id] = x.playlist.length;
+        set(x.playlist.concat([{ layout: 'full', screens: [mine.find((k) => !used.includes(k)) || mine[0]] }]));
+      } }, icon('add', 's'), 'Add');
+      const log = x.log.length ? h('details', { class: 'trmnl-log' }, h('summary', { class: 'muted small' }, 'What the device reported'),
+        h('ul', { class: 'small' }, x.log.slice().reverse().map((l) => h('li', null, h('span', { class: 'muted' }, `${when(l.at)}  `), l.text)))) : null;
+      return h('div', { class: 'box trmnl-screen trmnl-device' },
+        h('div', { class: 'grid' }, fld('Name', title), fld('Looks again every', every), bits ? fld('Shades', bits) : null),
+        h('p', { class: 'muted small' }, facts),
+        h('h3', null, 'Shows in turn'),
+        h('div', { class: 'trmnl-rows' }, rows),
+        h('div', { class: 'btns left' }, add),
+        h('img', { class: 'trmnl-pic', alt: `What ${x.name} shows`, style: `aspect-ratio: ${x.width} / ${x.height}`, src: `api/trmnl/devices/${x.id}/preview.png?at=${at}&v=${Date.now()}` }),
+        x.pairing ? h('p', { class: 'small' }, 'Pairing is open for ten minutes: reset the device now (hold its button until it restarts) and it gets a new key.') : null,
+        h('div', { class: 'btns left' },
+          h('button', { class: 'pillbtn noic', title: 'After a reset of the device, or when it says it is not registered', onclick: () => device(x, { pair: !x.pairing }, true) }, x.pairing ? 'Stop pairing' : 'Pair again'),
+          h('button', { class: 'pillbtn danger noic', onclick: async () => {
+            if (!await confirmDialog('Remove the screen', `Remove ${x.name}? The device shows a code again, for anyone here to take.`, 'Remove', true)) return;
+            try { await api(`api/trmnl/devices/${x.id}`, { method: 'DELETE' }); d.devices = d.devices.filter((o) => o.id !== x.id); toast('Removed'); drawDevices(); } catch (e) { fail(e); }
+          } }, 'Remove')),
+        log);
+    }));
+    if (!d.devices.length) devs.replaceChildren(h('p', { class: 'muted' }, 'No TRMNL of yours asks the start page yet.'));
+  }
+  const code = h('input', { class: 't trmnl-code', placeholder: 'ABC123', maxlength: 8, autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', 'aria-label': 'The code on the screen' });
+  async function claim() {
+    if (!code.value.trim()) return;
+    try {
+      const x = await api('api/trmnl/devices', { method: 'POST', json: { code: code.value } });
+      d.devices.push(x); code.value = ''; toast(`${x.name} is yours: it shows your screens at its next look`);
+      if (tz && tz !== d.tz) await save({}); else drawDevices();
+    } catch (e) { fail(e); }
+  }
+  code.addEventListener('keydown', (e) => { if (e.key === 'Enter') claim(); });
+  const where = d.deviceServer
+    ? [h('p', null, 'In the TRMNL’s Wi-Fi setup, where it asks for the server, enter this address instead of TRMNL’s own. The device cannot sign in, so it has to reach the start page inside your network, not through Cloudflare Access.'),
+      h('div', { class: 'trmnl-addr' }, h('code', null, d.deviceServer), copy(d.deviceServer))]
+    : [h('p', null, 'In the TRMNL’s Wi-Fi setup, where it asks for the server, enter the start page’s address inside your network instead of TRMNL’s own. This start page does not say it has one: it listens on this machine only (HOST in its config.env) or runs in a container without INTERNAL_URL. Through a reverse proxy, let ',
+      d.devicePaths.map((x, i) => [i ? (i === d.devicePaths.length - 1 ? ' and ' : ', ') : '', h('code', null, x)]), ' pass without a sign-in.')];
   el.append(h('div', { class: 'box' }, h('h2', null, icon('wall'), 'TRMNL'),
-    h('p', null, 'Put the suite on a TRMNL e-ink display. Each screen below is a TRMNL private plugin in its four sizes, so it can fill the display or share it with others (TRMNL’s mashups). Download it, then in TRMNL open Plugins › Private Plugin › Import new.'),
+    h('p', null, 'Put the suite on a TRMNL e-ink display: today, the calendar, tasks, papers to renew, health and bills, each filling the display or sharing it with others.'),
+    h('div', { class: 'grid' }, fld('Times on the screens', clock))),
+  h('div', { class: 'box' }, h('h2', null, icon('home'), 'Straight from the start page'),
+    h('p', null, 'The start page is a TRMNL server of its own. A TRMNL set to it gets these screens as finished pictures, with no TRMNL account, plugin or webhook, and nothing leaves your network.'),
+    where,
+    h('p', null, 'The device then shows a code. Type it here and it is yours: it shows your screens, read as you with an app password the start page makes for this (Settings › Account lists it as “TRMNL”).'),
+    h('div', { class: 'btns left trmnl-claim' }, code, h('button', { class: 'pillbtn primary noic', onclick: claim }, 'Add a screen'))),
+  devs,
+  h('div', { class: 'box' }, h('h2', null, icon('cloud'), 'Through TRMNL’s own plugins'),
+    h('p', null, 'For a TRMNL that stays with TRMNL’s cloud, or with another TRMNL server. Each screen below is a TRMNL private plugin in its four sizes (TRMNL’s mashups). Download it, then in TRMNL open Plugins › Private Plugin › Import new.'),
     h('p', null, h('b', null, 'For TRMNL to read: '), 'your own TRMNL server inside your network, or TRMNL’s cloud when it can reach the start page (through Cloudflare Access with a service token its policy lets in). In the plugin’s settings in TRMNL, give the start page’s address (', h('code', null, d.server), ') and an app password of yours (Settings › Account › App passwords).'),
-    h('p', null, h('b', null, 'For the start page to send: '), 'TRMNL’s cloud when the start page is only inside your network or behind Cloudflare Access. After the import, copy the plugin’s Webhook URL from its settings in TRMNL and paste it below. The start page then sends the screen every 15 minutes when it changed, reading it as you with an app password it makes for this (Settings › Account lists it as “TRMNL”).'),
-    h('div', { class: 'grid' }, fld('Times on the screens', clock))), list);
+    h('p', null, h('b', null, 'For the start page to send: '), 'TRMNL’s cloud when the start page is only inside your network or behind Cloudflare Access. After the import, copy the plugin’s Webhook URL from its settings in TRMNL and paste it below. The start page then sends the screen every 15 minutes when it changed, reading it as you with an app password it makes for this (Settings › Account lists it as “TRMNL”).')),
+  list);
   draw();
-  if (tz && tz !== d.tz && d.screens.some((x) => x.push)) save({});
+  drawDevices();
+  if (tz && tz !== d.tz && (d.screens.some((x) => x.push) || d.devices.length)) save({});
 }
 async function setHome(el) {
   const got = await api('api/home/settings');

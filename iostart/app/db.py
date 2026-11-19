@@ -11,7 +11,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 7  # 7: shared and personal bookmarks (owner, shared; prt_bookmark_starts)
+SCHEMA_VERSION = 8  # 8: TRMNL devices (prt_trmnl_devices); 7: shared and personal bookmarks (owner, shared; prt_bookmark_starts)
 PREFIX = "prt"
 
 # Every table is InnoDB/utf8mb4. Accounts and app passwords live in the Shared ioSuite database (iosuite-shared,
@@ -75,6 +75,26 @@ SCHEMA = [
         mime VARCHAR(32) NULL,
         etag CHAR(16) NULL,
         fetched_at DATETIME NOT NULL
+    )""",
+    # the TRMNL e-ink devices that ask this server what to show (app/trmnlserver.py), by MAC address. `code` is what a
+    # device nobody took yet shows on its screen; `owner` (ios_users.id) the person who typed it in Settings › TRMNL,
+    # whose screens it shows. settings: {playlist, refresh, bits}; state: what the device last said about itself and
+    # what it was last sent. Its key is not here: with the suite's keys and tokens (trmnl_device_<id>).
+    """CREATE TABLE IF NOT EXISTS prt_trmnl_devices (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        mac CHAR(17) NOT NULL,
+        code CHAR(6) NOT NULL,
+        owner INT NULL,
+        name VARCHAR(60) NOT NULL DEFAULT '',
+        model VARCHAR(40) NOT NULL DEFAULT '',
+        width INT NOT NULL DEFAULT 800,
+        height INT NOT NULL DEFAULT 480,
+        settings MEDIUMTEXT NOT NULL,
+        state MEDIUMTEXT NOT NULL,
+        seen_at DOUBLE NOT NULL DEFAULT 0,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE KEY idx_prt_trmnl_devices_mac (mac),
+        KEY idx_prt_trmnl_devices_owner (owner)
     )""",
 ]
 

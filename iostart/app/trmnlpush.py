@@ -104,23 +104,38 @@ def configure(user, b: dict) -> dict:
                                    "hint": "the webhook URL of a TRMNL plugin (Settings › TRMNL on the start page)"}])
         credentials.put(APP, _cred(uid, screen), url or None, by=user.get("name"))
         s["sent"].pop(screen, None)
-    have = hooks(uid)
-    if have and not credentials.get(APP, _cred(uid, "pw")):
-        if user.get("passwordless"):
-            raise Invalid("A one-click account cannot have app passwords, which pushing to TRMNL reads with; give the account a password first")
-        pw = apppasswords.create(uid, apppasswords.HUB, "TRMNL", "")
-        credentials.declare(APP, [{"name": _cred(uid, "pw"), "label": f"TRMNL: app password of {user.get('name')}",
-                                   "hint": "made by Settings › TRMNL; revoked there, or in Settings › Account › App passwords"}])
-        credentials.put(APP, _cred(uid, "pw"), pw, by=user.get("name"))
-    if not have:
-        stop(uid)
+    if hooks(uid):
+        ensure_password(user)
+    else:
+        release(uid)
     _save(uid, s)
     return state(user)
 
 
-def stop(uid: int) -> None:
-    """No screen pushed any more: the app password goes (revoked) and so do the keys."""
+def ensure_password(user) -> None:
+    """The app password this person's screens are read with (label "TRMNL"): made when they first push a screen or
+    take a device (app/trmnlserver.py), and made again when the one kept was revoked."""
+    uid = user["id"]
     pw = credentials.get(APP, _cred(uid, "pw"))
+    if pw and apppasswords.authenticate(None, pw, apppasswords.HUB):
+        return
+    if user.get("passwordless"):
+        raise Invalid("A one-click account cannot have app passwords, which the TRMNL screens are read with; give the account a password first")
+    pw = apppasswords.create(uid, apppasswords.HUB, "TRMNL", "")
+    credentials.declare(APP, [{"name": _cred(uid, "pw"), "label": f"TRMNL: app password of {user.get('name')}",
+                               "hint": "made by Settings › TRMNL; revoked there, or in Settings › Account › App passwords"}])
+    credentials.put(APP, _cred(uid, "pw"), pw, by=user.get("name"))
+
+
+def release(uid: int) -> None:
+    """The app password goes once nothing reads with it any more: no screen pushed and no device of theirs."""
+    if not hooks(uid) and not db.one("SELECT count(*) AS n FROM prt_trmnl_devices WHERE owner = %s", (int(uid),))["n"]:
+        stop(uid)
+
+
+def stop(uid: int) -> None:
+    """Nothing of this person's goes to a TRMNL any more: the app password goes (revoked) and so do the keys."""
+    pw = credentials.get(APP, _cred(uid, "pw")) or ""
     parts = pw.split("-")
     if len(parts) >= 3:
         from iosuite_shared import db as shared_db
@@ -144,13 +159,14 @@ class Asker:
         self.state.user = user
 
 
-def _asker(uid: int):
+def asker(uid: int):
+    """What the screens of this person are read as: them, with their "TRMNL" app password."""
     pw = credentials.get(APP, _cred(uid, "pw"))
     if not pw:
-        raise Invalid("No app password to read with (open Settings › TRMNL and save a webhook address again)")
+        raise Invalid("No app password to read with: open Settings › TRMNL and save it again")
     user = apppasswords.authenticate(None, pw, apppasswords.HUB)
     if not user:
-        raise Invalid("The TRMNL app password was revoked (Settings › Account); save a webhook address again in Settings › TRMNL")
+        raise Invalid("The TRMNL app password was revoked: open Settings › TRMNL and save it again")
     from app.auth import auth
     return Asker(auth.decorate(user), pw)
 
@@ -181,7 +197,7 @@ def push(uid: int, only: str = None, force: bool = False, now: float = None) -> 
     if not due:
         return tried
     try:
-        asker = _asker(uid)
+        who = asker(uid)
     except Invalid as e:
         for k in due:
             s["sent"][k] = {**(s["sent"].get(k) or {}), "made": now, "ok": False, "error": str(e)}
@@ -191,11 +207,11 @@ def push(uid: int, only: str = None, force: bool = False, now: float = None) -> 
     for k in due:
         last = s["sent"].get(k) or {}
         try:
-            data = trmnl.build(asker, k, s["tz"], s["clock"] == 24)
+            data = trmnl.build(who, k, s["tz"], s["clock"] == 24)
             # the time it was made changes every time: what counts as a change is the rest
             digest = hashlib.sha256(json.dumps({a: v for a, v in data.items() if a != "updated"}, sort_keys=True).encode()).hexdigest()
             if force or digest != last.get("hash") or now - (last.get("at") or 0) >= 60 * RESEND or not last.get("ok"):
-                _post(h[k], data, asker.state.user)
+                _post(h[k], data, who.state.user)
                 last = {"at": now, "ok": True, "error": None, "hash": digest}
             last["made"] = now
         except Invalid as e:
