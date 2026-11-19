@@ -1536,13 +1536,13 @@ async function showPair(page, r) {
 // ------------------------------------------------------------------ settings
 async function showSettings(page, r) {
   const adm = S.user.role === 'admin';
-  const tabs = [['account', 'Account'], ['display', 'Display'], ['bookmarks', 'Bookmarks'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(adm ? [['server', 'Server']] : []),
+  const tabs = [['account', 'Account'], ['display', 'Display'], ['bookmarks', 'Bookmarks'], ['trmnl', 'TRMNL'], ...(adm ? [['weather', 'Home page'], ['ha', 'Home Assistant']] : []), ...(adm ? [['server', 'Server']] : []),
     ...(S.user.suiteAdmin ? [['security', 'Security'], ['global', 'Global settings']] : [])];
   if (!tabs.some(([k]) => k === r.tab)) r.tab = 'account';
   page.append(h('div', { class: 'pagehead' }, h('h1', null, 'Settings')),
     h('div', { class: 'tabs' }, tabs.map(([k, l]) => h('button', { class: r.tab === k ? 'on' : '', onclick: () => { location.hash = `#/settings/${k}`; } }, l))));
   const body = h('div'); page.append(body);
-  await ({ account: setAccount, display: setDisplay, bookmarks: setBookmarkSettings, apps: setHome, weather: setHome, ha: setHomeAssistant, server: setServer, security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
+  await ({ account: setAccount, display: setDisplay, bookmarks: setBookmarkSettings, trmnl: setTrmnl, apps: setHome, weather: setHome, ha: setHomeAssistant, server: setServer, security: setSuite, global: setSuite }[r.tab] || setAccount)(body, r);
 }
 const fld = (l, e) => h('label', { class: 'field' }, h('span', null, l), e);
 
@@ -1554,6 +1554,48 @@ async function setAccount(el) {
 async function setDisplay(el) {
   const ui = await accountUi();
   el.append(ui.box('theme', 'Appearance', ui.themeRow(S.settings?.theme || 'system', setTheme)));
+}
+/** Settings › TRMNL: the suite on a TRMNL e-ink display. Each screen is a TRMNL private plugin, downloaded as the zip
+    TRMNL's Import new takes. Two ways for its data to get there: TRMNL reads the start page (a TRMNL server of your
+    own inside the network, or TRMNL's cloud through Cloudflare Access), with an app password typed in TRMNL's form;
+    or the start page sends it to the plugin's webhook (TRMNL's cloud, with nothing opened up), which needs that
+    webhook's address here. */
+async function setTrmnl(el) {
+  let d;
+  try { d = await api('api/trmnl'); } catch (e) { fail(e); return; }
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  const when = (t) => new Date(t * 1000).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  const clock = h('select', { class: 't', onchange: () => save({ clock: +clock.value }) }, [[12, '12 hours (6:00 PM)'], [24, '24 hours (18:00)']].map(([v, t]) => h('option', { value: v, selected: v === d.clock ? true : null }, t)));
+  const list = h('div', { class: 'trmnl-list' });
+  async function save(b) {
+    try { d = { ...d, ...await api('api/trmnl', { method: 'PUT', json: { tz, ...b } }) }; toast('Saved'); draw(); } catch (e) { fail(e); }
+  }
+  function draw() {
+    list.replaceChildren(...d.screens.map((x) => {
+      const hook = h('input', { class: 't', type: 'url', placeholder: x.push ? '(kept: paste another to change it, or clear it to stop)' : 'https://trmnl.com/api/custom_plugins/…', autocomplete: 'off' });
+      const st = x.sent && x.sent.at || (x.sent && x.sent.error) ? h('span', { class: x.sent.ok ? 'muted small' : 'err small' }, x.sent.ok ? `Sent ${when(x.sent.at)}` : `Not sent: ${x.sent.error}`) : null;
+      return h('div', { class: 'box trmnl-screen' },
+        h('h3', null, x.name), h('p', { class: 'muted small' }, `${x.about}. TRMNL looks again every ${x.every >= 60 ? `${x.every / 60} hour${x.every > 60 ? 's' : ''}` : `${x.every} minutes`}.`),
+        h('div', { class: 'btns left' },
+          h('a', { class: 'pillbtn', href: `api/trmnl/${x.key}/plugin.zip`, download: '' }, icon('download', 's'), 'For TRMNL to read'),
+          h('a', { class: 'pillbtn', href: `api/trmnl/${x.key}/plugin.zip?mode=push`, download: '' }, icon('download', 's'), 'For the start page to send')),
+        fld(x.push ? 'Sent to this TRMNL webhook' : 'TRMNL webhook (only to have the start page send it)', hook),
+        h('div', { class: 'btns left' },
+          h('button', { class: 'pillbtn primary noic', onclick: () => { const v = hook.value.trim(); if (v) save({ hooks: { [x.key]: v } }); } }, 'Save'),
+          x.push ? h('button', { class: 'pillbtn noic', onclick: async () => {
+            try { const r = await api(`api/trmnl/${x.key}/send`, { method: 'POST', json: {} }); x.sent = r; toast(r.ok ? 'Sent' : r.error); draw(); } catch (e) { fail(e); }
+          } }, 'Send now') : null,
+          x.push ? h('button', { class: 'pillbtn noic', onclick: () => save({ hooks: { [x.key]: '' } }) }, 'Stop sending') : null, st));
+    }));
+    if (!d.screens.length) list.replaceChildren(h('p', { class: 'muted' }, 'None of the apps these screens show is in your suite yet.'));
+  }
+  el.append(h('div', { class: 'box' }, h('h2', null, icon('wall'), 'TRMNL'),
+    h('p', null, 'Put the suite on a TRMNL e-ink display. Each screen below is a TRMNL private plugin in its four sizes, so it can fill the display or share it with others (TRMNL’s mashups). Download it, then in TRMNL open Plugins › Private Plugin › Import new.'),
+    h('p', null, h('b', null, 'For TRMNL to read: '), 'your own TRMNL server inside your network, or TRMNL’s cloud when it can reach the start page (through Cloudflare Access with a service token its policy lets in). In the plugin’s settings in TRMNL, give the start page’s address (', h('code', null, d.server), ') and an app password of yours (Settings › Account › App passwords).'),
+    h('p', null, h('b', null, 'For the start page to send: '), 'TRMNL’s cloud when the start page is only inside your network or behind Cloudflare Access. After the import, copy the plugin’s Webhook URL from its settings in TRMNL and paste it below. The start page then sends the screen every 15 minutes when it changed, reading it as you with an app password it makes for this (Settings › Account lists it as “TRMNL”).'),
+    h('div', { class: 'grid' }, fld('Times on the screens', clock))), list);
+  draw();
+  if (tz && tz !== d.tz && d.screens.some((x) => x.push)) save({});
 }
 async function setHome(el) {
   const got = await api('api/home/settings');

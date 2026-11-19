@@ -1,0 +1,27 @@
+<div class="layout layout--col layout--top layout--stretch-x">
+  {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
+  <div class="columns" data-overflow="true" data-overflow-max-cols="1" data-overflow-counter="true">
+    <div class="column">
+      {%- for d in days limit: 4 %}
+      {%- if d.events.size > 0 or forloop.first %}
+      <span class="label label--underline group-header" data-group-header="true">{{ d.label }} &middot; {{ d.date }}</span>
+      {%- for e in d.events limit: 4 %}
+      <div class="item">
+        <div class="meta"></div>
+        <div class="content">
+          <span class="title title--small" data-clamp="1">{{ e.title }}</span>
+          <span class="label label--small" data-clamp="1">{{ e.time }}{% if e.place != "" %} @ {{ e.place }}{% endif %}</span>
+        </div>
+      </div>
+      {%- endfor %}
+      {%- if d.events.size == 0 %}<span class="label label--small label--gray">Nothing more today</span>{% endif %}
+      {%- endif %}
+      {%- endfor %}
+    </div>
+  </div>
+</div>
+<div class="title_bar">
+  <img class="image" src="{{ iosuite_icon }}">
+  <span class="title">Calendar</span>
+  <span class="instance">{{ updated }}</span>
+</div>

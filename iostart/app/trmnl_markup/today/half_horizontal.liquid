@@ -1,0 +1,29 @@
+<div class="layout layout--row layout--top layout--stretch-x">
+  <div class="grid grid--cols-12 w--full">
+    <div class="col--span-3 flex flex--col flex--left gap--small">
+      <span class="value value--small">{{ weekday }}</span>
+      <span class="label">{{ date }}</span>
+      {%- if weather %}<span class="value value--small">{{ weather.temp }}</span><span class="label label--small" data-clamp="1">{{ weather.text }}</span>{% endif %}
+    </div>
+    <div class="col--span-5 flex flex--col flex--left gap--xsmall">
+      <span class="label label--underline">Today</span>
+      {%- for e in events limit: 3 %}
+      <span class="label" data-clamp="1">{{ e.time }} &middot; {{ e.title }}</span>
+      {%- if e.place != "" %}<span class="label label--small label--gray" data-clamp="1">@ {{ e.place }}</span>{% endif %}
+      {%- endfor %}
+      {%- if events.size == 0 %}<span class="label label--small" data-clamp="2">{% if next != "" %}{{ next }}{% else %}Nothing more today{% endif %}</span>{% endif %}
+    </div>
+    <div class="col--span-4 flex flex--col flex--left gap--xsmall">
+      {%- if has_tasks %}
+      <span class="label label--underline">Tasks{% if overdue > 0 %} &middot; {{ overdue }} late{% endif %}</span>
+      {%- for t in tasks limit: 4 %}<span class="label" data-clamp="1">{{ t.title }}</span>{% endfor %}
+      {%- if tasks.size == 0 %}<span class="label label--small">Nothing due</span>{% endif %}
+      {%- endif %}
+    </div>
+  </div>
+</div>
+<div class="title_bar">
+  <img class="image" src="{{ iosuite_icon }}">
+  <span class="title">Today</span>
+  <span class="instance">updated {{ updated }}</span>
+</div>
