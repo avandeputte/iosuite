@@ -34,7 +34,10 @@ jobs:
           target: esp32p4
           path: devices/tab5-wall
           extra_docker_args: -e WALL_VERSION=${{ env.WALL_VERSION }}
+          # the image's component manager stops at a Kconfig condition in a newer esp_hosted it only looks at;
+          # 2.4.11 and later pass over it (the build keeps esp_hosted 1.4.0)
           command: >-
+            pip install -q "idf-component-manager>=2.4.11,<3" &&
             idf.py build &&
             cd build &&
             esptool.py --chip esp32p4 merge_bin -o iowall-full.bin @flash_args
