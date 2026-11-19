@@ -68,6 +68,13 @@ static lv_obj_t *column(lv_obj_t *parent, int gap)
     return o;
 }
 
+/* one line, cut with "…" when it is too long (LVGL cuts only a label whose height is fixed) */
+static void one_line(lv_obj_t *l, const lv_font_t *f)
+{
+    lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+    lv_obj_set_height(l, lv_font_get_line_height(f));
+}
+
 static void shadow_text(lv_obj_t *l)
 {
     /* the shades behind the text keep it readable on a bright photo; nothing more to do per label */
@@ -239,49 +246,52 @@ static void on_event_row(lv_event_t *e)
 
 static void event_row(lv_obj_t *parent, const wall_event_t *ev, bool show_when)
 {
-    lv_obj_t *r = row(parent, 14);
+    lv_obj_t *r = row(parent, 12);
     lv_obj_set_width(r, lv_pct(100));
     lv_obj_add_flag(r, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_pad_ver(r, 6, 0);
+    lv_obj_set_style_pad_ver(r, 3, 0);
     lv_obj_set_style_radius(r, 12, 0);
     lv_obj_set_style_bg_color(r, lv_color_white(), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(r, LV_OPA_20, LV_STATE_PRESSED);
     lv_obj_add_event_cb(r, on_event_row, LV_EVENT_CLICKED, (void *)ev);
     lv_obj_t *dot = box(r);
-    lv_obj_set_size(dot, 16, 16);
+    lv_obj_set_size(dot, 12, 12);
     lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(dot, ev->has_color ? color_hex(ev->color) : DIM, 0);
     char when[24];
     fmt_event_when(when, sizeof when, ev);
-    lv_obj_t *w = label(r, font_text(28), DIM, show_when ? when : "");
-    lv_obj_set_width(w, S.clock24 ? 92 : 136);
-    lv_obj_t *t = label(r, font_text(30), TEXT, ev->title);
-    lv_label_set_long_mode(t, LV_LABEL_LONG_DOT);
+    lv_obj_t *w = label(r, font_text(24), DIM, show_when ? when : "");
+    lv_obj_set_width(w, S.clock24 ? 76 : 112);
+    /* "Dinner @ Nan Xiang Soup Dumplings" on one line; the place without what follows " - " (a branch, a town) */
+    char line[176];
+    if (ev->place[0]) {
+        char place[64];
+        strlcpy(place, ev->place, sizeof place);
+        char *cut = strstr(place, " - ");
+        if (cut && cut > place) *cut = 0;
+        snprintf(line, sizeof line, "%s @ %s", ev->title, place);
+    } else {
+        strlcpy(line, ev->title, sizeof line);
+    }
+    lv_obj_t *t = label(r, font_text(28), TEXT, line);
+    one_line(t, font_text(28));
     lv_obj_set_flex_grow(t, 1);
     lv_obj_set_style_min_width(t, 80, 0);
     shadow_text(t);
-    if (ev->place[0]) {
-        char at[72];
-        snprintf(at, sizeof at, "@ %s", ev->place);
-        lv_obj_t *p = label(r, font_text(26), DIM, at);
-        lv_label_set_long_mode(p, LV_LABEL_LONG_DOT);
-        lv_obj_set_width(p, LV_SIZE_CONTENT);
-        lv_obj_set_style_max_width(p, 220, 0);
-    }
 }
 
 static void head(lv_obj_t *parent, const char *text)
 {
-    lv_obj_t *l = label(parent, font_bold(22), DIM, text);
+    lv_obj_t *l = label(parent, font_bold(20), DIM, text);
     lv_obj_set_style_text_letter_space(l, 2, 0);
-    lv_obj_set_style_pad_top(l, 8, 0);
+    lv_obj_set_style_pad_top(l, 10, 0);
 }
 
 static void muted_line(lv_obj_t *parent, const char *text)
 {
-    lv_obj_t *l = label(parent, font_text(28), DIM, text);
-    lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+    lv_obj_t *l = label(parent, font_text(26), DIM, text);
+    one_line(l, font_text(26));
     lv_obj_set_width(l, lv_pct(100));
 }
 
@@ -307,12 +317,13 @@ static void draw_agenda(void)
             } else {
                 snprintf(t, sizeof t, "%s · %s %s", b->name, b->label, b->in ? "tomorrow" : "today");
             }
-            lv_obj_t *l = label(agenda_list, font_text(28), SUNNY, t);
-            lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+            lv_obj_t *l = label(agenda_list, font_text(26), SUNNY, t);
+            one_line(l, font_text(26));
             lv_obj_set_width(l, lv_pct(100));
         }
         if (FEED->has_today) {
-            head(agenda_list, "TODAY");
+            bool headed = FEED->ntoday == 0;
+            if (headed) head(agenda_list, "TODAY");
             if (FEED->ntoday == 0) {
                 char t[160];
                 if (FEED->has_next) {
@@ -332,7 +343,16 @@ static void draw_agenda(void)
                 }
                 muted_line(agenda_list, t);
             }
-            for (int i = 0; i < FEED->ntoday; i++) event_row(agenda_list, &FEED->today[i], true);
+            /* a birthday already said in the line above is not listed again as the calendar's all-day event */
+            bool said = false;
+            for (int i = 0; i < FEED->nbdays; i++) said |= FEED->bdays[i].in == 0;
+            for (int i = 0; i < FEED->ntoday; i++) {
+                const wall_event_t *ev = &FEED->today[i];
+                if (said && ev->all_day && (strstr(ev->title, "birthday") || strstr(ev->title, "Birthday"))) continue;
+                if (!headed) head(agenda_list, "TODAY");
+                headed = true;
+                event_row(agenda_list, ev, true);
+            }
             if (FEED->today_more) {
                 char t[24];
                 snprintf(t, sizeof t, "+%d more", FEED->today_more);
@@ -385,11 +405,11 @@ static lv_obj_t *tab(lv_obj_t *parent, const char *text, intptr_t which)
 {
     lv_obj_t *b = box(parent);
     lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_pad_hor(b, 22, 0);
-    lv_obj_set_style_pad_ver(b, 8, 0);
-    lv_obj_set_style_radius(b, 22, 0);
+    lv_obj_set_style_pad_hor(b, 18, 0);
+    lv_obj_set_style_pad_ver(b, 5, 0);
+    lv_obj_set_style_radius(b, 18, 0);
     lv_obj_set_style_bg_color(b, lv_color_black(), 0);
-    label(b, font_bold(24), TEXT, text);
+    label(b, font_bold(22), TEXT, text);
     lv_obj_add_event_cb(b, on_tab, LV_EVENT_CLICKED, (void *)which);
     return b;
 }
@@ -618,28 +638,29 @@ static void draw_weather(void)
         return;
     }
     lv_obj_remove_flag(hours_box, LV_OBJ_FLAG_HIDDEN);
+    /* a low strip: the hour, a small icon, the temperature; the chance of rain only in an hour that has one */
     for (int i = 0; i < FEED->nhours && i < 8; i++) {
         const wall_hour_t *hh = &FEED->hours[i];
         lv_obj_t *c = column(hours_box, 0);
-        lv_obj_set_size(c, 66, LV_SIZE_CONTENT);
+        lv_obj_set_size(c, 60, LV_SIZE_CONTENT);
         lv_obj_set_flex_align(c, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_ver(c, 6, 0);
-        lv_obj_set_style_radius(c, 14, 0);
-        lv_obj_set_style_bg_opa(c, hh->wet ? LV_OPA_30 : LV_OPA_20, 0);
-        lv_obj_set_style_bg_color(c, hh->wet ? lv_color_hex(0x5096ff) : lv_color_black(), 0);
+        lv_obj_set_style_pad_ver(c, 2, 0);
+        lv_obj_set_style_radius(c, 10, 0);
+        if (hh->wet) {
+            lv_obj_set_style_bg_opa(c, LV_OPA_30, 0);
+            lv_obj_set_style_bg_color(c, lv_color_hex(0x5096ff), 0);
+        }
         char at[12];
-        fmt_hour(at, sizeof at, hh->t);
-        label(c, font_text(18), DIM, at);
+        if (hh->wet && hh->rain) snprintf(at, sizeof at, "%d%%", hh->rain);
+        else fmt_hour(at, sizeof at, hh->t);
+        label(c, font_text(16), hh->wet && hh->rain ? RAINY : DIM, at);
         lv_obj_t *i2 = weather_icon(c, hh->icon, true, false);
-        lv_image_set_scale(i2, 200);  /* 52 → 40 px */
-        lv_obj_set_size(i2, 40, 40);
+        lv_image_set_scale(i2, 128);  /* 52 → 26 px */
+        lv_obj_set_size(i2, 28, 28);
         lv_image_set_inner_align(i2, LV_IMAGE_ALIGN_CENTER);
         char tt[12] = "";
         if (hh->has_temp) temp_text(tt, sizeof tt, hh->temp);
-        label(c, font_text(22), TEXT, tt);
-        char pct[8] = "";
-        if (hh->rain) snprintf(pct, sizeof pct, "%d%%", hh->rain);
-        label(c, font_text(16), RAINY, pct);
+        label(c, font_text(20), TEXT, tt);
     }
 }
 
@@ -658,29 +679,29 @@ static void draw_chips(void)
         if (left < 0) left = 0;
         lv_obj_t *c = row(chips, 8);
         lv_obj_add_flag(c, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_pad_hor(c, 18, 0);
-        lv_obj_set_style_pad_ver(c, 8, 0);
+        lv_obj_set_style_pad_hor(c, 14, 0);
+        lv_obj_set_style_pad_ver(c, 4, 0);
         lv_obj_set_style_radius(c, 24, 0);
         lv_obj_set_style_bg_color(c, lv_color_black(), 0);
         lv_obj_set_style_bg_opa(c, LV_OPA_50, 0);
         lv_obj_add_event_cb(c, open_timers, LV_EVENT_CLICKED, NULL);
-        label(c, &lv_font_montserrat_28, SUNNY, LV_SYMBOL_LOOP);
-        lv_obj_t *l = label(c, font_bold(30), TEXT, "");
+        label(c, &lv_font_montserrat_20, SUNNY, LV_SYMBOL_LOOP);
+        lv_obj_t *l = label(c, font_bold(26), TEXT, "");
         if (left >= 3600) lv_label_set_text_fmt(l, "%d:%02d:%02d", (int)(left / 3600), (int)(left / 60 % 60), (int)(left % 60));
         else lv_label_set_text_fmt(l, "%d:%02d", (int)(left / 60), (int)(left % 60));
-        if (TIMER[i].label[0]) label(c, font_text(26), DIM, TIMER[i].label);
+        if (TIMER[i].label[0]) label(c, font_text(22), DIM, TIMER[i].label);
     }
     time_t next = alarm_next();
     if (next) {
         lv_obj_t *c = row(chips, 8);
         lv_obj_add_flag(c, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_pad_hor(c, 18, 0);
-        lv_obj_set_style_pad_ver(c, 8, 0);
+        lv_obj_set_style_pad_hor(c, 14, 0);
+        lv_obj_set_style_pad_ver(c, 4, 0);
         lv_obj_set_style_radius(c, 24, 0);
         lv_obj_set_style_bg_color(c, lv_color_black(), 0);
         lv_obj_set_style_bg_opa(c, LV_OPA_40, 0);
         lv_obj_add_event_cb(c, open_alarms, LV_EVENT_CLICKED, NULL);
-        label(c, &lv_font_montserrat_28, TEXT, LV_SYMBOL_BELL);
+        label(c, &lv_font_montserrat_20, TEXT, LV_SYMBOL_BELL);
         char at[16];
         fmt_time(at, sizeof at, next);
         time_t t = time(NULL);
@@ -692,7 +713,7 @@ static void draw_chips(void)
             static const char *W[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
             snprintf(txt, sizeof txt, "%s %s", W[tm.tm_wday], at);
         }
-        label(c, font_text(26), TEXT, txt);
+        label(c, font_text(22), TEXT, txt);
     }
 }
 
@@ -841,13 +862,14 @@ static void build(void)
     lv_obj_set_pos(tl, 48, 20);
     lv_obj_t *cr = row(tl, 14);
     lv_obj_set_flex_align(cr, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
-    clock_lbl = label(cr, font_light(176), TEXT, "--:--");
-    lv_obj_set_style_text_letter_space(clock_lbl, -4, 0);
-    ampm_lbl = label(cr, font_light(54), TEXT, "");
-    lv_obj_set_style_pad_bottom(ampm_lbl, 26, 0);
-    date_lbl = label(tl, font_text(40), TEXT, "");
-    lv_obj_set_style_pad_bottom(date_lbl, 10, 0);
-    chips = row(tl, 10);
+    clock_lbl = label(cr, font_light(150), TEXT, "--:--");
+    lv_obj_set_style_text_letter_space(clock_lbl, -3, 0);
+    ampm_lbl = label(cr, font_light(46), TEXT, "");
+    lv_obj_set_style_pad_bottom(ampm_lbl, 22, 0);
+    /* the date, and beside it the timers running and the next alarm */
+    lv_obj_t *dr = row(tl, 18);
+    date_lbl = label(dr, font_text(36), TEXT, "");
+    chips = row(dr, 10);
 
     /* the weather: top right */
     wx_box = column(scr, 10);
@@ -863,9 +885,9 @@ static void build(void)
     wx_days = row(wx_box, 4);
 
     /* the agenda: bottom left */
-    agenda = column(scr, 8);
-    lv_obj_set_size(agenda, 640, 376);
-    lv_obj_set_pos(agenda, 40, 324);
+    agenda = column(scr, 6);
+    lv_obj_set_size(agenda, 660, 420);
+    lv_obj_set_pos(agenda, 40, 280);
     lv_obj_add_flag(agenda, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(agenda, on_agenda_gesture, LV_EVENT_GESTURE, NULL);
     lv_obj_t *tabs = row(agenda, 6);
@@ -891,7 +913,7 @@ static void build(void)
     lv_obj_set_flex_flow(ha_box, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(ha_box, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_row(ha_box, 10, 0);
-    hours_box = row(right, 4);
+    hours_box = row(right, 2);
 
     caption = label(scr, font_text(22), DIM, "");
     lv_obj_align(caption, LV_ALIGN_BOTTOM_RIGHT, -16, -4);
