@@ -22,7 +22,8 @@ with several, everyone has **one name and one password for all of them**, and on
 - A **member** keeps private things of their own (a Personal calendar, their own lists and recipes) and sees the
   family's read-only.
 - A **viewer** only reads: nothing is changed with that role.
-- What is private stays private: notes and health data belong to one account, admins included.
+- What is private stays private: notes and health data belong to one account, admins included. (A note an editor
+  puts in ioNote's Family space is the one exception: everyone reads those.)
 - An account without a role in an app holds that app's **default role** (`member` unless changed). Set the default to
   `none` and the app is by invitation only.
 - A **passwordless** account signs in with one click, on the home network only, and is a member at most everywhere:

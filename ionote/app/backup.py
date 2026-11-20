@@ -54,14 +54,14 @@ def export_zip(include_trash: bool = False, pictures: bool = True):
     folders = notes.list_folders()
     fname = {f["id"]: _safe(f["name"], "Folder") for f in folders}
     with db.connect() as con:
-        rows = con.execute(f"SELECT {notes.NOTE_COLS} FROM nts_notes WHERE user_id = %s AND deleted {'< 2' if include_trash else '= 0'} ORDER BY created_at",
-                           (notes.owner(),)).fetchall()
+        seen, p = notes._seen()  # one's own and the family's (those in a Family folder of the zip)
+        rows = con.execute(f"SELECT {notes.NOTE_COLS} FROM nts_notes WHERE {seen} AND deleted {'< 2' if include_trash else '= 0'} ORDER BY created_at", p).fetchall()
         all_notes = notes.with_attachments(con, [notes.note_dict(r) for r in rows])
     buf = tempfile.SpooledTemporaryFile(max_size=8 << 20)
     used = set()
     stems = {}
     for n in all_notes:
-        d = "Trash/" if n["deleted"] else (fname.get(n["folderID"], "") + "/" if n["folderID"] in fname else "")
+        d = "Trash/" if n["deleted"] else "Family/" if n["family"] else (fname.get(n["folderID"], "") + "/" if n["folderID"] in fname else "")
         base = d + _safe(notes.display_title(n), "Note")
         stem, i = base, 2
         while stem.lower() in used:
@@ -128,7 +128,8 @@ def _member(z: zipfile.ZipFile, name: str, limit: int) -> bytes:
 
 def import_zip(src, user: str) -> dict:
     """Import an export (zip, or its notes.json alone), from bytes or a file. Records keep their ids; newer
-    server copies win. An id another account on this server has (its export, imported here) gets a new one."""
+    server copies win. An id another account on this server has (its export, imported here) gets a new one. A family
+    note comes in as one for an editor; for anyone else as a note of their own, unless the family still has it."""
     f = io.BytesIO(src) if isinstance(src, (bytes, bytearray)) else src
     pics = {}
     if f.read(2) == b"PK":
@@ -196,6 +197,8 @@ def import_zip(src, user: str) -> dict:
         fields = {k: v for k, v in n.items() if k not in ("hasImage", "imageSHA", "rev", "imageData", "attachments", "image")}
         if fields.get("folderID") in fmap:
             fields["folderID"] = fmap[fields["folderID"]]
+        if fields.get("family") and not notes.family_write():
+            fields["family"] = False
         try:
             uid = notes.save_note(n["id"], fields, user)["id"]
             out["notes"] += 1

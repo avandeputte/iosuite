@@ -232,6 +232,7 @@ details.ocr pre { white-space: pre-wrap; word-break: break-word; font: inherit; 
 .card .prog { display: inline-flex; align-items: center; gap: 2px; }
 .card .prog .ic { width: 13px; height: 13px; }
 .card .prog.done { color: var(--ok); }
+.card .prog.fam { color: var(--c-green); }
 .banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
 /* Manage › Templates */
 .templates h1.ptitle .sp { flex: 1; }

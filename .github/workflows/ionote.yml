@@ -70,9 +70,6 @@ jobs:
     # version.yml starts this workflow for every app (every app carries the suite's version), tests left out
     if: ${{ always() && github.event_name != 'push' && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
       - id: version

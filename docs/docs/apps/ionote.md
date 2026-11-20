@@ -23,6 +23,9 @@ included, and gives you a web app; the **ioNote apps for Mac, iPhone and iPad** 
   as a note. Right-click › Save to ioNote in any app. On the **iPhone and iPad**: the same notes, paste and photos.
 - **Offline**: the apps work without the server and send their changes when it is back.
 - **Private**: every note belongs to the account that made it; nobody else sees it, admins included.
+- **Family notes**: the exception you choose. A note put in the **Family** space (the wifi password, the bin days, the
+  packing list) is read by everyone with a role in ioNote; editors and admins write and change those notes, and can
+  take one back, which makes it their own again. Family notes sit in no folder; tags group them.
 
 ## On its own
 

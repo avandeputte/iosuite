@@ -199,13 +199,24 @@ that made it; nobody else sees, searches, syncs, exports or changes it, admins i
 about the server, not other people's notes). The notes made while the install was still open (before the first
 account) stay with the open install: export them before making the first account and import them after. A note id that belongs to another account is answered as if it did not exist.
 
+**The Family space is the exception.** A note marked Family (the wifi password, the bin days, the packing list) is
+everyone's who has a role here: viewers and members read and search it, editors and admins write it, change it,
+delete it, and take it back out. In the web app it is the **Family** view in the sidebar; a note is put there, or
+made one's own again, with the folder menu on the note (a family note is in no folder, since folders are each
+account's own; tags group them). Taking a note out makes it the editor's who did it, and it disappears from the
+others' devices at their next sync. In the API a note carries `family` (true or false); `GET /api/notes?family=1`
+lists the Family space, `/api/meta` and `/api/sync` say `familyWrite` (whether this account may change family
+notes), and a change to a family note by someone who only reads it is answered like an older edit: 409 with the
+server's copy (`stale` in a sync push), which a device takes. When an account is deleted its own notes go; what
+it put in the Family space stays.
+
 | Who | Can |
 | --- | --- |
-| Not signed in | nothing but the sign-in screen (there are no shared notes to read) |
-| **viewer** | read and search their own notes (there is nothing shared to see); their own settings kept on the server |
+| Not signed in | nothing but the sign-in screen |
+| **viewer** | read and search their own notes and the family's; their own settings kept on the server |
 | **member** (the default) | plus every change to their own notes, folders, tags and templates, and export/import of them (Import and export; the Mac and iPhone apps sign in as a member or more) |
 | **without a password** | a member at most; signs in with one click from the account picker, on the home network only |
-| **editor** | the same as a member: every note is private, so there is nothing shared for an editor to change |
+| **editor** | plus the Family space: add notes to it, change and delete them, take them back out |
 | **admin** | plus settings, accounts, updates and the server log |
 
 **Sign-in required** (Settings › Global settings › Apps, on by default) also closes the open routes to visitors, but for the app shell, `/api/status` and the sign-in routes (the MCP endpoint wants an app password either way).
@@ -258,12 +269,13 @@ suite. An assistant such as Claude can then:
   client can offer: *Summarise a note*, *Weekly review*, *Tidy up unfiled notes*
 - write, as a member: `create_note` (optionally with a picture, or from a template), `update_note` (replace or append
   text, tags, folder, pin), `organize_notes` (many notes at once), `delete_note`, `restore_note`, `manage_folder`,
-  `manage_tag`, `manage_template`, `attach_file`, `remove_attachment`, `empty_trash`
+  `manage_tag`, `manage_template`, `attach_file`, `remove_attachment`, `empty_trash`; family notes are changed, and
+  notes put in or taken out of the Family space (`family` on `create_note` and `update_note`), as an editor
 - operate, as an admin: `diagnostics`, `server_log`
 
 Every assistant signs in with an **app password** (Settings › Account › App passwords), as HTTP Basic or
-`Authorization: Bearer <app password>`, and acts as that account: notes are private to each account, so it sees and
-changes that account's notes and nothing else (`notes_overview` names the account). Off, `/mcp` does not answer at all.
+`Authorization: Bearer <app password>`, and acts as that account: it sees that account's notes and the family's, and changes
+what that account may change (`notes_overview` names the account and says whether it may change family notes). Off, `/mcp` does not answer at all.
 
 ```sh
 claude mcp add --transport http ionote https://notes.example.com/mcp --header "Authorization: Bearer ionote-xxxxxxxx-…"

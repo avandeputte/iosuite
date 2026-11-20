@@ -15,7 +15,7 @@ import time
 from PIL import Image
 
 from app import config, db, images
-from app.notes import NotFound, check_uuid, display_title, get_note, log_change, new_uuid, owner
+from app.notes import NotFound, check_uuid, display_title, get_note, log_change, need_write, new_uuid, owner
 
 log = logging.getLogger("app.attachments")
 MAX_PER_NOTE = 50
@@ -105,9 +105,10 @@ def put(note_uid: str, data: bytes, name: str, user: str, mime_hint: str = "", a
         n = get_note(note_uid, con)
         if not n or n["deleted"]:
             raise NotFound("No such note")
-        r = con.execute("SELECT note_uuid, user_id, sha FROM nts_attachments WHERE uuid = %s", (att_uid,)).fetchone()
-        if r and (r["user_id"] != owner() or r["note_uuid"] != note_uid):
-            raise NotFound("No such attachment")  # another note's or account's id
+        need_write(n)
+        r = con.execute("SELECT note_uuid, sha FROM nts_attachments WHERE uuid = %s", (att_uid,)).fetchone()
+        if r and r["note_uuid"] != note_uid:
+            raise NotFound("No such attachment")  # another note's id (which may be another account's)
         if r and r["sha"] == sha:
             return n  # a device sending it again
         if not r and len(n["attachments"]) >= MAX_PER_NOTE:
@@ -127,8 +128,10 @@ def put(note_uid: str, data: bytes, name: str, user: str, mime_hint: str = "", a
 def rename(note_uid: str, att_uid: str, name: str, user: str) -> dict:
     note_uid, att_uid = check_uuid(note_uid), check_uuid(att_uid)
     with db.tx() as con:
-        if not con.execute("SELECT 1 FROM nts_attachments WHERE uuid = %s AND note_uuid = %s AND user_id = %s", (att_uid, note_uid, owner())).fetchone():
+        n = get_note(note_uid, con)
+        if not n or not con.execute("SELECT 1 FROM nts_attachments WHERE uuid = %s AND note_uuid = %s", (att_uid, note_uid)).fetchone():
             raise NotFound("No such attachment")
+        need_write(n)
         con.execute("UPDATE nts_attachments SET name = %s WHERE uuid = %s", (_clean_name(name), att_uid))
         con.execute("UPDATE nts_notes SET rev = %s, changed_by = %s WHERE uuid = %s", (db.next_rev(con), user, note_uid))
         return get_note(note_uid, con)
@@ -138,9 +141,10 @@ def remove(note_uid: str, att_uid: str, user: str) -> dict:
     note_uid, att_uid = check_uuid(note_uid), check_uuid(att_uid)
     with db.tx() as con:
         n = get_note(note_uid, con)
-        r = con.execute("SELECT name FROM nts_attachments WHERE uuid = %s AND note_uuid = %s AND user_id = %s", (att_uid, note_uid, owner())).fetchone()
+        r = con.execute("SELECT name FROM nts_attachments WHERE uuid = %s AND note_uuid = %s", (att_uid, note_uid)).fetchone()
         if not n or not r:
             raise NotFound("No such attachment")
+        need_write(n)
         con.execute("DELETE FROM nts_attachments WHERE uuid = %s", (att_uid,))
         con.execute("UPDATE nts_notes SET rev = %s, changed_by = %s WHERE uuid = %s", (db.next_rev(con), user, note_uid))
         log_change(con, user, "detach", "note", note_uid, f"{display_title(n)}: {r['name']}")
@@ -148,10 +152,12 @@ def remove(note_uid: str, att_uid: str, user: str) -> dict:
 
 
 def get(note_uid: str, att_uid: str, thumb: bool = False):
-    """(bytes, mime, sha, name) of this account's attachment, or None."""
+    """(bytes, mime, sha, name) of an attachment of a note the one asking sees, or None."""
     with db.connect() as con:
-        r = con.execute(f"SELECT {'thumb' if thumb else 'data'}, mime, sha, name FROM nts_attachments WHERE uuid = %s AND note_uuid = %s AND user_id = %s",
-                        (check_uuid(att_uid), check_uuid(note_uid), owner())).fetchone()
+        if not get_note(note_uid, con):
+            return None
+        r = con.execute(f"SELECT {'thumb' if thumb else 'data'}, mime, sha, name FROM nts_attachments WHERE uuid = %s AND note_uuid = %s",
+                        (check_uuid(att_uid), check_uuid(note_uid))).fetchone()
     if not r or r[0] is None:
         return None
     return bytes(r[0]), ("image/jpeg" if thumb else r[1]), r[2], r[3]
@@ -159,8 +165,9 @@ def get(note_uid: str, att_uid: str, thumb: bool = False):
 
 def text(note_uid: str, att_uid: str):
     with db.connect() as con:
-        r = con.execute("SELECT text FROM nts_attachments WHERE uuid = %s AND note_uuid = %s AND user_id = %s",
-                        (check_uuid(att_uid), check_uuid(note_uid), owner())).fetchone()
+        if not get_note(note_uid, con):
+            return None
+        r = con.execute("SELECT text FROM nts_attachments WHERE uuid = %s AND note_uuid = %s", (check_uuid(att_uid), check_uuid(note_uid))).fetchone()
     return r[0] if r else None
 
 

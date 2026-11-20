@@ -20,12 +20,13 @@ def notes_overview() -> dict:
     from, the newest and oldest note, and the web app's address."""
     m = notes.meta()
     with notes.db.connect() as con:
-        o = (notes.owner(),)
-        sources = {r[0]: r[1] for r in con.execute("SELECT source, count(*) FROM nts_notes WHERE user_id = %s AND deleted = 0 GROUP BY source ORDER BY 2 DESC", o)}
-        apps = {r[0]: r[1] for r in con.execute("SELECT source_app, count(*) FROM nts_notes WHERE user_id = %s AND deleted = 0 AND source_app IS NOT NULL "
+        seen, o = notes._seen()  # the account's own and the family's
+        sources = {r[0]: r[1] for r in con.execute(f"SELECT source, count(*) FROM nts_notes WHERE {seen} AND deleted = 0 GROUP BY source ORDER BY 2 DESC", o)}
+        apps = {r[0]: r[1] for r in con.execute(f"SELECT source_app, count(*) FROM nts_notes WHERE {seen} AND deleted = 0 AND source_app IS NOT NULL "
                                                  "GROUP BY source_app ORDER BY 2 DESC LIMIT 15", o)}
-        first, last = con.execute("SELECT min(created_at), max(created_at) FROM nts_notes WHERE user_id = %s AND deleted = 0", o).fetchone()
-    return {"notes": m["total"], "pinned": m["pinned"], "with_picture": m["images"], "in_no_folder": m["noFolder"], "in_trash": m["trash"],
+        first, last = con.execute(f"SELECT min(created_at), max(created_at) FROM nts_notes WHERE {seen} AND deleted = 0", o).fetchone()
+    return {"notes": m["total"], "family_notes": m["family"], "may_change_family_notes": m["familyWrite"],
+            "pinned": m["pinned"], "with_picture": m["images"], "in_no_folder": m["noFolder"], "in_trash": m["trash"],
             "folders": {f["name"]: f["count"] for f in m["folders"]}, "tags": {t["name"]: t["count"] for t in m["tags"]},
             "sources": sources, "source_apps": apps, "oldest": iso(first), "newest": iso(last), "web_app": APP,
             "account": _account()}
@@ -41,8 +42,9 @@ def _account():
 def search_notes(text: str = "", folder: Optional[str] = None, tag: Optional[str] = None, pinned: Optional[bool] = None,
                  has_picture: Optional[bool] = None, source: Optional[str] = None, created_from: Optional[str] = None,
                  created_to: Optional[str] = None, sort: Literal["updated", "created", "oldest", "title"] = "updated",
-                 limit: int = 25, offset: int = 0) -> dict:
+                 limit: int = 25, offset: int = 0, family: Optional[bool] = None) -> dict:
     """Find notes. All filters are optional and combine:
+      family: true for the Family space's notes only, false for the account's own only
       text: every word must appear (prefix match) in the title, the text, the text read from the picture, or a tag
       folder: a folder name or id ("none" for notes in no folder); tag: a tag name
       pinned, has_picture: true/false; source: clipboard, screenshot, service, manual, web, photo, share, mcp
@@ -53,7 +55,7 @@ def search_notes(text: str = "", folder: Optional[str] = None, tag: Optional[str
     lo = parse_date(created_from) if created_from else None
     hi = parse_date(created_to, end=True) if created_to else None
     folders = {f["id"]: f["name"] for f in notes.list_folders()}
-    res = notes.list_notes(text, fid, tag, pinned, has_picture, sort, limit, offset, source, created_from=lo, created_before=hi)
+    res = notes.list_notes(text, fid, tag, pinned, has_picture, sort, limit, offset, source, created_from=lo, created_before=hi, family=family)
     found, total = res["notes"], res["total"]
     return {"total": total, "offset": offset, "returned": len(found), "notes": [summary(n, folders) for n in found]}
 
@@ -65,7 +67,7 @@ def get_note(note_id: str) -> dict:
     n = note_or_fail(note_id)
     folders = {f["id"]: f["name"] for f in notes.list_folders(include_deleted=True)}
     out = {"id": n["id"], "title": n["title"], "display_title": notes.display_title(n), "text": n["body"], "text_in_picture": n["ocrText"],
-           "tags": n["tags"], "folder": folders.get(n["folderID"]), "folder_id": n["folderID"], "pinned": n["pinned"], "source": n["source"],
+           "tags": n["tags"], "folder": folders.get(n["folderID"]), "folder_id": n["folderID"], "family": n["family"] or None, "pinned": n["pinned"], "source": n["source"],
            "source_app": n["sourceApp"], "created": iso(n["createdAt"]), "updated": iso(n["updatedAt"]), "last_changed_by": n["changedBy"],
            "in_trash": n["deleted"], "url": f"{APP}/#/note/{n['id']}"}
     if n["hasImage"]:

@@ -139,7 +139,7 @@ text = "photos from this day in earlier years on the tile, a strip of photos und
 [ionote]
 eyebrow = "notes"
 headline = "Your notes, searchable everywhere."
-lede = "Notes with folders, tags and pins, and full-text search that reads the text <strong>inside pictures</strong> too. On the Mac everything you copy and every screenshot lands in an Inbox, to keep what is worth keeping. Every note is private to the account that made it."
+lede = "Notes with folders, tags and pins, and full-text search that reads the text <strong>inside pictures</strong> too. On the Mac everything you copy and every screenshot lands in an Inbox, to keep what is worth keeping. Every note is private to the account that made it, unless an editor puts it in the Family space for everyone to read."
 chips = ["Full-text search", "Text in pictures", "Mac, iPhone and iPad apps", "Works offline", "MCP"]
 hero = "ionote.jpg"
 hero_alt = "ioNote with folders, tags and a note open"

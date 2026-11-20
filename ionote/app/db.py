@@ -19,7 +19,7 @@ from iosuite_shared import db as shared_db, schema
 from app import config
 
 log = logging.getLogger("app.db")
-SCHEMA_VERSION = 4  # recorded in nts_schema_version (iosuite_shared.schema); the tables are made as SCHEMA says
+SCHEMA_VERSION = 5  # recorded in nts_schema_version (iosuite_shared.schema); the tables are made as SCHEMA says
 PREFIX = "nts"
 Error = pymysql.err.Error
 _lock = threading.Lock()
@@ -35,13 +35,17 @@ SCHEMA = [
     # one row per change: its id is the rev stamped on what changed
     ('CREATE TABLE IF NOT EXISTS nts_change_counter (rev BIGINT AUTO_INCREMENT PRIMARY KEY, created_at BIGINT)'),
     # times are seconds since 1970 (UTC) as the apps send them; tags is a JSON list of names; user_id: the account's
-    # id in the Shared ioSuite database (0: made while the install was open, before the first account)
+    # id in the Shared ioSuite database (0: made while the install was open, before the first account). family: 1 for a
+    # note of the Family space, which everyone with a role reads and editors change (whose it was no longer counts);
+    # unshared_rev: the rev at which a family note was last made someone's own again, so the others' devices drop it
     ('CREATE TABLE IF NOT EXISTS nts_notes (uuid VARCHAR(64) PRIMARY KEY, title TEXT NOT NULL, '
      "body MEDIUMTEXT NOT NULL, ocr_text MEDIUMTEXT NOT NULL, source VARCHAR(32) NOT NULL DEFAULT 'manual', "
      'source_app VARCHAR(191), created_at DOUBLE NOT NULL, updated_at DOUBLE NOT NULL, tags TEXT NOT NULL, '
      'pinned INT NOT NULL DEFAULT 0, folder_id VARCHAR(64), has_image INT NOT NULL DEFAULT 0, image_sha VARCHAR(64), '
      'deleted INT NOT NULL DEFAULT 0, rev BIGINT NOT NULL DEFAULT 0, changed_by VARCHAR(191), '
-     'user_id BIGINT NOT NULL DEFAULT 0, INDEX idx_nts_notes_rev (rev), INDEX idx_nts_notes_folder (folder_id), '
+     'user_id BIGINT NOT NULL DEFAULT 0, family INT NOT NULL DEFAULT 0, unshared_rev BIGINT NOT NULL DEFAULT 0, '
+     'INDEX idx_nts_notes_rev (rev), INDEX idx_nts_notes_folder (folder_id), '
+     'INDEX idx_nts_notes_family (family, rev), INDEX idx_nts_notes_unshared (unshared_rev), '
      'INDEX idx_nts_notes_updated (updated_at), INDEX idx_nts_notes_user (user_id, rev), '
      'FULLTEXT INDEX idx_nts_notes_text (title, body, ocr_text, tags))'),
     # the picture of a note: the bytes as sent, and a small JPEG for lists

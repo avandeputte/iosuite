@@ -1,6 +1,6 @@
 /** One note: title, text (Markdown, with checklists you can tick), tags, folder, pin, its picture and the text read
  *  from it, its attached files, and the notes related to it. Saved as you type. */
-import { $, h, api, state, icon, fmtDate, colorVar, toast, fail, canWrite, debounce, confirmIt, menu, displayTitle } from './core.js';
+import { $, h, api, state, icon, fmtDate, colorVar, toast, fail, canWrite, canChange, familyWrite, debounce, confirmIt, menu, displayTitle } from './core.js';
 import { go, updateCard, refresh, markSelected } from './notes.js';
 import { renderMarkdown, toggleTask, continueList, applyFormat, FORMATS } from './markdown.js';
 
@@ -74,9 +74,26 @@ function change(field, value) {
   save();
 }
 
+/** Where the note is kept: one of one's own folders, or the Family space (everyone reads it; an editor or an admin
+ *  puts it there and takes it back). A family note is in no folder. */
+const FAMILY = 'family';  // never a folder's id (those are UUIDs)
 function folderSelect() {
-  return h('select', { 'aria-label': 'Folder', disabled: !canWrite() || note.deleted, onchange: async (e) => { change('folderID', e.target.value || null); await flush(); refresh(); } },
-    h('option', { value: '' }, 'No folder'), state.meta.folders.map((f) => h('option', { value: f.id, selected: f.id === note.folderID }, f.name)));
+  const sel = h('select', { 'aria-label': 'Folder', title: note.family || familyWrite() ? 'A folder of yours, or Family: everyone reads the note' : 'Folder', disabled: !canChange(note) || note.deleted, onchange: async (e) => {
+    const v = e.target.value;
+    if (v === FAMILY) {
+      change('family', true); change('folderID', null);
+    } else {
+      if (note.family) {
+        if (!await confirmIt('Take out of the Family space', 'This note becomes yours alone: the others no longer see it, on any of their devices.', 'Make it mine')) { sel.value = FAMILY; return; }
+        change('family', false);
+      }
+      change('folderID', v || null);
+    }
+    await flush(); await refresh(); render();
+  } },
+    h('option', { value: '' }, 'No folder'), state.meta.folders.map((f) => h('option', { value: f.id, selected: !note.family && f.id === note.folderID }, f.name)),
+    note.family || familyWrite() ? h('option', { value: FAMILY, selected: note.family }, 'Family') : null);
+  return sel;
 }
 
 function tagEditor() {
@@ -86,12 +103,12 @@ function tagEditor() {
     box.textContent = '';
     for (const t of note.tags) {
       const chip = h('span.tag', { onclick: () => go({ v: 'tag', t, f: null, n: null, q: '' }) }, '#' + t,
-        canWrite() && !note.deleted ? h('button.x', { title: 'Remove tag', 'aria-label': `Remove ${t}`, onclick: (e) => { e.stopPropagation(); setTags(note.tags.filter((x) => x !== t)); } }, '×') : null);
+        canChange(note) && !note.deleted ? h('button.x', { title: 'Remove tag', 'aria-label': `Remove ${t}`, onclick: (e) => { e.stopPropagation(); setTags(note.tags.filter((x) => x !== t)); } }, '×') : null);
       const cv = colorVar(colors[t.toLowerCase()]);
       if (cv) chip.style.setProperty('--tc', cv);
       box.append(chip);
     }
-    if (canWrite() && !note.deleted) {
+    if (canChange(note) && !note.deleted) {
       const dl = h('datalist#tagnames', (state.meta.tags || []).map((t) => h('option', { value: t.name })));
       const input = h('input.tagin', { placeholder: 'Add a tag', list: 'tagnames', 'aria-label': 'Add a tag' });
       input.addEventListener('keydown', (e) => {
@@ -117,7 +134,7 @@ function tagEditor() {
 
 function picture() {
   if (!note.hasImage) {
-    if (!canWrite() || note.deleted) return null;
+    if (!canChange(note) || note.deleted) return null;
     const file = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: (e) => e.target.files[0] && uploadPicture(note.id, e.target.files[0]) });
     return h('div.picture', file, h('button.pillbtn', { onclick: () => file.click() }, icon('upload'), 'Add a picture'));
   }
@@ -127,7 +144,7 @@ function picture() {
   return h('div.picture', img, h('div.acts',
     h('a.pillbtn', { href: src + '&download=1' }, icon('download'), 'Download'),
     h('button.pillbtn', { onclick: copyPicture }, icon('copy'), 'Copy picture'),
-    canWrite() && !note.deleted ? h('button.pillbtn', { onclick: async () => {
+    canChange(note) && !note.deleted ? h('button.pillbtn', { onclick: async () => {
       if (!await confirmIt('Remove picture', 'Remove the picture from this note? The text read from it stays.', 'Remove', true)) return;
       try { note = { ...(await api(`api/notes/${note.id}/image`, { method: 'DELETE' })), image: null }; render(); updateCard(note); } catch (e) { fail(e); }
     } }, icon('trash'), 'Remove') : null,
@@ -168,7 +185,7 @@ const kb = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(
 
 function files() {
   const list = note.attachments || [];
-  const w = canWrite() && !note.deleted;
+  const w = canChange(note) && !note.deleted;
   if (!list.length && !w) return null;
   const input = h('input', { type: 'file', multiple: true, hidden: true, onchange: (e) => { attachFiles(note.id, [...e.target.files]); e.target.value = ''; } });
   const items = list.map((a) => {
@@ -207,9 +224,9 @@ async function related(box, id) {
   try { r = await api(`api/notes/${id}/related`); } catch (e) { return; }
   if (!note || note.id !== id || !box.isConnected) return;
   box.textContent = '';
-  const w = canWrite() && !note.deleted;
+  const w = canChange(note) && !note.deleted;
   const sugg = [];
-  if (w && r.folder && !note.folderID) {
+  if (w && r.folder && !note.folderID && !note.family) {
     sugg.push(h('button.chip.sugg', { title: 'Move it to this folder', onclick: async () => { change('folderID', r.folder.id); await flush(); refresh(); render(); } }, icon('folder'), r.folder.name));
   }
   if (w) for (const t of r.tags.filter((t) => !note.tags.some((x) => x.toLowerCase() === t.toLowerCase()))) {
@@ -230,7 +247,7 @@ async function mountLinks(el, id) {
   linkPanel = null;
   try { linkUi = linkUi || await import(new URL('api/related/ui.js', document.baseURI).href); } catch (e) { return; }
   if (!note || note.id !== id || !el.isConnected) return;
-  linkPanel = linkUi.mount(el, { kind: 'note', id, toast, canEdit: canWrite() });
+  linkPanel = linkUi.mount(el, { kind: 'note', id, toast, canEdit: canChange(note) });
 }
 
 async function copyNote() {
@@ -244,11 +261,11 @@ function moreMenu(btn) {
     { icon: 'copy', label: 'Copy link', action: async () => { await navigator.clipboard.writeText(new URL('#/note/' + note.id, document.baseURI).href); toast('Link copied'); } },
     note.hasImage ? { icon: 'copy', label: 'Copy picture', action: copyPicture } : null,
     canWrite() && !note.deleted ? '-' : null,
-    canWrite() && !note.deleted ? { icon: 'attach', label: 'Attach files…', action: () => { const i = $('.files input[type=file]'); if (i) i.click(); } } : null,
+    canChange(note) && !note.deleted ? { icon: 'attach', label: 'Attach files…', action: () => { const i = $('.files input[type=file]'); if (i) i.click(); } } : null,
     canWrite() && !note.deleted ? { icon: 'template', label: 'Save as a template…', action: saveAsTemplate } : null,
-    canWrite() && !note.deleted && linkPanel ? { icon: 'link', label: 'Link an event, task, contact…', action: () => linkPanel.pick() } : null,
-    canWrite() ? '-' : null,
-    canWrite() ? { icon: 'trash', label: 'Delete note', action: deleteNote } : null,
+    canChange(note) && !note.deleted && linkPanel ? { icon: 'link', label: 'Link an event, task, contact…', action: () => linkPanel.pick() } : null,
+    canChange(note) ? '-' : null,
+    canChange(note) ? { icon: 'trash', label: 'Delete note', action: deleteNote } : null,
   ]);
 }
 
@@ -278,20 +295,20 @@ function render() {
   const pane = $('#note');
   if (!pane) return;
   pane.textContent = '';
-  const w = canWrite() && !note.deleted;
+  const w = canChange(note) && !note.deleted;
   const pin = h('button.iconbtn' + (note.pinned ? '.on' : ''), { title: note.pinned ? 'Unpin' : 'Pin to the top', 'aria-label': 'Pin', disabled: !w,
     onclick: async () => { change('pinned', !note.pinned); pin.classList.toggle('on', note.pinned); await flush(); refresh(); } }, icon('pin'));
   const bar = h('div.edbar',
     h('button#backbtn.iconbtn', { title: 'Back to the list', 'aria-label': 'Back', onclick: () => go({ n: null }) }, icon('back')),
     note.deleted ? null : folderSelect(), note.deleted ? null : pin,
     h('span.sp'), h('span.status'),
-    note.deleted && canWrite() ? h('button.pillbtn.primary', { onclick: async () => { await api(`api/notes/${note.id}/restore`, { method: 'POST' }).catch(fail); toast('Restored'); go({ v: 'all', n: note.id }); refresh(); } }, icon('restore'), 'Restore') : null,
-    note.deleted && canWrite() ? h('button.pillbtn.danger', { onclick: async () => {
+    note.deleted && canChange(note) ? h('button.pillbtn.primary', { onclick: async () => { await api(`api/notes/${note.id}/restore`, { method: 'POST' }).catch(fail); toast('Restored'); go({ v: 'all', n: note.id }); refresh(); } }, icon('restore'), 'Restore') : null,
+    note.deleted && canChange(note) ? h('button.pillbtn.danger', { onclick: async () => {
       if (!await confirmIt('Delete for good', 'Delete this note for good, with its files? This cannot be undone.', 'Delete for good', true)) return;
       try { await api(`api/trash/${note.id}`, { method: 'DELETE' }); toast('Deleted for good'); go({ n: null }); refresh(); } catch (e) { fail(e); }
     } }, 'Delete for good') : null,
     h('button.iconbtn', { title: 'Copy (⌘C with nothing selected)', 'aria-label': 'Copy', onclick: copyNote }, icon('copy')),
-    canWrite() && !note.deleted ? h('button.iconbtn', { title: 'Delete', 'aria-label': 'Delete', onclick: deleteNote }, icon('trash')) : null,
+    canChange(note) && !note.deleted ? h('button.iconbtn', { title: 'Delete', 'aria-label': 'Delete', onclick: deleteNote }, icon('trash')) : null,
     h('button.iconbtn', { title: 'More', 'aria-label': 'More', onclick: (e) => moreMenu(e.currentTarget) }, icon('more')));
   const t = h('input.ed-title', { value: note.title, placeholder: displayTitle({ ...note, title: '' }) === 'Untitled' ? 'Title' : displayTitle({ ...note, title: '' }), readOnly: !w, 'aria-label': 'Title',
     oninput: (e) => change('title', e.target.value) });
@@ -340,7 +357,8 @@ function render() {
     h('span', 'Created ' + fmtDate(note.createdAt, true)),
     note.updatedAt - note.createdAt > 60 ? h('span', 'Edited ' + fmtDate(note.updatedAt, true)) : null,
     h('span', (SOURCES[note.source] || note.source) + (note.sourceApp ? ` from ${note.sourceApp}` : '')),
-    note.changedBy ? h('span', 'by ' + note.changedBy) : null);
+    note.changedBy ? h('span', 'by ' + note.changedBy) : null,
+    note.family && !familyWrite() ? h('span', 'Family note: editors and admins change it') : null);
   const ocr = note.ocrText ? h('details.ocr', { open: !note.body }, h('summary', 'Text in the picture'), h('pre', note.ocrText)) : null;
   const rel = h('div.related');
   const linked = h('div.linked');
