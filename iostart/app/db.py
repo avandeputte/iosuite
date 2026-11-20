@@ -11,7 +11,7 @@ from app import config
 
 from iosuite_shared import db as shared_db, schema
 
-SCHEMA_VERSION = 8  # 8: TRMNL devices (prt_trmnl_devices); 7: shared and personal bookmarks (owner, shared; prt_bookmark_starts)
+SCHEMA_VERSION = 9  # 9: kitchen timers (prt_timers); 8: TRMNL devices (prt_trmnl_devices); 7: shared and personal bookmarks (owner, shared; prt_bookmark_starts)
 PREFIX = "prt"
 
 # Every table is InnoDB/utf8mb4. Accounts and app passwords live in the Shared ioSuite database (iosuite-shared,
@@ -95,6 +95,19 @@ SCHEMA = [
         created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
         UNIQUE KEY idx_prt_trmnl_devices_mac (mac),
         KEY idx_prt_trmnl_devices_owner (owner)
+    )""",
+    # kitchen timers started from the search box (app/timers.py): the whole family sees them, the page and the wall
+    # count down, and `user_id` (who started it) gets a notification when it ends. ends_at: epoch seconds; notified 1:
+    # the "done" notification went out. A timer is gone when somebody dismisses it, or a while after it ended.
+    """CREATE TABLE IF NOT EXISTS prt_timers (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        label VARCHAR(80) NOT NULL,
+        seconds INT NOT NULL,
+        ends_at DOUBLE NOT NULL,
+        notified TINYINT(1) NOT NULL DEFAULT 0,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        KEY idx_prt_timers_ends (ends_at)
     )""",
 ]
 

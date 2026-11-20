@@ -14,7 +14,7 @@ import zipfile
 from iosuite_shared import prefix
 from iosuite_shared.access import json_body
 
-from app import access, apps, config, siteicons, bookmarkcheck, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, trmnl, trmnlpush, trmnlserver, wall, weather, widgets
+from app import access, apps, config, siteicons, bookmarkcheck, bookmarkdav, bookmarkfiles, bookmarks, bookmarksync, homeassistant as ha, ncbookmarks, layout, status as appstatus, rates, timers, trmnl, trmnlpush, trmnlserver, wall, weather, widgets
 
 router = APIRouter()
 
@@ -515,6 +515,56 @@ def widget_image(key: str, kind: str, item_id: str, request: Request, p: str = "
         raise HTTPException(e.status, str(e))
     return Response(body, media_type=ctype if ctype.startswith("image/") else "image/jpeg",
                     headers={"Cache-Control": "private, max-age=86400"})
+
+
+# ------------------------------------------------------------------ kitchen timers (app/timers.py)
+
+def _timer(fn, *a):
+    try:
+        return fn(*a)
+    except timers.BadTimer as e:
+        raise HTTPException(400, str(e))
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.get("/api/timers", dependencies=[access.signed_in])
+def timers_list():
+    """{now, items: [{id, label, seconds, endsAt, by, byId}]}: the family's timers, running or ended a moment ago;
+    now and endsAt are the server's epoch seconds."""
+    return timers.listing()
+
+
+@router.post("/api/timers", dependencies=[access.signed_in])
+async def timers_start(request: Request):
+    """A new timer: {seconds, label?} → the timer."""
+    b = await json_body(request)
+    return await run_in_threadpool(_timer, timers.start, request.state.user, b)
+
+
+@router.post("/api/timers/{tid}/more", dependencies=[access.signed_in])
+async def timers_more(tid: int, request: Request):
+    """More time: {seconds} (60 by default); an ended timer starts again from now."""
+    b = await json_body(request)
+    return await run_in_threadpool(_timer, timers.more, tid, b)
+
+
+@router.delete("/api/timers/{tid}", dependencies=[access.signed_in])
+def timers_dismiss(tid: int):
+    """Stop a timer, or silence one that ended."""
+    _timer(timers.dismiss, tid)
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------ exchange rates for the search box (app/rates.py)
+
+@router.get("/api/rates", dependencies=[access.signed_in])
+def rates_get():
+    """{base: 'EUR', date, rates: {USD: 1.08, ...}}: the ECB's reference rates of the working day, for "120 usd in eur"."""
+    try:
+        return rates.get()
+    except rates.RatesError as e:
+        raise HTTPException(502, str(e))
 
 
 # ------------------------------------------------------------------ the wall display on a device (app/wall.py)

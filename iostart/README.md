@@ -33,6 +33,14 @@ what the app will show on the start page later (today's events, the newest photo
   `todo`, `task`) is a task for ioTask ("t call the plumber fri 9am": the day it names is its due date, none named is
   no due date, and the dialog asks which list); one that starts with `n` (or `note`) is a note for ioNote ("n the gate
   code is 4411"). Both are made with the viewer's own sign-in, like the event.
+- **Calculator**: a sum or a conversion typed in the search box shows its answer as the first row, and Enter copies
+  it: "15% of 84", "84 + 15%", "(12+8)*1.21", "2^10", "350f in c", "3 cups in ml", "5 km to mi", "10 lb in kg",
+  "120 usd in eur" (the European Central Bank's rates of the day, fetched by the server from Frankfurter and kept six
+  hours). A phone number or a date typed without spaces ("555-1234", "24/12") is not taken for a sum; "=24/12" is.
+- **Kitchen timers**: "timer 10m pasta", "egg timer 6 min", "timer 1h30 roast" starts a timer for the whole family. The
+  running ones count down under the greeting on every start page and on the wall display, with who started them;
+  anyone can add a minute or dismiss one. When one ends, the page that started it and the wall display beep, and the
+  person who started it gets a notification ("Kitchen timers" in Settings › Account › Notifications).
 - **Live**: every five minutes, and when the tab is shown again, the page brings the tiles, the cards, the weather
   and the dots up to date in place; at midnight it is drawn anew for the new day.
 - **A wall display** (the gear › Wall display, or `#/wall` as a tablet's home address): full screen, ioPix photos one
@@ -158,10 +166,13 @@ what the app will show on the start page later (today's events, the newest photo
   front (no offline copy). On a phone it has a search box, rows to tap, a ⋯ menu per link and folder, and a short
   link form (the address; the name is the site's address when left empty). Sign-in is the page's own: behind
   Cloudflare Access a home-screen app signs in once by itself (it keeps its own cookies, apart from the browser's).
-- **ioStart, the iPhone and iPad app** ([avandeputte/iostart-apps](https://github.com/avandeputte/iostart-apps)): the
-  tree with search and editing, a share sheet entry that bookmarks the page open in any browser, and a built-in
-  browser (WebKit) for opening bookmarks inside the app. It speaks the extension's API (`/dav/ext`) and signs in with
-  the same one-tap flow.
+- **ioStart, the iPhone and iPad app** ([avandeputte/iosuite-apps](https://github.com/avandeputte/iosuite-apps), folder
+  `iostart/`): the tree with search and editing, a share sheet entry that bookmarks the page open in any browser, and a
+  built-in browser (WebKit) for opening bookmarks inside the app, plus home screen widgets (today, the next event,
+  favourite bookmarks) and Siri / Shortcuts actions to add a task or an event. It speaks the extension's API
+  (`/dav/ext`) and signs in with the same one-tap flow, asking for a full app password (`?scope=full`) because its
+  widgets and Siri read and add in ioCalendar and ioTask as the person (`/dav/ext/today`, `/dav/ext/calendars`,
+  `/dav/ext/tasks`, `/dav/ext/events`); a sync-only password is told to sign in again for those.
 - **Bookmark sync with browsers**: everything in the tree syncs, on the start page or not.
   - *The ioStart Bookmarks extension* (`static/extension`, Chrome, Edge and Firefox; its own README there): keeps the
     browser's own bookmarks the same as the tree, both ways, with nothing to configure but the address. The bookmarks
@@ -363,6 +374,8 @@ app/weather.py     AccuWeather: the settings, the place search, the cached condi
 app/homeassistant.py  Home Assistant: the settings, the chosen entities and their state, switching them, the search, the alerts
 app/ha_feed.py     Home Assistant's websocket: state changes folded into the copy, streamed to the pages
 app/bookmarks.py   the bookmark groups and links
+app/timers.py      kitchen timers: the family's, from the search box; the "timer done" notification loop
+app/rates.py       the exchange rates for the search box's currency conversions (ECB, through Frankfurter)
 app/auth.py        the shared accounts and the updater (iosuite-shared), as ioStart uses them
 app/db.py          MariaDB access and the schema (the meta settings table, the bookmarks)
 app/config.py      the settings: the suite's standard names (iosuite_shared.config) and ioStart's own

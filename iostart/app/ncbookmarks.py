@@ -168,7 +168,10 @@ def flow_start(request: Request):
         raise HTTPException(429, "Too many sign-ins waiting; try again in a few minutes")
     poll, page = secrets.token_urlsafe(48), secrets.token_urlsafe(32)
     who = request.query_params.get("client") or request.headers.get("user-agent") or ""  # ?client=: the extension names itself
-    _flows[poll] = {"at": time.time(), "page": page, "ua": who[:80], "done": None}
+    # ?scope=full: the iPhone app (ioStart), whose widgets and Siri read and add in the other apps as the person, asks
+    # for an app password without a limit; everyone else gets one for sync only. The page says which it is.
+    full = request.query_params.get("scope") == "full"
+    _flows[poll] = {"at": time.time(), "page": page, "ua": who[:80], "done": None, "full": full}
     root = _root(request) + BASE
     return {"poll": {"token": poll, "endpoint": f"{root}/index.php/login/v2/poll"}, "login": f"{root}/index.php/login/v2/flow/{page}"}
 
@@ -205,11 +208,17 @@ def flow_page(page: str, request: Request):
         return _page("ioStart", '<h1>Sign in to ioStart first</h1><p>Then you are asked whether the app may sync the bookmarks.</p>'
                                 f'<p><a class="btn" href="{prefix.of(request)}/?flow={html.escape(page)}">Sign in</a></p>')
     who = html.escape(f["ua"] or "An app")
+    grant = f'<form method="post" action="{prefix.of(request)}{BASE}/index.php/login/v2/grant"><input type="hidden" name="page" value="{html.escape(page)}"><button>Allow</button></form>'
+    if f.get("full"):
+        return _page("Sign in to ioStart", f"""<h1>Let this app in as you?</h1>
+<p><b>{who}</b> asks for full access as <b>{html.escape(u["name"])}</b>: your bookmarks, and what its widgets and Siri show and add in your other apps (your day in ioCalendar, your tasks in ioTask).</p>
+<p class="muted">It gets an app password of its own that works wherever you do. You can revoke it any time in Settings.</p>
+{grant}""")
     can = "read and change" if sync.users.is_member(u) else "read"
     return _page("Sync bookmarks with ioStart", f"""<h1>Let this app sync the bookmarks?</h1>
 <p><b>{who}</b> asks to {can} your bookmarks and the shared ones as <b>{html.escape(u["name"])}</b>.</p>
 <p class="muted">It gets an app password of its own, for sync only. You can revoke it any time in Settings.</p>
-<form method="post" action="{prefix.of(request)}{BASE}/index.php/login/v2/grant"><input type="hidden" name="page" value="{html.escape(page)}"><button>Allow</button></form>""")
+{grant}""")
 
 
 @router.post(BASE + "/index.php/login/v2/grant", include_in_schema=False)
@@ -221,8 +230,11 @@ async def flow_grant(request: Request):
     f = _flow_by_page(str((await _json(request)).get("page") or ""))
     if not f or f["done"]:
         return _page("ioStart", "<h1>This sign-in link is no longer valid</h1><p>Start again from the app that sent you here.</p>")
-    label = f"Bookmark sync: {f['ua']}" if f["ua"] else "Bookmark sync"
-    pw = await run_in_threadpool(apppasswords.create, u["id"], auth.app, label, apppasswords.DAV)
+    if f.get("full"):
+        label, scope = (f"App: {f['ua']}" if f["ua"] else "App"), ""
+    else:
+        label, scope = (f"Bookmark sync: {f['ua']}" if f["ua"] else "Bookmark sync"), apppasswords.DAV
+    pw = await run_in_threadpool(apppasswords.create, u["id"], auth.app, label, scope)
     f["done"] = {"loginName": u["name"], "appPassword": pw}
     return _page("ioStart", "<h1>Done</h1><p>The app is signed in. You can close this tab and go back to it.</p>")
 
