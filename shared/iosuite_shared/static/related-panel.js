@@ -31,7 +31,13 @@ const IC = {
   check: 'M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
   open: 'M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z',
 };
-const svg = (d, cls = 'rl-ic') => { const s = document.createElement('span'); s.className = cls; s.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`; return s; };
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const svg = (d, cls = 'rl-ic') => {  // built as elements, never from an HTML string
+  const s = document.createElement('span'); s.className = cls;
+  const g = document.createElementNS(SVG_NS, 'svg'); g.setAttribute('viewBox', '0 0 24 24'); g.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(SVG_NS, 'path'); p.setAttribute('d', d);
+  g.append(p); s.append(g); return s;
+};
 
 const CSS = `
 .iosv.rl { margin: 16px 0 0; }

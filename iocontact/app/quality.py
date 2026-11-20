@@ -396,39 +396,58 @@ def history(book_ids: list[int], limit: int = 50) -> list[dict]:
     return out
 
 
-def undo(merge_id: int) -> dict:
-    """Put the contacts of a merge back as they were (the kept one loses changes made to it since)."""
+def _columns(table: str) -> set:
+    """The table's columns as the database has them now: a snapshot's keys are only ever written to one of these (a
+    column dropped since the merge is left out, and nothing from the stored JSON becomes SQL by itself)."""
+    return {r["c"] for r in db.q("SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+                                 "AND TABLE_NAME = %s", (table,))}
+
+
+def undo(merge_id: int, user: dict | None = None) -> dict:
+    """Put the contacts of a merge back as they were (the kept one loses changes made to it since). user: who asks, who
+    must be able to change the address book of every contact of the merge, where it is now and where it goes back to
+    (the merged-away ones too, deleted as they are), else NotAllowed."""
     m = db.one("SELECT * FROM con_contact_merges WHERE id = %s", (merge_id,))
     if not m or m["undone_at"]:
         raise Invalid("No such merge, or it was undone already")
     marks = ",".join(["%s"] * len(_merge_ids(m)))
-    if len(db.q(f"SELECT id FROM con_contacts WHERE id IN ({marks})", _merge_ids(m))) < len(set(_merge_ids(m))):
+    now = db.q(f"SELECT id, address_book_id FROM con_contacts WHERE id IN ({marks})", _merge_ids(m))
+    if len(now) < len(set(_merge_ids(m))):
         raise Invalid("This merge can no longer be undone: some of its contacts are gone for good")
     snap = {k: [{c: _dec(v) for c, v in r.items()} for r in rows] for k, rows in json.loads(m["snapshot"]).items()}
+    if user is not None:
+        books = {r["address_book_id"] for r in now} | {r["address_book_id"] for r in snap["contacts"]}
+        if not all(model.can_write_book(user, model.book(b)) for b in books):
+            raise NotAllowed("Some contacts of this merge are in an address book you cannot change")
     ids = [r["id"] for r in snap["contacts"]]
     marks = ",".join(["%s"] * len(ids))
     live = {r["id"] for r in db.q("SELECT id FROM con_contacts WHERE deleted = 0")}
     with db.tx():
         touched = {r["contact_id"] for r in db.q(f"SELECT contact_id FROM con_contact_relations WHERE related_id IN ({marks})", ids)}
+        known = {t: _columns(t) for t in ("con_contacts", "con_contact_relations", *TABLES)}
         for r in snap["contacts"]:
-            cols = {k: v for k, v in r.items() if k not in ("id", "created_at", "updated_at")}
+            cols = {k: v for k, v in r.items() if k in known["con_contacts"] and k not in ("id", "created_at", "updated_at")}
             db.ex("UPDATE con_contacts SET " + ", ".join(f"`{k}` = %s" for k in cols) + " WHERE id = %s", (*cols.values(), r["id"]))
         for t in TABLES:
             db.ex(f"DELETE FROM {t} WHERE contact_id IN ({marks})", ids)
             for r in snap[t]:
-                cols = {k: v for k, v in r.items() if k != "id"}
+                cols = {k: v for k, v in r.items() if k in known[t] and k != "id"}
                 db.ex(f"INSERT INTO {t} (" + ", ".join(f"`{k}`" for k in cols) + ") VALUES (" + ", ".join(["%s"] * len(cols)) + ")", tuple(cols.values()))
         db.ex(f"DELETE FROM con_contact_relations WHERE contact_id IN ({marks}) OR related_id IN ({marks})", (*ids, *ids))
         for r in snap["relations"]:
             if r["contact_id"] not in live and r["contact_id"] not in ids or (r["related_id"] and r["related_id"] not in live and r["related_id"] not in ids):
                 continue
-            cols = {k: v for k, v in r.items() if k != "id"}
+            cols = {k: v for k, v in r.items() if k in known["con_contact_relations"] and k != "id"}
             db.ex("INSERT INTO con_contact_relations (" + ", ".join(f"`{k}`" for k in cols) + ") VALUES (" + ", ".join(["%s"] * len(cols)) + ")", tuple(cols.values()))
             touched.add(r["contact_id"])
         for cid in set(ids) | touched:
             model._touch(cid)  # new etag and sync token: phones pick the contacts up again
         db.ex("UPDATE con_contact_merges SET undone_at = NOW() WHERE id = %s", (merge_id,))
     return {"restored": [model.get_row(i)["fn"] for i in ids]}
+
+
+class NotAllowed(Exception):
+    """Undoing a merge reaches into an address book the person cannot change."""
 
 
 # ------------------------------------------------------------------ data quality

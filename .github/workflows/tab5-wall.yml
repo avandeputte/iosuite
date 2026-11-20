@@ -17,9 +17,8 @@ concurrency:
   group: tab5-wall-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: write   # the release wall-latest
-  actions: write    # building the website again, with the new firmware
+permissions:  # a build (a pull request's too) only reads; the release job alone writes
+  contents: read
 
 env:
   # main: 1.<run>; a pull request: pr<n>.<run>, which a device on it trades for main's at its next update
@@ -39,16 +38,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        uses: espressif/esp-idf-ci-action@v1
+        uses: espressif/esp-idf-ci-action@9d38657f3d789ca759b2b37aaf5ceffbc42c4f0d  # v1
         with:
           esp_idf_version: v5.4.4  # the USB host component the Tab5's board package pulls in needs 5.4.4
           target: esp32p4
           path: devices/tab5-wall
           extra_docker_args: -e WALL_VERSION=${{ env.WALL_VERSION }} -e WALL_BOARD=${{ matrix.board }} -e WALL_CHIP=${{ matrix.chip }}
           # the image's component manager stops at a Kconfig condition in a newer esp_hosted it only looks at;
-          # 2.4.11 and later pass over it (the build keeps esp_hosted 1.4.0)
+          # 2.4.11 and later pass over it (the build keeps esp_hosted 1.4.0); pinned to the version that passes today
           command: >-
-            pip install -q "idf-component-manager>=2.4.11,<3" &&
+            pip install -q "idf-component-manager==2.5.2" &&
             idf.py build &&
             cd build &&
             esptool.py --chip esp32p4 merge_bin -o iowall-full.bin @flash_args
@@ -68,6 +67,9 @@ jobs:
 
   release:
     needs: build
+    permissions:
+      contents: write   # the release wall-latest
+      actions: write    # building the website again, with the new firmware
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

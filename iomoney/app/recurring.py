@@ -173,16 +173,21 @@ def _hits(r: dict, t: dict) -> bool:
     return _says(r, t)
 
 
-def _payments(r: dict, start: dt.date, end: dt.date) -> list[dict]:
-    """The transactions that look like this one from start to end (not hidden)."""
+def _payments(r: dict, start: dt.date, end: dt.date, u: dict = None) -> list[dict]:
+    """The transactions that look like this one from start to end (not hidden). u: only in the accounts this person
+    sees (one kept for any account would otherwise show the payments of someone else's private account)."""
     want, reach = Decimal(r["amount"]), _reach(r)
     where = "t.hidden = 0 AND t.day BETWEEN %s AND %s AND ABS(t.amount) BETWEEN %s AND %s AND t.amount " + ("< 0" if r["flow"] == "out" else "> 0")
     args = [start, end, want - reach, want + reach]
     if r["account_id"]:
         where += " AND t.account_id = %s"
         args.append(r["account_id"])
-    rows = db.q(f"SELECT t.id, t.account_id, t.day, t.amount, t.merchant, t.description FROM mny_transactions t WHERE {where} "
-                "ORDER BY t.day", args)
+    if u is not None:
+        vis, vargs = model._visible(u)
+        where += f" AND {vis}"
+        args += vargs
+    rows = db.q(f"SELECT t.id, t.account_id, t.day, t.amount, t.merchant, t.description FROM mny_transactions t "
+                f"JOIN mny_accounts a ON a.id = t.account_id WHERE {where} ORDER BY t.day", args)
     return [t for t in rows if _hits(r, t)]
 
 
@@ -195,12 +200,12 @@ def _changed_by(r: dict) -> Decimal:
     return _reach(r) if r["approximate"] else max(Decimal("0.25"), want * Decimal("0.01"))
 
 
-def flag_of(r: dict, paid: list[dict], today: dt.date) -> dict | None:
+def flag_of(r: dict, paid: list[dict], today: dt.date, u: dict = None) -> dict | None:
     """What is off with a recurring transaction, from its payments so far (paid: _payments, by day), or None:
     {kind: "changed", day, from, to, transactionId}: the latest payment, or one like it (its words, when one was due,
     between half and twice the amount) had another amount; {kind: "missed", since (the last payment's day), expected
     (about when the next was due), days (how late)}: none came for longer than its pace allows. Not one set aside
-    (mny_recurring_ok) for that day."""
+    (mny_recurring_ok) for that day. u: only from the accounts this person sees (as _payments)."""
     if not paid:
         return None
     last = paid[-1]
@@ -215,8 +220,12 @@ def flag_of(r: dict, paid: list[dict], today: dt.date) -> dict | None:
         if r["account_id"]:
             where += " AND t.account_id = %s"
             args.append(r["account_id"])
+        if u is not None:
+            vis, vargs = model._visible(u)
+            where += f" AND {vis}"
+            args += vargs
         cands = [t for t in db.q(f"SELECT t.id, t.account_id, t.day, t.amount, t.merchant, t.description FROM mny_transactions t "
-                                 f"WHERE {where} ORDER BY t.day", args)
+                                 f"JOIN mny_accounts a ON a.id = t.account_id WHERE {where} ORDER BY t.day", args)
                  if _says(r, t) and lo - near <= (t["day"] - last["day"]).days <= hi + near]
         if cands:
             c = min(cands, key=lambda t: abs(abs(Decimal(t["amount"])) - want))  # the nearest amount: a price moves a little
@@ -288,7 +297,7 @@ def _need_change(u: dict, account_id) -> None:
 def public(r: dict, u: dict, today: dt.date = None) -> dict:
     today = today or dt.date.today()
     a = model.account_row(r["account_id"]) if r["account_id"] else None
-    paid = _payments(r, today - dt.timedelta(days=LOOK_BACK), today)
+    paid = _payments(r, today - dt.timedelta(days=LOOK_BACK), today, u)
     last = paid[-1] if paid else None
     nxt = next_date(r, today)
     sign = -1 if r["flow"] == "out" else 1
@@ -299,7 +308,7 @@ def public(r: dict, u: dict, today: dt.date = None) -> dict:
             "next": nxt.isoformat() if nxt else None, "category": r["category"], "source": r["source"],
             "subscription": bool(r["subscription"]), "perMonth": model.n2(sign * per_month(r["amount"], r["frequency"])),
             "last": {"day": last["day"].isoformat(), "amount": model.n2(last["amount"])} if last else None,
-            "flag": flag_of(r, paid, today), "writable": _may_change(u, r["account_id"])}
+            "flag": flag_of(r, paid, today, u), "writable": _may_change(u, r["account_id"])}
 
 
 def items(u: dict, today: dt.date = None) -> list[dict]:
@@ -643,7 +652,7 @@ def bills(u: dict, start, end, today: dt.date = None) -> list[dict]:
             continue
         a = model.account_row(r["account_id"]) if r["account_id"] else None
         near = NEAR.get(r["frequency"], 5)
-        pays = _payments(r, s - dt.timedelta(days=near), min(e + dt.timedelta(days=near), today))
+        pays = _payments(r, s - dt.timedelta(days=near), min(e + dt.timedelta(days=near), today), u)
         used = set()
         sign = -1 if r["flow"] == "out" else 1
         for d in ds:

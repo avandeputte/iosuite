@@ -207,3 +207,30 @@ def test_account_changes_are_one_transaction_and_a_name_taken_meanwhile_is_no_50
     monkeypatch.undo()
     assert users.find("txa") and not users.find("txa2")
     users.delete(u["id"])
+
+
+def test_the_first_account_is_made_once_whatever_the_cache_says():
+    """Security review 2026-11-20: two first-run setups (two apps, a moment apart, each with any_users cached as False)
+    make one suite admin; the other is refused, checked in the database under a lock."""
+    import threading
+    assert not users.any_users()  # cached False now, as in another app's process
+    users.create("alex", "secret123", suite_admin=True, first=True)
+    users._cache.update(any=False, any_at=__import__("time").time())  # stale: another process made the account
+    with pytest.raises(users.FirstTaken):
+        users.create("mallory", "secret123", suite_admin=True, first=True)
+    assert users.find("mallory") is None
+    # at the same moment, from two threads: one account
+    users.db.ex("DELETE FROM ios_users")
+    users.invalidate()
+    out = []
+
+    def setup(name):
+        try:
+            out.append(users.create(name, "secret123", suite_admin=True, first=True)["name"])
+        except users.FirstTaken:
+            out.append(None)
+    ts = [threading.Thread(target=setup, args=(n,)) for n in ("one", "two", "three")]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert sorted(out, key=str).count(None) == 2
+    assert users.db.one("SELECT COUNT(*) AS n FROM ios_users WHERE service IS NULL")["n"] == 1

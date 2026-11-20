@@ -261,6 +261,14 @@ def _books_seen_by(user: dict | None) -> set | None:
     return {b["id"] for b in db.q("SELECT id FROM con_address_books WHERE owner_id IS NULL OR owner_id = %s", (user["id"],))}
 
 
+def _books_written_by(user: dict | None) -> set | None:
+    """The ids of the address books this account may change; None: no account, no limit."""
+    if not user:
+        return None
+    return {b["id"] for b in db.q("SELECT * FROM con_address_books WHERE owner_id IS NULL OR owner_id = %s", (user["id"],))
+            if can_write_book(user, b)}
+
+
 def full(cid: int | dict, with_photo: bool = False) -> dict | None:
     """The whole contact (an id, or its con_contacts row), or None when it is gone."""
     r = get_row(cid) if isinstance(cid, int) else cid
@@ -418,6 +426,22 @@ def _etag(cid: int) -> str:
     return hashlib.sha1(f"{cid}-{time.time_ns()}-{uuidlib.uuid4()}".encode()).hexdigest()[:20]
 
 
+MOVED_AWAY = "This contact is in an address book you cannot change (it was moved a moment ago)"
+
+
+def _lock_for_write(cid: int, *targets: int) -> dict | None:
+    """The contact's row, locked for the rest of the transaction. The routes check the book before they write, but the
+    contact can be moved between that check and the write: with the row locked, the account writing (`viewer`) must
+    still be able to change the book it is in now (and each of `targets`), else Invalid."""
+    row = db.one("SELECT * FROM con_contacts WHERE id = %s FOR UPDATE", (cid,))
+    u = viewer.get()
+    if row and u:
+        for bid in {row["address_book_id"], *targets}:
+            if not can_write_book(u, book(bid)):
+                raise Invalid(MOVED_AWAY)
+    return row
+
+
 def save(book_id: int, data: dict, cid: int | None = None, href: str | None = None,
          resolve_book_ids: list[int] | None = None) -> int:
     """Create or replace a contact. `data` is a contact dict (API, vCard or CSV); relations may name the other contact by
@@ -425,7 +449,7 @@ def save(book_id: int, data: dict, cid: int | None = None, href: str | None = No
     (a vCard's PHOTO, say) is not kept: the linked ioPix person is a contact's only photo."""
     c = validate(data)
     with db.tx():
-        prev = get_row(cid) if cid else None
+        prev = _lock_for_write(cid, book_id) if cid else None
         if prev and prev["address_book_id"] != book_id:
             move(cid, book_id)
             prev = get_row(cid)
@@ -502,8 +526,15 @@ def _touch(cid: int) -> None:
 def _save_relations(cid: int, rels: list[dict], book_ids: list[int]) -> None:
     """Replace the contact's relations with `rels`, and mirror each on the related contact (a brother has a sibling).
     Relations to contacts outside `book_ids` (the books the account saving can see) are left as they are: it was not
-    shown them (full_many), so their absence from `rels` does not mean they were removed."""
+    shown them (full_many), so their absence from `rels` does not mean they were removed.
+    The mirror (and a gender the relation implies) is only written on a related contact in a book the account saving
+    (`viewer`) may change: one in a book it only reads keeps its card as it is."""
     me = get_row(cid)
+    writable = _books_written_by(viewer.get())
+
+    def may_touch(rid: int) -> bool:
+        return writable is None or ((get_row(rid) or {}).get("address_book_id") in writable)
+
     marks = ",".join(["%s"] * len(book_ids))
     old = {(x["related_id"], x["type"]) for x in db.q(
         "SELECT r.related_id, r.type FROM con_contact_relations r JOIN con_contacts o ON o.id = r.related_id "
@@ -536,18 +567,18 @@ def _save_relations(cid: int, rels: list[dict], book_ids: list[int]) -> None:
         if rid:
             new.add((rid, t))
             g = r.get("gender")  # "Brother" picked: the related person is a man, if nobody said otherwise
-            if g in ("M", "F") and db.ex("UPDATE con_contacts SET gender = %s WHERE id = %s AND gender IS NULL", (g, rid)):
+            if g in ("M", "F") and may_touch(rid) and db.ex("UPDATE con_contacts SET gender = %s WHERE id = %s AND gender IS NULL", (g, rid)):
                 touched.add(rid)  # its card changed: a new etag, so sync clients fetch it
     db.many("INSERT INTO con_contact_relations (contact_id, position, type, related_id, related_name, label) VALUES (%s, %s, %s, %s, %s, %s)", rows)
     for rid, t in old - new:
         inv = rel.inverse(t)
-        if inv:
+        if inv and may_touch(rid):
             n = db.ex("DELETE FROM con_contact_relations WHERE contact_id = %s AND related_id = %s AND type = %s LIMIT 1", (rid, cid, inv))
             if n:
                 touched.add(rid)
     for rid, t in new - old:
         inv = rel.inverse(t)
-        if inv and not db.one("SELECT 1 AS x FROM con_contact_relations WHERE contact_id = %s AND related_id = %s AND type = %s", (rid, cid, inv)):
+        if inv and may_touch(rid) and not db.one("SELECT 1 AS x FROM con_contact_relations WHERE contact_id = %s AND related_id = %s AND type = %s", (rid, cid, inv)):
             pos = (db.one("SELECT coalesce(max(position), -1) + 1 AS p FROM con_contact_relations WHERE contact_id = %s", (rid,)) or {"p": 0})["p"]
             db.ex("INSERT INTO con_contact_relations (contact_id, position, type, related_id) VALUES (%s, %s, %s, %s)", (rid, pos, inv, cid))
             touched.add(rid)
@@ -562,15 +593,16 @@ def _save_relations(cid: int, rels: list[dict], book_ids: list[int]) -> None:
 
 
 def set_fields(cid: int, **cols) -> None:
-    row = get_row(cid)
-    tok = _bump(row["address_book_id"])
-    db.ex("UPDATE con_contacts SET " + ", ".join(f"{k} = %s" for k in cols) + ", etag = %s, changed_token = %s WHERE id = %s",
-          (*cols.values(), _etag(cid), tok, cid))
+    with db.tx():
+        row = _lock_for_write(cid)
+        tok = _bump(row["address_book_id"])
+        db.ex("UPDATE con_contacts SET " + ", ".join(f"{k} = %s" for k in cols) + ", etag = %s, changed_token = %s WHERE id = %s",
+              (*cols.values(), _etag(cid), tok, cid))
 
 
 def delete(cid: int) -> None:
     with db.tx():
-        row = get_row(cid)
+        row = _lock_for_write(cid)
         if not row or row["deleted"]:
             return
         others = [x["contact_id"] for x in db.q("SELECT DISTINCT contact_id FROM con_contact_relations WHERE related_id = %s", (cid,))]
@@ -621,7 +653,7 @@ def move(cid: int, new_book: int) -> None:
     that syncs it sees the card go. The contact's own row moves first: the tombstone takes the address (book, href)
     it had, which is unique, so written the other way round it would land on the contact itself."""
     with db.tx():
-        row = get_row(cid)
+        row = _lock_for_write(cid, new_book)
         if not row or row["deleted"] or row["address_book_id"] == new_book:
             return
         href = row["href"]

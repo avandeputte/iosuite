@@ -1,6 +1,7 @@
 """`python -m app.mcp [--user NAME]`: the MCP server over stdio, for clients that spawn a local process. It acts as
 the account named by --user or MCP_USER (or the only admin, when there is just one), as the HTTP endpoint does for a
-client signed in with an app password."""
+client signed in with an app password. The account and its role are read when the server starts: a role changed later
+counts from the next start (anyone who can start it holds the database password)."""
 import sys
 
 from app import config, users
@@ -19,6 +20,8 @@ def _pick_user():
         u = next((u for u in accounts if u["name"].lower() == name.lower()), None)
         if not u:
             sys.exit(f"no ioPix account named {name!r}")
+        if u.get("role") == "none":
+            sys.exit(f"the account {name!r} has no access to ioPix")
         return u
     admins = [u for u in accounts if u.get("role") == "admin" or u.get("suiteAdmin")]
     if len(admins) == 1:

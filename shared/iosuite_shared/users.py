@@ -66,8 +66,15 @@ def init() -> bool:
         return False
     db.error = None
     if config.ADMIN_USER and config.ADMIN_PASSWORD and not any_users():
-        create(config.ADMIN_USER, config.ADMIN_PASSWORD, suite_admin=True)
+        try:
+            create(config.ADMIN_USER, config.ADMIN_PASSWORD, suite_admin=True, first=True)
+        except FirstTaken:  # another app of the suite, starting at the same moment, made it
+            pass
     return True
+
+
+class FirstTaken(Invalid):
+    """The first-run setup, when an account exists already."""
 
 
 def any_users() -> bool:
@@ -163,9 +170,18 @@ def _atomic():
 
 
 def create(name: str, password: str, role: str | None = None, app: str | None = None, email: str = "", display_name: str = "",
-           suite_admin: bool = False) -> dict:
-    """A new account; with app and role, that role there too. ValueError with the message to show."""
+           suite_admin: bool = False, first: bool = False) -> dict:
+    """A new account; with app and role, that role there too. ValueError with the message to show.
+    first: only while no account exists (the first-run setup). Checked under a lock in this transaction, never from
+    any_users' cache: two setups at once (or one in each app, a moment apart) make one account, the other gets FirstTaken."""
     with _atomic():
+        if first:
+            # every setup takes this one row's lock first, so they run one after the other; a locking read sees what
+            # the setup before committed
+            db.ex("INSERT INTO ios_settings (app, name, value) VALUES ('', 'first_account', '1') "
+                  "ON DUPLICATE KEY UPDATE value = VALUES(value)")
+            if db.one("SELECT 1 AS x FROM ios_users WHERE service IS NULL LIMIT 1 LOCK IN SHARE MODE"):
+                raise FirstTaken("Users already exist; sign in as an admin")
         name, email = clean_name(name), clean_email(email)
         if role is not None and role not in ROLES:
             raise Invalid("Unknown role")

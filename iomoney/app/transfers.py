@@ -331,10 +331,16 @@ def possible(u: dict, tied: set = frozenset(), limit: int = 1000) -> list[dict]:
 
 # ---- transfer rules
 
+def _sees_rule(u: dict, r: dict) -> bool:
+    """A rule names two accounts and words from their transactions: it is for whoever sees both (a rule learned from
+    someone's private account would otherwise show that account's payees)."""
+    return all(model.can_read(u, model.account_row(x)) for x in (r["account_id"], r["other_id"]))
+
+
 def rules(u: dict) -> list[dict]:
     if model.role_rank(u) < 1:
         return []
-    return db.q("SELECT * FROM mny_transfer_rules ORDER BY account_id, pattern")
+    return [r for r in db.q("SELECT * FROM mny_transfer_rules ORDER BY account_id, pattern") if _sees_rule(u, r)]
 
 
 def rule_public(r: dict, u: dict) -> dict:
@@ -383,7 +389,7 @@ def rule(u: dict, rid) -> dict:
         r = db.one("SELECT * FROM mny_transfer_rules WHERE id = %s", (int(rid),))
     except (TypeError, ValueError):
         r = None
-    if not r or model.role_rank(u) < 1:
+    if not r or model.role_rank(u) < 1 or not _sees_rule(u, r):
         raise model.NotFound("No such transfer rule")
     return r
 

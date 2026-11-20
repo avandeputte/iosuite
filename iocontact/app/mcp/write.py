@@ -282,8 +282,8 @@ def undo_merge(merge_id: int) -> dict:
         raise ToolError("No such merge")
     find_contact(u, str(m["kept_contact_id"]), writable=True)
     try:
-        return quality.undo(int(merge_id))
-    except ValueError as e:
+        return quality.undo(int(merge_id), u)
+    except (quality.NotAllowed, ValueError) as e:
         raise ToolError(str(e))
 
 
