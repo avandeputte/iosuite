@@ -17,6 +17,11 @@
    },
    "notifications": [
     {
+     "kind": "timers",
+     "label": "Kitchen timers",
+     "hint": "When a timer you started from the start page's search box ends"
+    },
+    {
      "kind": "trmnl",
      "label": "TRMNL screens",
      "hint": "When one of your TRMNL screens runs low on battery, or sends you what it shows"

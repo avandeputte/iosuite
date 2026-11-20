@@ -10,6 +10,8 @@ const ICONS = {
   doc: 'M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',
   box: 'M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V4c0-1.1-1-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4l16-.02V7z',
   add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
+  timer: 'M15 1H9v2h6V1zm-4 13h2V8h-2v6zm8.03-6.61 1.42-1.42c-.43-.51-.9-.99-1.41-1.41l-1.42 1.42A8.962 8.962 0 0 0 12 4c-4.97 0-9 4.03-9 9s4.02 9 9 9 9-4.03 9-9c0-2.12-.74-4.07-1.97-5.61zM12 20c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z',
+  calc: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5.97 4.06L14.09 6l1.41 1.41L16.91 6l1.06 1.06-1.41 1.41 1.41 1.41-1.06 1.06-1.41-1.4-1.41 1.41-1.06-1.06 1.41-1.41-1.41-1.42zm-6.78.66h5v1.5h-5v-1.5zM11.5 16h-2v2H8v-2H6v-1.5h2v-2h1.5v2h2V16zm6.5 1.25h-5v-1.5h5v1.5zm0-2.5h-5v-1.5h5v1.5z',
   person: 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
   people: 'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z',
   settings: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z',
@@ -242,7 +244,7 @@ async function showHome(page) {
   // under the greeting: a column for the tiles and the cards and, on a wide screen, the bookmarks in a column of their
   // own on the right (when they come last, as by default); narrower, the side column simply follows the main one
   const col = h('div', { class: 'homecol' }), side = h('div', { class: 'homeside' });
-  page.append(h('div', { class: 'homegrid' }, col, side));
+  page.append(timersBlock(), h('div', { class: 'homegrid' }, col, side));
   drawWeather(wx);  // fills in when AccuWeather (or the server's copy) answers
   // the tiles, as the person laid the page out (Customize › Layout):
   // "cards": an app with something to show gets a card, as many across as fit at a width its lines can be read in; the
@@ -382,7 +384,7 @@ function money(v, cur, opts = {}) {
   try { return new Intl.NumberFormat([], cur ? { style: 'currency', currency: cur, ...opts } : { minimumFractionDigits: 2, maximumFractionDigits: 2, ...opts }).format(v); } catch { return `${(+v).toFixed(2)}${cur ? ` ${cur}` : ''}`; }
 }
 function searchBox() {
-  const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search, or add something', title: 'Search the suite and the web. Or add an event: “dinner fri 19:00”; a task: “t buy milk sat”; a note: “n the gate code is 4411”.', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, people, events, tasks, recipes, notes, things in the house, money, photos and the web, or add an event, a task (t …) or a note (n …)' });
+  const inp = h('input', { class: 'q', type: 'search', placeholder: 'Search, or add something', title: 'Search the suite and the web. Or add an event: “dinner fri 19:00”; a task: “t buy milk sat”; a note: “n the gate code is 4411”; start a timer: “timer 10m pasta”; work something out: “15% of 84”, “350f in c”, “120 usd in eur”.', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Search bookmarks, people, events, tasks, recipes, notes, things in the house, money, photos and the web, or add an event, a task (t …) or a note (n …)' });
   const list = h('div', { class: 'qlist', hidden: true });
   const box = h('div', { class: 'search' }, icon('search', 's'), inp, h('kbd', null, /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'), list);
   let rows = [], sel = 0, timer = null, things = { q: '', items: [] };
@@ -397,7 +399,10 @@ function searchBox() {
     const found_ = finders().map((a) => [a, got[a.key]]).filter(([, g]) => g && g.q === ql && g.items.length);
     // "t buy milk fri": a task for ioTask; "n the gate code is 4411": a note for ioNote (the row comes first: Enter adds it)
     const add = quickPrefix(q);
-    const bang = add ? null : webBang(q), site = bang || add ? null : looksLikeSite(q), cal = !bang && !add && S.apps.find((a) => a.key === 'iocalendar') && parseEvent(q);
+    // "timer 10m pasta": a kitchen timer; "15% of 84", "350f in c": the answer (Enter copies it)
+    const tmr = add ? null : parseTimer(q), calc = add || tmr ? null : calcOf(q);
+    if (calc && calc.need === 'rates') calcRates(build);
+    const bang = add || tmr ? null : webBang(q), site = bang || add || tmr ? null : looksLikeSite(q), cal = !bang && !add && !tmr && S.apps.find((a) => a.key === 'iocalendar') && parseEvent(q);
     const eng = bang ? bang.engine : webEngine(), wq = bang ? bang.q : q;
     const webRow = () => row(eng.url(wq), [h('span', { class: 'bmic' }, icon('web', 's')), h('span', { class: 'qname' }, `“${wq}”`), h('span', { class: 'muted small' }, eng.name)], true);
     const found = links.length || found_.length || (things.q === ql && things.items.length);
@@ -412,6 +417,11 @@ function searchBox() {
     };
     const kids = [
       add ? [h('div', { class: 'qhead' }, add.kind === 'task' ? 'Add a task' : 'Add a note'), addRow()] : null,
+      tmr ? [h('div', { class: 'qhead' }, 'Start a timer'), (() => { const a = row('#', [h('span', { class: 'bmic' }, icon('timer', 's')), h('span', { class: 'qname' }, tmr.label), h('span', { class: 'muted small' }, timerLength(tmr.seconds))]);
+        a.onclick = (e) => { e.preventDefault(); inp.blur(); timerStart(tmr); }; return a; })()] : null,
+      calc && calc.text ? [h('div', { class: 'qhead' }, 'Answer'), (() => { const a = row('#', [h('span', { class: 'bmic' }, icon('calc', 's')), h('span', { class: 'qname qcalc' }, calc.text), h('span', { class: 'muted small' }, calc.note ? `${calc.note} · Enter copies` : 'Enter copies')]);
+        a.onclick = (e) => { e.preventDefault(); calcCopy(calc); }; return a; })()] : null,
+      calc && calc.need ? [h('div', { class: 'qhead' }, 'Answer'), h('div', { class: 'qrow muted small' }, 'Getting the exchange rates…')] : null,
       // a site typed in full, or a prefix (g, w, yt…): that first, Enter goes there
       site ? [h('div', { class: 'qhead' }, 'Open'), row(site, [h('span', { class: 'bmic' }, icon('link', 's')), h('span', { class: 'qname' }, site.replace(/^https?:\/\//, '')), h('span', { class: 'muted small' }, 'New tab')], true)] : null,
       bang ? [h('div', { class: 'qhead' }, eng.name), webRow()] : null,
@@ -427,7 +437,7 @@ function searchBox() {
       cal ? [h('div', { class: 'qhead' }, 'Add to the calendar'), (() => { const a = row('#', [h('span', { class: 'bmic' }, icon('event', 's')), h('span', { class: 'qname' }, cal.title || '(no title)'), h('span', { class: 'muted small' }, eventWhen(cal))]);
         a.onclick = (e) => { e.preventDefault(); inp.blur(); quickAdd(cal); }; return a; })()] : null,
       // nothing here matches: the web first, so Enter searches it
-      !bang && !site && !found && !add ? [h('div', { class: 'qhead' }, 'Web'), webRow()] : null,
+      !bang && !site && !found && !add && !tmr ? [h('div', { class: 'qhead' }, 'Web'), webRow()] : null,
       add ? null : h('div', { class: 'qhead' }, 'Search in'),
       add ? [] : S.allApps.filter((a) => appSearch(a, q)).map((a) => row(appSearch(a, q), [h('img', { class: 'qapp', src: a.icon, alt: '' }), h('span', { class: 'qname' }, appName(a.name, a.color)), h('span', { class: 'muted small' }, `“${q}”`)])),
       !bang && !site && found ? webRow() : null,
@@ -439,7 +449,7 @@ function searchBox() {
   // each app answers on its own: the box grows as they do, a slow or absent one holds up none of the others
   const askApps = () => {
     const q = inp.value.trim(), ql = q.toLowerCase();
-    if (q.length < 2 || quickPrefix(q)) return;  // "t buy milk" is something to add, not to look for
+    if (q.length < 2 || quickPrefix(q) || parseTimer(q)) return;  // "t buy milk" is something to add, not to look for
     for (const a of finders()) {
       widget(a.key, { q }).then((d) => {
         if (inp.value.trim().toLowerCase() !== ql) return;
@@ -682,6 +692,258 @@ async function quickNote(text) {
 
 // ------------------------------------------------------------------ is each app up?
 /** A dot by each app's name (green: it answers; red: it does not). */
+// ------------------------------------------------------------------ the calculator in the search box
+/* "15% of 84", "(12+8)*1.21", "2^10", "84 + 15%", "350f in c", "3 cups in ml", "5 km to mi", "120 usd in eur": the
+   answer is the first row of the box, and Enter copies it. A sum is worked out here (no eval), a currency with the
+   European Central Bank's rates of the day (api/rates, fetched by the server the first time somebody converts).
+   Not taken for a sum: a phone number or a date typed without spaces ("555-1234", "24/12"); "=24/12" is one. */
+const CALC_SYMBOLS = { '$': 'USD', '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₹': 'INR', '₩': 'KRW', 'euro': 'EUR', 'euros': 'EUR' };
+const CALC_UNITS = (() => {
+  const u = {};
+  const add = (dim, f, ...names) => names.forEach((n) => { u[n] = { dim, f }; });
+  add('len', 0.001, 'mm', 'millimeter', 'millimeters', 'millimetre', 'millimetres'); add('len', 0.01, 'cm', 'centimeter', 'centimeters', 'centimetre', 'centimetres');
+  add('len', 1, 'm', 'meter', 'meters', 'metre', 'metres'); add('len', 1000, 'km', 'kilometer', 'kilometers', 'kilometre', 'kilometres');
+  add('len', 0.0254, 'in', 'inch', 'inches', '"'); add('len', 0.3048, 'ft', 'foot', 'feet', "'"); add('len', 0.9144, 'yd', 'yard', 'yards'); add('len', 1609.344, 'mi', 'mile', 'miles');
+  add('mass', 0.001, 'mg'); add('mass', 1, 'g', 'gram', 'grams', 'gr'); add('mass', 1000, 'kg', 'kilo', 'kilos', 'kilogram', 'kilograms');
+  add('mass', 28.349523125, 'oz', 'ounce', 'ounces'); add('mass', 453.59237, 'lb', 'lbs', 'pound', 'pounds'); add('mass', 6350.29318, 'st', 'stone', 'stones');
+  add('vol', 1, 'ml', 'milliliter', 'milliliters', 'millilitre', 'millilitres'); add('vol', 10, 'cl'); add('vol', 100, 'dl');
+  add('vol', 1000, 'l', 'liter', 'liters', 'litre', 'litres'); add('vol', 4.92892, 'tsp', 'teaspoon', 'teaspoons'); add('vol', 14.7868, 'tbsp', 'tablespoon', 'tablespoons');
+  add('vol', 236.588, 'cup', 'cups'); add('vol', 29.5735, 'floz', 'fluidounce', 'fluidounces'); add('vol', 473.176, 'pt', 'pint', 'pints');
+  add('vol', 946.353, 'qt', 'quart', 'quarts'); add('vol', 3785.41, 'gal', 'gallon', 'gallons');
+  add('speed', 1 / 3.6, 'km/h', 'kmh', 'kph'); add('speed', 0.44704, 'mph'); add('speed', 1, 'm/s'); add('speed', 0.514444, 'kn', 'knot', 'knots');
+  for (const [k, n] of [['c', 'celsius'], ['f', 'fahrenheit'], ['k', 'kelvin']]) { u[k] = u[`°${k}`] = u[n] = u[`degrees${n}`] = { dim: 'temp', t: k }; }
+  return u;
+})();
+const CALC_UNIT_SHOW = { floz: 'fl oz', '"': 'in', "'": 'ft' };
+/** A number as typed: "1,200.5", "1.200,5" and "3,5" (a decimal comma) too. NaN when it is not one. */
+function calcNum(s) {
+  s = String(s).trim();
+  if (!/^[\d.,]+$/.test(s) || !/\d/.test(s)) return NaN;
+  const c = s.lastIndexOf(','), d = s.lastIndexOf('.');
+  if (c >= 0 && d >= 0) s = c > d ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  else if (c >= 0) s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, '') : (s.split(',').length === 2 ? s.replace(',', '.') : 'x');
+  return s.split('.').length > 2 ? NaN : +s;
+}
+const calcUnitKey = (s) => s.toLowerCase().replace(/\s+/g, '').replace(/\.$/, '');
+function calcUnit(s) {
+  const k = s.toLowerCase().replace(/\s+/g, '').replace(/\.$/, '');
+  return CALC_UNITS[k] || CALC_UNITS[k.replace(/^degrees?/, 'degrees')] || CALC_UNITS[k.replace(/^degrees?/, '')] || null;
+}
+function calcTemp(v, from, to) {
+  const c = from === 'c' ? v : from === 'f' ? (v - 32) * 5 / 9 : v - 273.15;
+  return to === 'c' ? c : to === 'f' ? c * 9 / 5 + 32 : c + 273.15;
+}
+/** A result for the eye ("1,234.5") and for the clipboard ("1234.5"). */
+function calcShow(v, digits = 10) {
+  const r = Number(Number(v.toPrecision(12)).toFixed(digits));
+  return { text: r.toLocaleString([], { maximumFractionDigits: digits }), copy: String(r) };
+}
+/** "350f in c": {value, text, copy, note} or null; a currency needs the rates (S.rates): {need: 'rates'} until then. */
+function calcConvert(q) {
+  const m = q.trim().match(/^([$€£¥₹₩]?)\s*(-?[\d.,]+)\s*([a-z°"'/.$€£¥₹₩][a-z°/. ]*?)?\s+(?:in|to|as|into|=|->|→)\s+([a-z°"'/.$€£¥₹₩][a-z°/. ]*?)\s*$/i);
+  if (!m) return null;
+  const v = calcNum(m[2]);
+  if (!isFinite(v)) return null;
+  const fromTxt = (m[1] || m[3] || '').trim(), toTxt = m[4].trim();
+  const cur = (s) => { const k = s.toLowerCase(); return CALC_SYMBOLS[k] || CALC_SYMBOLS[s] || (/^[a-z]{3}$/i.test(s) ? s.toUpperCase() : null); };
+  const uf = calcUnit(fromTxt), ut = calcUnit(toTxt);
+  if (uf && ut && uf.dim === ut.dim) {
+    const out = uf.dim === 'temp' ? calcTemp(v, uf.t, ut.t) : v * uf.f / ut.f;
+    const unit = (s, x) => (x.dim === 'temp' ? `°${x.t.toUpperCase()}` : CALC_UNIT_SHOW[calcUnitKey(s)] || s.toLowerCase());
+    const shown = calcShow(out, uf.dim === 'temp' ? 1 : 4);
+    return { ...shown, text: `${shown.text} ${unit(toTxt, ut)}`, note: `${calcShow(v, 4).text} ${unit(fromTxt, uf)}` };
+  }
+  const cf = cur(fromTxt), ct = cur(toTxt);
+  if (!cf || !ct || uf || ut) return null;
+  if (!S.rates) return { need: 'rates' };
+  const r = S.rates.rates || {};
+  if (!r[cf] || !r[ct]) return null;
+  const out = v / r[cf] * r[ct];
+  const fmt = (x, c) => { try { return new Intl.NumberFormat([], { style: 'currency', currency: c }).format(x); } catch { return `${calcShow(x, 2).text} ${c}`; } };
+  return { text: fmt(out, ct), copy: out.toFixed(2), note: `${fmt(v, cf)} · rate of ${S.rates.date || 'today'}` };
+}
+/** "15% of 84", "(1+2)*3", "84 + 15%", "2^10", "sqrt(2)": {text, copy, note} or null. */
+function calcSum(q) {
+  let s = q.trim();
+  const forced = s.startsWith('=');
+  if (forced) s = s.slice(1);
+  s = s.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/(\d)\s*x\s*(?=[\d(.])/gi, '$1*');
+  s = s.replace(/%\s*of\b/gi, '%*');
+  if (!/^[\d\s.,+\-*/^%()]+$|sqrt|pi/i.test(s) || !/\d/.test(s)) return null;
+  if (!/[+\-*/^%]|sqrt/i.test(s.replace(/^\s*-/, ''))) return null;  // a lone number is not a sum
+  if (!forced && !/\s/.test(s) && !/[+*^%()]|sqrt/i.test(s)) return null;  // 555-1234, 24/12, 2026-11-20: not sums
+  const toks = s.match(/\d[\d.,]*|\.\d+|sqrt|pi|[+\-*/^%()]|\S/gi) || [];
+  let i = 0;
+  const peek = () => toks[i], next = () => toks[i++];
+  // each level returns {v, pct}: pct marks "15%", which a + or - takes as a share of what comes before it
+  function expr() {
+    let a = term();
+    while (peek() === '+' || peek() === '-') {
+      const op = next(), b = term();
+      const bv = b.pct ? a.v * b.v : b.v;
+      a = { v: op === '+' ? a.v + bv : a.v - bv };
+    }
+    return a;
+  }
+  function term() {
+    let a = power();
+    while (peek() === '*' || peek() === '/') {
+      const op = next(), b = power();
+      a = { v: op === '*' ? a.v * b.v : a.v / b.v };
+    }
+    return a;
+  }
+  function power() {
+    const a = unary();
+    if (peek() === '^') { next(); const b = power(); return { v: Math.pow(a.v, b.v) }; }
+    return a;
+  }
+  function unary() {
+    if (peek() === '-') { next(); const a = unary(); return { v: -a.v, pct: a.pct }; }
+    if (peek() === '+') { next(); return unary(); }
+    let a = primary();
+    while (peek() === '%') { next(); a = { v: a.v / 100, pct: true }; }
+    return a;
+  }
+  function primary() {
+    const t = next();
+    if (t === undefined) throw new Error('end');
+    if (t === '(') { const a = expr(); if (next() !== ')') throw new Error(')'); return { v: a.v }; }
+    if (/^sqrt$/i.test(t)) { const a = primary(); return { v: Math.sqrt(a.v) }; }
+    if (/^pi$/i.test(t)) return { v: Math.PI };
+    const v = calcNum(t);
+    if (!isFinite(v)) throw new Error(t);
+    return { v };
+  }
+  try {
+    const r = expr();
+    if (i !== toks.length || !isFinite(r.v)) return null;
+    return calcShow(r.v);
+  } catch { return null; }
+}
+/** What the box shows for this text: a conversion or a sum, else null. */
+function calcOf(q) {
+  if (q.length > 120) return null;
+  return calcConvert(q) || calcSum(q);
+}
+async function calcRates(again) {
+  if (S.rates || S.ratesAsked) return;
+  S.ratesAsked = true;
+  try { S.rates = await api('api/rates'); again(); } catch (e) { S.ratesAsked = false; toast(e.message || 'No exchange rates'); }
+}
+async function calcCopy(c) {
+  try { await navigator.clipboard.writeText(c.copy); toast(`Copied ${c.copy}`); } catch { toast(c.copy); }
+}
+
+// ------------------------------------------------------------------ kitchen timers
+/* "timer 10m pasta", "pasta timer 1h30", "egg timer 6 min", "timer 90s": a timer for the whole family, kept by the
+   server (app/timers.py). Every start page and the wall display show the running ones counting down (anyone can add
+   a minute or dismiss one); when one ends, the page that started it and the wall display ring, and whoever started
+   it gets a notification on their phone. The page asks the server every 15 seconds, so a timer started on the phone
+   shows on the kitchen tablet. */
+function parseTimer(q) {
+  const words = q.trim().split(/\s+/);
+  if (!words.some((w) => /^timer$/i.test(w))) return null;
+  let secs = 0, found = false;
+  const label = [];
+  const UNIT = { h: 3600, hr: 3600, hrs: 3600, hour: 3600, hours: 3600, m: 60, min: 60, mins: 60, minute: 60, minutes: 60, s: 1, sec: 1, secs: 1, second: 1, seconds: 1 };
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i].toLowerCase(), nx = (words[i + 1] || '').toLowerCase();
+    let m;
+    if (/^(timer|for|a|an|set|start|of)$/.test(w)) continue;
+    if ((m = w.match(/^(\d+)h(?:(\d+)m?)?$/))) { secs += +m[1] * 3600 + +(m[2] || 0) * 60; found = true; continue; }
+    if ((m = w.match(/^(\d+)m(?:(\d+)s?)?$/))) { secs += +m[1] * 60 + +(m[2] || 0); found = true; continue; }
+    if ((m = w.match(/^(\d+(?:[.,]\d+)?)(h|hrs?|hours?|m|mins?|minutes?|s|secs?|seconds?)$/))) { secs += +m[1].replace(',', '.') * UNIT[m[2]]; found = true; continue; }
+    if ((m = w.match(/^(\d+):(\d{2})(?::(\d{2}))?$/))) { secs += m[3] ? +m[1] * 3600 + +m[2] * 60 + +m[3] : +m[1] * 60 + +m[2]; found = true; continue; }
+    if ((m = w.match(/^(\d+(?:[.,]\d+)?)$/)) && UNIT[nx]) { secs += +m[1].replace(',', '.') * UNIT[nx]; i++; found = true; continue; }
+    if (w === 'and' && found) continue;
+    label.push(words[i]);
+  }
+  secs = Math.round(secs);
+  if (!found || secs < 1 || secs > 86400) return null;
+  const text = label.join(' ').trim();
+  return { seconds: secs, label: text ? text[0].toUpperCase() + text.slice(1) : 'Timer' };
+}
+function timerLength(s) {
+  const h_ = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return [h_ ? `${h_} h` : '', m ? `${m} min` : '', sec ? `${sec} s` : ''].filter(Boolean).join(' ');
+}
+const T = { items: [], skew: 0, els: new Set(), tick: null, poll: null, rang: new Set(), audio: null, ringing: null };
+const timerMine = () => { try { return new Set(JSON.parse(sessionStorage.getItem('iostart.timers') || '[]')); } catch { return new Set(); } };
+function timerKeep(id) { const s = timerMine(); s.add(id); try { sessionStorage.setItem('iostart.timers', JSON.stringify([...s].slice(-30))); } catch { /* private mode: it still rings while the page is open */ } }
+const timerLeft = (t) => Math.ceil((t.endsAt * 1000 - (Date.now() + T.skew)) / 1000);
+const clockOf = (s) => { const a = Math.max(0, s), h_ = Math.floor(a / 3600), m = Math.floor((a % 3600) / 60), sec = a % 60; return h_ ? `${h_}:${pad2(m)}:${pad2(sec)}` : `${m}:${pad2(sec)}`; };
+async function timersLoad() {
+  try { const d = await api('api/timers'); T.skew = d.now * 1000 - Date.now(); T.items = d.items || []; } catch { /* the next round */ }
+  timersPaint();
+}
+async function timerStart(t) {
+  timerSound(true);  // a tap or Enter: the moment a browser lets the page make a sound later
+  try {
+    const got = await api('api/timers', { method: 'POST', json: { seconds: t.seconds, label: t.label } });
+    timerKeep(got.id); toast(`Timer: ${got.label}, ${timerLength(got.seconds)}`);
+    $('.search .q') && ($('.search .q').value = '');
+    await timersLoad();
+  } catch (e) { fail(e); }
+}
+async function timerAct(t, what) {
+  timerSound(true);
+  try {
+    if (what === 'more') await api(`api/timers/${t.id}/more`, { method: 'POST', json: { seconds: 60 } });
+    else await api(`api/timers/${t.id}`, { method: 'DELETE' });
+  } catch (e) { fail(e); }
+  T.rang.delete(t.id); await timersLoad();
+}
+/** The page's sound: made (and let out) on a tap, a short beep three times for a timer that ended. */
+function timerSound(prime) {
+  try {
+    T.audio = T.audio || new (window.AudioContext || window.webkitAudioContext)();
+    if (T.audio.state === 'suspended') T.audio.resume();
+    if (prime) return;
+    const a = T.audio, t0 = a.currentTime;
+    for (let k = 0; k < 3; k++) {
+      const o = a.createOscillator(), g = a.createGain();
+      o.frequency.value = 880; o.connect(g); g.connect(a.destination);
+      g.gain.setValueAtTime(0.0001, t0 + k * 0.35); g.gain.exponentialRampToValueAtTime(0.4, t0 + k * 0.35 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + k * 0.35 + 0.25);
+      o.start(t0 + k * 0.35); o.stop(t0 + k * 0.35 + 0.3);
+    }
+  } catch { /* no sound here: the chip still turns red */ }
+}
+function timersPaint() {
+  for (const el of [...T.els]) if (!el.isConnected) T.els.delete(el);
+  const mine = timerMine(), me = S.user && S.user.id;
+  const wall = [...T.els].some((el) => el.dataset.wall);
+  let ring = false;
+  for (const el of T.els) {
+    el.replaceChildren(...T.items.map((t) => {
+      const left = timerLeft(t), done = left <= 0;
+      return h('div', { class: `timer${done ? ' done' : ''}`, title: `${t.label}: ${timerLength(t.seconds)}${t.by ? `, started by ${t.by}` : ''}` },
+        icon('timer', 's'), h('span', { class: 'tlabel' }, t.label),
+        h('span', { class: 'tleft' }, done ? 'Done' : clockOf(left)),
+        t.byId !== me && t.by ? h('span', { class: 'tby muted small' }, t.by) : null,
+        h('button', { class: 'tbtn', title: done ? 'One more minute' : 'A minute more', onclick: () => timerAct(t, 'more') }, '+1'),
+        h('button', { class: 'tbtn', title: done ? 'Dismiss' : 'Stop the timer', 'aria-label': 'Dismiss', onclick: () => timerAct(t, 'dismiss') }, icon('close', 's')));
+    }));
+    el.hidden = !T.items.length;
+  }
+  for (const t of T.items) {
+    if (timerLeft(t) > 0) { T.rang.delete(t.id); continue; }
+    // a timer that ends rings where it was started and on the wall display, for a minute or until it is dismissed
+    if ((mine.has(t.id) || wall) && timerLeft(t) > -60) ring = true;
+  }
+  if (ring && !T.ringing) { timerSound(); T.ringing = setInterval(() => { if (!T.items.some((t) => timerLeft(t) <= 0 && timerLeft(t) > -60 && (timerMine().has(t.id) || [...T.els].some((el) => el.dataset.wall)))) { clearInterval(T.ringing); T.ringing = null; } else timerSound(); }, 2500); }
+  if (!ring && T.ringing) { clearInterval(T.ringing); T.ringing = null; }
+  clearInterval(T.tick); T.tick = T.items.length && T.els.size ? setInterval(timersPaint, 1000) : null;
+}
+/** A place that shows the family's timers (the home page under the search box, the wall display). */
+function timersBlock(wall = false) {
+  const el = h('div', { class: wall ? 'walltimers' : 'timers', hidden: true, ...(wall ? { 'data-wall': '1' } : {}) });
+  T.els.add(el);
+  if (!T.poll) T.poll = setInterval(() => { for (const x of [...T.els]) if (!x.isConnected) T.els.delete(x); if (!T.els.size) { clearInterval(T.poll); T.poll = null; } else if (!document.hidden) timersLoad(); }, 15000);
+  timersLoad();
+  return el;
+}
+
 async function drawAppStatus(page) {
   let d;
   try { d = await api('api/apps/status'); } catch { return; }
@@ -1499,7 +1761,7 @@ async function showWall(page) {
   page.classList.toggle('black', bg === 'black');
   page.append(sky, photos, h('div', { class: 'wallshade' }),
     h('div', { class: 'walltop' }, h('div', null, clock, date), wx),
-    h('div', { class: 'wallbottom' }, agenda, h('div', { class: 'wallright' }, sensors, hours, caption)), bar);
+    h('div', { class: 'wallbottom' }, agenda, h('div', { class: 'wallright' }, timersBlock(true), sensors, hours, caption)), bar);
   // the controls show on a touch or a move of the mouse, and fade after a few seconds
   let hideT;
   const wake = () => { bar.classList.add('on'); clearTimeout(hideT); hideT = setTimeout(() => bar.classList.remove('on'), 4000); };
