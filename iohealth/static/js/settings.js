@@ -113,9 +113,10 @@ export async function setGoals() {
   return [
     card('Goals', h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Shown on the dashboard cards and in Metrics, with streaks.'),
       goalsEl, h('button', { onclick: addGoal, style: { marginTop: '6px' } }, '+ Add a goal')),
-    card('Alerts on the dashboard', h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Empty: the default in grey. 0 turns an alert off.'),
+    card('Alerts on the dashboard', h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Empty: the default in grey. 0 turns an alert off. "Your usual" is the last 7 days against the 4 weeks before; those three also come as a notification on the day they begin (Account › Notifications, Outside your usual).'),
       alertIn('tir', 'Glucose time in range under (last 7 days)', '%'), alertIn('lows', 'Glucose lows in the last 7 days, at least', 'lows'),
-      alertIn('rhr', 'Resting heart rate above your usual by', 'bpm (7 days against the 4 weeks before)'), alertIn('hrv', 'Heart rate variability below your usual by', '%'),
+      alertIn('rhr', 'Resting heart rate above your usual by', 'bpm'), alertIn('hrv', 'Heart rate variability below your usual by', '%'),
+      alertIn('sleep', 'Sleep below your usual by', 'minutes a night'),
       alertIn('sync', 'No sync from the iPhone for', 'hours'))];
 }
 

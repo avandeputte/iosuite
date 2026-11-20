@@ -8,6 +8,10 @@ the activity rings): a goal is kept in the units the web app shows, which the se
 And on Monday, at the person's morning time (Settings › Account › Notifications), the weekly summary: last week's
 steps, sleep and workouts next to the week before (weekly(), run every minute by the app).
 
+And what left the person's usual (usual.py: resting heart rate up, heart rate variability or sleep down, the last
+seven days against the four weeks before), once, on the day it begins: at the morning time, and after every sync from
+then to the end of the day, so last night's sleep counts as soon as the phone sent it.
+
 "Today" is the person's own: the zone their phone sends when a sync starts (timeZone), or the web app's, as last seen
 (webapi.remember_zone); the server's TZ only until either has been seen.
 """
@@ -17,7 +21,7 @@ from datetime import datetime, timedelta
 
 from iosuite_shared import push
 
-from app import db, webapi
+from app import db, usual, webapi
 
 log = logging.getLogger("app.notify")
 APP = "iohealth"
@@ -75,10 +79,46 @@ def after_sync(uid: int, now: datetime = None) -> int:
 
 
 def after_sync_quietly(uid: int) -> None:
-    try:
-        after_sync(uid)
-    except Exception:  # noqa: BLE001 - a goal alert never fails a sync
-        log.exception("goal notifications after the sync of account %s", uid)
+    for what in (after_sync, outside_usual):
+        try:
+            what(uid)
+        except Exception:  # noqa: BLE001 - a notification never fails a sync
+            log.exception("%s after the sync of account %s", what.__name__, uid)
+
+
+# ------------------------------------------------------------------ outside your usual
+
+def outside_usual(uid: int, now: datetime = None) -> int:
+    """What left this person's usual today (usual.findings, the ones that begin today), once each, from their morning
+    time to the end of the day."""
+    if uid not in {u["id"] for u in push.recipients("health_usual")}:
+        return 0
+    loc = webapi.zone_of(uid)
+    local = (now or datetime.now(loc)).astimezone(loc)
+    if not push.is_morning(uid, local.replace(tzinfo=None), hours=24):  # not in the night before it
+        return 0
+    sent = 0
+    for f in usual.findings(uid, loc, local):
+        if f["new"]:
+            sent += push.notify(uid, "health_usual", f["title"], f["body"], url=push.link(APP, f["href"]),
+                                once=f"health:usual:{f['key']}:{local.date()}", tag=f"usual-{f['key']}")
+    return sent
+
+
+def usual_morning(now: datetime = None) -> int:
+    """At each person's morning time: what left their usual, from what the phone has sent so far (run every minute by
+    the app; a sync later in the day looks again)."""
+    sent = 0
+    for u in push.recipients("health_usual"):
+        uid = u["id"]
+        loc = webapi.zone_of(uid)
+        local = (now or datetime.now(loc)).astimezone(loc)
+        key = f"health:usual:morning:{local.date()}"
+        if not push.is_morning(uid, local.replace(tzinfo=None)) or push.was_sent(uid, key):
+            continue
+        push.claim(uid, key)  # looked at this morning: not again every minute
+        sent += outside_usual(uid, local)
+    return sent
 
 
 # ------------------------------------------------------------------ the weekly summary

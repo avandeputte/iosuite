@@ -174,7 +174,6 @@ export function goalNotes(t, goal, info, vals, latest, unit, el, addAlert) {
 
 // dashboardAlerts: things worth a look, from the alert settings.
 export function dashboardAlerts(types, addAlert) {
-  const avg = a => { const x = a.filter(v => v != null); return x.length ? x.reduce((p, q) => p + q, 0) / x.length : null; };
   const syncH = alertSetting('sync');
   if (syncH > 0) api('status', {}, { cache: false }).then(st => {
     const t = st.lastSync?.finished || st.lastSync?.started;
@@ -190,19 +189,8 @@ export function dashboardAlerts(types, addAlert) {
       else if (want > 0) addAlert('good', `Glucose time in range ${fmtNum(tir, 0)}% over the last 7 days.`, '#/glucose?range=7');
     }).catch(() => {});
   }
-  const usual = (t, f) => api('series', { type: t, from: daysAgo(34), to: today(), bucket: 'day' }).then(sr => {
-    const byDay = new Map(sr.points.map(p => [isoDate(new Date(p.t * 1000)), p.v]));
-    const vals = []; for (let i = 34; i >= 0; i--) vals.push(byDay.get(daysAgo(i)) ?? null);
-    const now = avg(vals.slice(-7)), base = avg(vals.slice(0, -7));
-    if (now != null && base != null && vals.slice(-7).filter(v => v != null).length >= 3) f(now, base, sr.unit);
-  }).catch(() => {});
-  const rhr = alertSetting('rhr'), hrv = alertSetting('hrv');
-  if (rhr > 0 && types.resting_heart_rate) usual('resting_heart_rate', (now, base) => {
-    if (now - base >= rhr) addAlert('warn', `Resting heart rate is up: ${fmtNum(now, 0)} bpm this week against your usual ${fmtNum(base, 0)}. Illness, stress, alcohol or too little recovery can do that.`, '#/metrics?types=resting_heart_rate,heart_rate_variability_sdnn&range=90d');
-  });
-  if (hrv > 0 && types.heart_rate_variability_sdnn) usual('heart_rate_variability_sdnn', (now, base) => {
-    if (base > 0 && (base - now) / base * 100 >= hrv) addAlert('warn', `Heart rate variability is down: ${fmtNum(now, 0)} ms this week against your usual ${fmtNum(base, 0)} ms (−${fmtNum((base - now) / base * 100, 0)}%).`, '#/metrics?types=heart_rate_variability_sdnn,resting_heart_rate&range=90d');
-  });
+  // outside your usual (resting heart rate, heart rate variability, sleep): worked out by the server, which also sends it as a notification
+  api('usual', {}, { cache: false }).then(found => { for (const f of found) addAlert('warn', `${f.title}: ${f.body}`, f.href); }).catch(() => {});
 }
 
 export function mondayOf(t) { const d = new Date(t * 1000); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d; }

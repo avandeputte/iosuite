@@ -250,7 +250,7 @@ $('#print-btn')?.addEventListener('click', printPage);
 // settings.goals: [{type, dir: 'min' (at least) | 'max' (at most), value}] in the units the app shows.
 export const goalFor = t => (settings.goals || []).find(g => g.type === t && g.value !== '' && isFinite(+g.value));
 export const goalMet = (g, v) => v != null && (g.dir === 'max' ? v <= +g.value : v >= +g.value);
-export const ALERT_DEFAULTS = { tir: 70, lows: 1, rhr: 5, hrv: 15, sync: 24 };
+export const ALERT_DEFAULTS = { tir: 70, lows: 1, rhr: 5, hrv: 15, sleep: 45, sync: 24 }; // rhr, hrv and sleep: as app/usual.py DEFAULTS
 export const alertSetting = k => { const v = settings.alerts?.[k]; return v === '' || v == null || !isFinite(+v) ? ALERT_DEFAULTS[k] : +v; };
 
 // Sections and metrics can be switched off in Settings; switched-off metrics are left out of every list and chart.

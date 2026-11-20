@@ -321,6 +321,7 @@ its pages.
 | `events` | ioCalendar | an event's reminder goes off (an all-day event's counts from the start of its day) | the same rule, with calendars |
 | `birthdays` | ioContact | at the person's morning time: today's birthdays ("Remind me" on) and anniversaries | whoever sees the address book |
 | `health` | ioHealth | a sync brings today's value up to one of the account's daily "at least" goals (steps, minutes, kcal, hours, the rings) | the account itself |
+| `health_usual` | ioHealth | the account's resting heart rate, heart rate variability or sleep leaves its usual (the last 7 days against the 4 weeks before), on the day it begins | the account itself |
 | `backups` | ioBackup | a backup or restore fails | suite admins |
 | `updates` | every app's daily check | a newer version of the suite is on GitHub | suite admins |
 
