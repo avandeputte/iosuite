@@ -16,6 +16,13 @@ database); nobody sees or changes another account's notes. Who is asking is set 
 app/main.py from the signed-in user, or the MCP server's account); every function here works on that account's
 records only. Records made while the install was open, before any account existed, have user_id 0.
 
+The Family space is the exception: a note with family = 1 is everyone's who has a role here. Viewers and members read
+it, editors and admins change it, add to it and delete from it (current_family, set per request like the owner). A
+family note is in no folder (folders are each account's own); tags group them. An editor makes a note of their own a
+family note, or a family note their own again: it then leaves the others, whose devices are told so in their next
+sync, as a deletion (unshared_rev). A change a member's device sends for a family note is answered as an older edit
+is, with the server's copy, so the device takes that.
+
 Text read from an image (OCR) is done on the device where it can be (Apple's Vision on the Mac and the iPhone)
 and sent along as ocr_text; the server reads it itself (RapidOCR, app/ocr.py) only for notes made in the web app.
 
@@ -37,7 +44,7 @@ from iosuite_shared.errors import Invalid
 SOURCES = ("clipboard", "service", "screenshot", "manual", "web", "photo", "import", "share", "mcp")
 COLORS = ("red", "orange", "yellow", "green", "mint", "teal", "blue", "indigo", "purple", "pink", "brown", "gray")
 NOTE_COLS = ("uuid, title, body, ocr_text, source, source_app, created_at, updated_at, tags, pinned, folder_id, "
-             "has_image, image_sha, deleted, rev, changed_by")
+             "has_image, image_sha, deleted, rev, changed_by, family")
 SORTS = {"updated": "updated_at DESC", "created": "created_at DESC", "oldest": "created_at ASC", "title": "lower(title) ASC, updated_at DESC"}
 MAX_TEXT = 4 << 20  # 4 MB of text per field is more than any note needs
 MAX_TAG, MAX_TAGS = 100, 150  # a tag's length and a note's tags: 150 of 100 characters still fit the tags column (TEXT)
@@ -58,15 +65,46 @@ def owner() -> int:
     return current_owner.get()
 
 
+NO_FAMILY, FAMILY_READ, FAMILY_WRITE = 0, 1, 2  # what the one asking may do with the Family space's notes
+current_family = contextvars.ContextVar("ionote_family", default=FAMILY_WRITE)  # as the owner's default: an open install
+
+
+def family_read() -> bool:
+    return owner() != NOBODY and current_family.get() >= FAMILY_READ
+
+
+def family_write() -> bool:
+    return owner() != NOBODY and current_family.get() >= FAMILY_WRITE
+
+
+def _seen(alias: str = "") -> tuple:
+    """(sql, params): the notes the one asking sees, their own and the family's."""
+    if family_read():
+        return f"({alias}user_id = %s OR {alias}family = 1)", [owner()]
+    return f"{alias}user_id = %s", [owner()]
+
+
+def _changeable() -> tuple:
+    """(sql, params): the notes the one asking may change, their own and (an editor) the family's."""
+    return ("(user_id = %s OR family = 1)" if family_write() else "(user_id = %s AND family = 0)"), [owner()]
+
+
 class NotFound(LookupError):
     """No such record for this account (it may be another account's: that is never said)."""
 
 
 class Stale(Exception):
     """The change is older than what the server has: the caller answers with the server's copy."""
+    detail = "A newer version is on the server"
 
     def __init__(self, current):
         self.current = current
+
+
+class ReadOnly(Stale):
+    """A change to a family note by someone who only reads the Family space: answered like an older edit, with the
+    server's copy, which a device then takes."""
+    detail = "Family notes are changed by editors and admins"
 
 
 def check_uuid(u: str) -> str:
@@ -106,7 +144,7 @@ def note_dict(r) -> dict:
             "sourceApp": r["source_app"], "createdAt": r["created_at"], "updatedAt": r["updated_at"],
             "tags": json.loads(r["tags"] or "[]"), "pinned": bool(r["pinned"]), "folderID": r["folder_id"],
             "hasImage": bool(r["has_image"]), "imageSHA": r["image_sha"], "deleted": bool(r["deleted"]), "rev": r["rev"],
-            "changedBy": r["changed_by"]}
+            "changedBy": r["changed_by"], "family": bool(r["family"])}
 
 
 def folder_dict(r) -> dict:
@@ -147,11 +185,19 @@ def get_note(uid: str, con=None):
     own = con is None
     con = con or db.connect()
     try:
-        r = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE uuid = %s AND user_id = %s", (check_uuid(uid), owner())).fetchone()
+        seen, p = _seen()
+        r = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE uuid = %s AND {seen}", [check_uuid(uid)] + p).fetchone()
         return with_attachments(con, [note_dict(r)])[0] if r else None
     finally:
         if own:
             con.close()
+
+
+def need_write(n: dict) -> dict:
+    """The note, when the one asking may change it (their own, or the family's for an editor); ReadOnly otherwise."""
+    if n["family"] and not family_write():
+        raise ReadOnly(n)
+    return n
 
 
 ATTACHMENT_COLS = "uuid, note_uuid, name, mime, size_bytes, sha, width, height, created_at"
@@ -172,8 +218,8 @@ def with_attachments(con, out: list) -> list:
     ids = list(by)
     for i in range(0, len(ids), 500):
         part = ids[i:i + 500]
-        rows = con.execute(f"SELECT {ATTACHMENT_COLS} FROM nts_attachments WHERE note_uuid IN ({','.join(['%s'] * len(part))}) AND user_id = %s "
-                           "ORDER BY created_at, uuid", part + [owner()]).fetchall()
+        rows = con.execute(f"SELECT {ATTACHMENT_COLS} FROM nts_attachments WHERE note_uuid IN ({','.join(['%s'] * len(part))}) "
+                           "ORDER BY created_at, uuid", part).fetchall()
         for r in rows:
             by[r["note_uuid"]]["attachments"].append(attachment_dict(r))
     return out
@@ -212,7 +258,7 @@ def _search_clause(q: str):
             like = "%" + w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
             aclauses.append("(lower(a.name) LIKE %s ESCAPE '\\\\' OR lower(a.text) LIKE %s ESCAPE '\\\\')")
             aparams += [like, like]
-    sql = ("((" + " AND ".join(clauses) + ") OR EXISTS (SELECT 1 FROM nts_attachments a WHERE a.note_uuid = nts_notes.uuid AND a.user_id = nts_notes.user_id AND "
+    sql = ("((" + " AND ".join(clauses) + ") OR EXISTS (SELECT 1 FROM nts_attachments a WHERE a.note_uuid = nts_notes.uuid AND "
            + " AND ".join(aclauses) + "))")
     return sql, params + aparams
 
@@ -230,18 +276,23 @@ def _tag_clause(name: str):
 
 def list_notes(q: str = "", folder: str = None, tag: str = None, pinned: bool = None, image: bool = None,
                sort: str = "updated", limit: int = 200, offset: int = 0, source: str = None,
-               created_from: float = None, created_before: float = None) -> dict:
-    """A page of notes, pinned first, then by sort. folder: an id, or "none" for notes in no folder;
-    created_from / created_before: a range of creation times (seconds; the end left out)."""
-    where, params = ["user_id = %s", "deleted = 0"], [owner()]
+               created_from: float = None, created_before: float = None, family: bool = None) -> dict:
+    """A page of notes, pinned first, then by sort. folder: an id, or "none" for one's own notes in no folder;
+    created_from / created_before: a range of creation times (seconds; the end left out); family: the Family
+    space's notes only (True), or one's own only (False)."""
+    seen, params = _seen()
+    where = [seen, "deleted = 0"]
     with db.connect() as con:
+        if family is not None:
+            where.append("family = %s")
+            params.append(1 if family else 0)
         if q and q.strip():
             s, p = _search_clause(q)
             if s:
                 where.append(s)
                 params += p
         if folder == "none":
-            where.append("folder_id IS NULL")
+            where.append("folder_id IS NULL AND family = 0")
         elif folder:
             where.append("folder_id = %s")
             params.append(check_uuid(folder))
@@ -283,9 +334,14 @@ def save_note(uid: str, data: dict, user: str, force: bool = False) -> dict:
     now = time.time()
     with db.tx() as con:
         cur = con.execute(f"SELECT {NOTE_COLS}, user_id FROM nts_notes WHERE uuid = %s", (uid,)).fetchone()
-        if cur and cur["user_id"] != owner():
+        if cur and cur["user_id"] != owner() and not (cur["family"] and family_read()):
             raise NotFound("No such note")  # another account's id: refused without saying so
         old = note_dict(cur) if cur else None
+        if old:
+            need_write(old)
+        shared = bool(data["family"]) if "family" in data else bool(old and old["family"])
+        if shared and not family_write():
+            raise Invalid("Notes are added to the Family space by editors and admins")
         ts = edit_time(data.get("updatedAt"), now)
         if old and not force:
             base_rev = data.get("baseRev")
@@ -324,17 +380,27 @@ def save_note(uid: str, data: dict, user: str, force: bool = False) -> dict:
                     n["folderID"] = None
         if "deleted" in data:
             n["deleted"] = bool(data["deleted"])
+        if shared:
+            n["folderID"] = None  # folders are each account's own
         rev = db.next_rev(con)
         # a purged tombstone stays purged unless the edit brings the note back
         dval = (PURGED if cur and cur["deleted"] == PURGED else 1) if n["deleted"] else 0
         vals = (n["title"], n["body"], n["ocrText"], n["source"], n["sourceApp"], n["createdAt"], ts, json.dumps(n["tags"], ensure_ascii=False),
-                1 if n["pinned"] else 0, n["folderID"], 1 if n["hasImage"] else 0, n["imageSHA"], dval, rev, user)
+                1 if n["pinned"] else 0, n["folderID"], 1 if n["hasImage"] else 0, n["imageSHA"], dval, rev, user, 1 if shared else 0)
+        unshared = bool(old and old["family"] and not shared)  # someone's own again, theirs who did it: the others' devices are told (changes)
         if old:
             con.execute("UPDATE nts_notes SET title=%s, body=%s, ocr_text=%s, source=%s, source_app=%s, created_at=%s, updated_at=%s, tags=%s, pinned=%s, "
-                        "folder_id=%s, has_image=%s, image_sha=%s, deleted=%s, rev=%s, changed_by=%s WHERE uuid=%s", vals + (uid,))
+                        "folder_id=%s, has_image=%s, image_sha=%s, deleted=%s, rev=%s, changed_by=%s, family=%s WHERE uuid=%s", vals + (uid,))
+            if unshared:
+                con.execute("UPDATE nts_notes SET user_id = %s, unshared_rev = %s WHERE uuid = %s", (owner(), rev, uid))
         else:
-            con.execute(f"INSERT INTO nts_notes ({NOTE_COLS}, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", (uid,) + vals + (owner(),))
-        action = "delete" if n["deleted"] and not (old and old["deleted"]) else ("create" if not old or old["deleted"] else "edit")
+            con.execute(f"INSERT INTO nts_notes ({NOTE_COLS}, user_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", (uid,) + vals + (owner(),))
+        if n["deleted"] and not (old and old["deleted"]):
+            action = "delete"
+        elif not old or old["deleted"]:
+            action = "create"
+        else:
+            action = "share" if shared and not old["family"] else "unshare" if unshared else "edit"
         log_change(con, user, action, "note", uid, display_title(n))
         return get_note(uid, con)
 
@@ -345,7 +411,8 @@ def delete_note(uid: str, user: str, ts: float = None) -> dict:
 
 def restore_note(uid: str, user: str) -> dict:
     with db.connect() as con:
-        r = con.execute("SELECT deleted FROM nts_notes WHERE uuid = %s AND user_id = %s", (check_uuid(uid), owner())).fetchone()
+        seen, p = _seen()
+        r = con.execute(f"SELECT deleted FROM nts_notes WHERE uuid = %s AND {seen}", [check_uuid(uid)] + p).fetchone()
     if not r or r[0] == PURGED:
         raise NotFound("No such note (notes are kept in the trash for 30 days)")
     return save_note(uid, {"deleted": False, "updatedAt": time.time()}, user, force=True)
@@ -353,10 +420,10 @@ def restore_note(uid: str, user: str) -> dict:
 
 def trash(limit: int = 200) -> list:
     """The notes in the trash, newest delete first (their text, picture and attachments are kept until the note is
-    purged, so a restored note comes back whole)."""
+    purged, so a restored note comes back whole): one's own and, for an editor, the family's."""
     with db.connect() as con:
-        rows = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE user_id = %s AND deleted = 1 ORDER BY updated_at DESC LIMIT %s",
-                           (owner(), limit)).fetchall()
+        mine, p = _changeable()
+        rows = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE {mine} AND deleted = 1 ORDER BY updated_at DESC LIMIT %s", p + [limit]).fetchall()
         return with_attachments(con, [note_dict(r) for r in rows])
 
 
@@ -373,14 +440,16 @@ def _purge_rows(con, uids: list) -> int:
 
 
 def empty_trash(user: str, uid: str = None) -> int:
-    """Delete forever: every note in this account's trash, or the one with this id. Returns how many went."""
+    """Delete forever: every note in this account's trash (an editor's holds the family's too), or the one with this
+    id. Returns how many went."""
     with db.tx() as con:
+        mine, p = _changeable()
         if uid:
-            rows = con.execute("SELECT uuid, title, body FROM nts_notes WHERE uuid = %s AND user_id = %s AND deleted = 1", (check_uuid(uid), owner())).fetchall()
+            rows = con.execute(f"SELECT uuid, title, body FROM nts_notes WHERE uuid = %s AND {mine} AND deleted = 1", [check_uuid(uid)] + p).fetchall()
             if not rows:
                 raise NotFound("That note is not in the trash")
         else:
-            rows = con.execute("SELECT uuid, title, body FROM nts_notes WHERE user_id = %s AND deleted = 1", (owner(),)).fetchall()
+            rows = con.execute(f"SELECT uuid, title, body FROM nts_notes WHERE {mine} AND deleted = 1", p).fetchall()
         n = _purge_rows(con, [r["uuid"] for r in rows])
         if n:
             log_change(con, user, "purge", "note", uid or "", display_title({"title": rows[0]["title"], "body": rows[0]["body"]}) if uid else f"emptied the trash ({n} notes)")
@@ -481,7 +550,8 @@ def list_tags(rev: int = None) -> list:
 def _count_tags() -> list:
     counts, names = {}, {}
     with db.connect() as con:
-        for (tags,) in con.execute("SELECT tags FROM nts_notes WHERE user_id = %s AND deleted = 0 AND tags != '[]'", (owner(),)).fetchall():
+        seen, p = _seen()
+        for (tags,) in con.execute(f"SELECT tags FROM nts_notes WHERE {seen} AND deleted = 0 AND tags != '[]'", p).fetchall():
             for t in json.loads(tags or "[]"):
                 k = tag_key(t)
                 counts[k] = counts.get(k, 0) + 1
@@ -518,7 +588,8 @@ def set_tag_color(name: str, color, user: str, ts: float = None, force: bool = F
 
 
 def rename_tag(old: str, new: str, user: str) -> int:
-    """Rename a tag on every note (merging into an existing one of that name); returns how many notes changed."""
+    """Rename a tag on every note one may change (merging into an existing one of that name); returns how many notes
+    changed."""
     ok, new = tag_key(old), clean_tags([new])
     if not new:
         raise Invalid("The new name is empty")
@@ -526,7 +597,8 @@ def rename_tag(old: str, new: str, user: str) -> int:
     now, changed = time.time(), 0
     with db.tx() as con:
         c, p = _tag_clause(ok)
-        for r in con.execute(f"SELECT uuid, tags FROM nts_notes WHERE user_id = %s AND deleted = 0 AND {c}", (owner(), p)).fetchall():
+        mine, mp = _changeable()
+        for r in con.execute(f"SELECT uuid, tags FROM nts_notes WHERE {mine} AND deleted = 0 AND {c}", mp + [p]).fetchall():
             tags = json.loads(r["tags"] or "[]")
             if not any(tag_key(t) == ok for t in tags):
                 continue
@@ -553,11 +625,12 @@ def _drop_tag_color(con, k: str, now: float):
 
 
 def remove_tag(name: str, user: str) -> int:
-    """Take a tag off every note."""
+    """Take a tag off every note one may change."""
     k, now, changed = tag_key(name), time.time(), 0
     with db.tx() as con:
         c, p = _tag_clause(k)
-        for r in con.execute(f"SELECT uuid, tags FROM nts_notes WHERE user_id = %s AND deleted = 0 AND {c}", (owner(), p)).fetchall():
+        mine, mp = _changeable()
+        for r in con.execute(f"SELECT uuid, tags FROM nts_notes WHERE {mine} AND deleted = 0 AND {c}", mp + [p]).fetchall():
             tags = json.loads(r["tags"] or "[]")
             keep = [t for t in tags if tag_key(t) != k]
             if len(keep) == len(tags):
@@ -576,20 +649,28 @@ def meta() -> dict:
     ensure_standard_templates()
     with db.connect() as con:
         o = owner()
-        total, pinned, images = con.execute("SELECT count(*), coalesce(sum(pinned), 0), coalesce(sum(has_image), 0) FROM nts_notes WHERE user_id = %s AND deleted = 0", (o,)).fetchone()
-        nofolder = con.execute("SELECT count(*) FROM nts_notes WHERE user_id = %s AND deleted = 0 AND folder_id IS NULL", (o,)).fetchone()[0]
-        trashed = con.execute("SELECT count(*) FROM nts_notes WHERE user_id = %s AND deleted = 1", (o,)).fetchone()[0]
+        seen, p = _seen()
+        total, pinned, images, shared = con.execute("SELECT count(*), coalesce(sum(pinned), 0), coalesce(sum(has_image), 0), coalesce(sum(family), 0) "
+                                                    f"FROM nts_notes WHERE {seen} AND deleted = 0", p).fetchone()
+        nofolder = con.execute("SELECT count(*) FROM nts_notes WHERE user_id = %s AND deleted = 0 AND folder_id IS NULL AND family = 0", (o,)).fetchone()[0]
+        mine, mp = _changeable()
+        trashed = con.execute(f"SELECT count(*) FROM nts_notes WHERE {mine} AND deleted = 1", mp).fetchone()[0]
     rev = owner_rev()
     return {"total": int(total), "pinned": int(pinned), "images": int(images), "noFolder": int(nofolder), "trash": int(trashed),
+            "family": int(shared), "familyWrite": family_write(),
             "folders": list_folders(), "tags": list_tags(rev), "templates": list_templates(), "rev": rev}
 
 
 def owner_rev() -> int:
-    """The latest rev among this account's notes, folders and tag colours: it moves when (and only when) something
-    this account sees changes; the server-wide counter would also tell of other accounts' edits."""
+    """The latest rev among this account's notes, folders and tag colours and the family's notes: it moves when (and
+    only when) something this account sees changes; the server-wide counter would also tell of other accounts' edits."""
     with db.connect() as con:
-        return max(int(con.execute(f"SELECT coalesce(max(rev), 0) FROM {t} WHERE user_id = %s", (owner(),)).fetchone()[0])
-                   for t in ("nts_notes", "nts_folders", "nts_tag_colors", "nts_templates"))
+        revs = [int(con.execute(f"SELECT coalesce(max(rev), 0) FROM {t} WHERE user_id = %s", (owner(),)).fetchone()[0])
+                for t in ("nts_notes", "nts_folders", "nts_tag_colors", "nts_templates")]
+        if family_read():  # the family's notes, and the ones that left them
+            revs += [int(con.execute(q).fetchone()[0]) for q in ("SELECT coalesce(max(rev), 0) FROM nts_notes WHERE family = 1",
+                                                                 "SELECT coalesce(max(unshared_rev), 0) FROM nts_notes")]
+        return max(revs)
 
 
 def changes(since: int, limit: int = 500) -> dict:
@@ -603,8 +684,9 @@ def changes(since: int, limit: int = 500) -> dict:
         # the head first, and nothing past it: a change committed while this runs is left for the next call, not
         # skipped (each statement may see a newer database than the one before; writers commit in rev order)
         head = int(con.execute("SELECT max(rev) FROM nts_change_counter").fetchone()[0] or 0)
-        rows = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE user_id = %s AND rev > %s AND rev <= %s ORDER BY rev LIMIT %s",
-                           (o, since, head, limit + 1)).fetchall()
+        seen, sp = _seen()
+        rows = con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE {seen} AND rev > %s AND rev <= %s ORDER BY rev LIMIT %s",
+                           sp + [since, head, limit + 1]).fetchall()
         more = len(rows) > limit
         rows = rows[:limit]
         upto = rows[-1]["rev"] if more else head
@@ -616,7 +698,16 @@ def changes(since: int, limit: int = 500) -> dict:
         templates = [template_dict(r) for r in con.execute(f"SELECT {TEMPLATE_COLS} FROM nts_templates WHERE user_id = %s AND rev > %s AND rev <= %s ORDER BY rev", p).fetchall()]
         rev = upto
         out = with_attachments(con, [note_dict(r) for r in rows])
-    return {"rev": rev, "more": more, "notes": out, "folders": folders, "tags": tags, "templates": templates, "serverTime": time.time()}
+        if since and family_read():
+            # family notes that became someone else's own again: gone for this account, told as deletions (nothing
+            # of the note goes along). A device that starts from nothing never had them.
+            for r in con.execute("SELECT uuid, unshared_rev, updated_at FROM nts_notes WHERE family = 0 AND user_id != %s AND unshared_rev > %s "
+                                 "AND unshared_rev <= %s ORDER BY unshared_rev", p).fetchall():
+                out.append({"id": r["uuid"], "title": "", "body": "", "ocrText": "", "source": "manual", "sourceApp": None, "createdAt": r["updated_at"],
+                            "updatedAt": r["updated_at"], "tags": [], "pinned": False, "folderID": None, "hasImage": False, "imageSHA": None,
+                            "deleted": True, "rev": r["unshared_rev"], "changedBy": None, "family": False, "attachments": []})
+    return {"rev": rev, "more": more, "notes": out, "folders": folders, "tags": tags, "templates": templates, "familyWrite": family_write(),
+            "serverTime": time.time()}
 
 
 def purge_deleted(days: int = None) -> dict:
@@ -825,18 +916,19 @@ def related(uid: str, limit: int = 8) -> list:
     words = _keywords(text)
     mine = {t.lower() for t in n["tags"]}
     scores = {}
+    seen, sp = _seen()
     with db.connect() as con:
         if words:
             rows = con.execute(f"SELECT {NOTE_COLS}, MATCH (title, body, ocr_text, tags) AGAINST (%s) AS score FROM nts_notes "
-                               "WHERE user_id = %s AND deleted = 0 AND uuid != %s AND MATCH (title, body, ocr_text, tags) AGAINST (%s) "
-                               "ORDER BY score DESC LIMIT 60", (" ".join(words), owner(), n["id"], " ".join(words))).fetchall()
+                               f"WHERE {seen} AND deleted = 0 AND uuid != %s AND MATCH (title, body, ocr_text, tags) AGAINST (%s) "
+                               "ORDER BY score DESC LIMIT 60", [" ".join(words)] + sp + [n["id"], " ".join(words)]).fetchall()
             for r in rows:
                 scores[r["uuid"]] = [note_dict(r), float(r["score"] or 0)]
         if mine:  # tags in common count too, even with no words in common
             for t in list(mine)[:8]:
                 c, p = _tag_clause(t)
-                for r in con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE user_id = %s AND deleted = 0 AND uuid != %s AND {c} LIMIT 60",
-                                     (owner(), n["id"], p)).fetchall():
+                for r in con.execute(f"SELECT {NOTE_COLS} FROM nts_notes WHERE {seen} AND deleted = 0 AND uuid != %s AND {c} LIMIT 60",
+                                     sp + [n["id"], p]).fetchall():
                     scores.setdefault(r["uuid"], [note_dict(r), 0.0])
         top = scores and max(s for _, s in scores.values()) or 1.0
         out = []

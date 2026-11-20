@@ -1,6 +1,6 @@
 /** Start-up and routing: #/notes (the list and the open note), #/note/<id>, #/settings[/tab], #/changes. Pasting or
  *  dropping a picture makes a note of it; N makes a new note; / goes to the search box. */
-import { $, h, api, state, icon, paintIcons, toast, fail, canWrite, debounce, menu } from './core.js';
+import { $, h, api, state, icon, paintIcons, toast, fail, canWrite, familyWrite, debounce, menu } from './core.js';
 import { loadMe, renderUserMenu, signIn } from './auth.js';
 import { loadSuite } from './suite.js';
 import { view, viewFromHash, go, loadMeta, renderNav, loadList, setOpenHandler, refresh, markSelected, setStatus } from './notes.js';
@@ -76,10 +76,12 @@ async function newNote(extra = {}, fromTemplate = false) {
     if (view.v === 'folder' && !(fromTemplate && extra.folderID)) body.folderID = view.f;
     if (view.v === 'tag') body.tags = [...new Set([...(extra.tags || []), view.t])];
     if (view.v === 'pinned') body.pinned = true;
+    const own = view.v === 'family' && !familyWrite();  // a member's new note is their own: it opens among all notes
+    if (view.v === 'family' && !own) body.family = true;
     const n = await api('api/notes', { method: 'POST', body });
     await refresh();
     const page = location.hash.replace(/^#/, '').split(/[?/]/)[1] || 'notes';
-    go({ n: n.id, v: view.v === 'trash' || view.v === 'images' || !['notes', 'note'].includes(page) ? 'all' : view.v, q: '' });
+    go({ n: n.id, v: view.v === 'trash' || view.v === 'images' || own || !['notes', 'note'].includes(page) ? 'all' : view.v, q: '' });
     return n;
   } catch (e) { fail(e); return null; }
 }

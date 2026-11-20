@@ -3,7 +3,8 @@
 Who may call a route is declared on the route (app/access.py); iosuite-shared's middleware works out who is asking
 (the shared session cookie, the identity a reverse proxy such as Cloudflare Access vouches for, HTTP Basic or a bearer
 app password), whether sign-in is required at all, and refuses cross-site writes. The same scheme as every app of the
-suite. What is ioNote's own: whose notes a request works on (notes are private to each account).
+suite. What is ioNote's own: whose notes a request works on (notes are private to each account, but for the Family
+space's, which everyone with a role reads and editors change).
 """
 import logging
 from contextlib import asynccontextmanager
@@ -51,7 +52,7 @@ async def lifespan(_app):
 
 app = FastAPI(title="ioNote", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None,
               openapi_url="/api/openapi.json",
-              description="Notes for the family, private to each account. The API the Mac and iPhone apps use, and an MCP "
+              description="Notes for the family: each account's own, and the Family space's. The API the Mac and iPhone apps use, and an MCP "
                           "endpoint (/mcp) for AI assistants.")
 
 
@@ -70,10 +71,20 @@ def _owner_of(request: Request) -> int:
     return 0 if not users.any_users() else notes_mod.NOBODY
 
 
+def _family_of(user) -> int:
+    """What this account may do with the Family space's notes: editors and admins change them, everyone else with a
+    role reads them; a visitor sees none."""
+    if users.can_write(user):
+        return notes_mod.FAMILY_WRITE
+    return notes_mod.FAMILY_READ if user and users.is_signed_in(user) else notes_mod.NO_FAMILY
+
+
 def _mcp_user(u: dict) -> None:
-    """The MCP endpoint, once its gate let the request through: every tool acts as this account, on its own notes."""
+    """The MCP endpoint, once its gate let the request through: every tool acts as this account, on its own notes and
+    the family's."""
     mcp.current_user.set(u)
     notes_mod.current_owner.set(int(u["id"]))
+    notes_mod.current_family.set(_family_of(u))
 
 
 _mcp_gate = auth.mcp_gate(mcp_enabled, on_user=_mcp_user)
@@ -87,6 +98,7 @@ def _before(request: Request):
         return refused
     if not request.url.path.startswith("/mcp"):
         notes_mod.current_owner.set(_owner_of(request))
+        notes_mod.current_family.set(_family_of(request.state.user))
     return None
 
 
@@ -108,6 +120,14 @@ def _limit_for(path: str, ctype: str) -> int:
 # 400 for bad input, the headers, no-store on the API, the body cap (counted as the body arrives, so nothing large is
 # ever held in memory), and the same 404 for another account's note as for none at all: iosuite-shared
 auth.install(app, limit_for=_limit_for, not_found=(notes_mod.NotFound,))
+
+
+@app.exception_handler(notes_mod.Stale)
+async def _stale(_request: Request, e: notes_mod.Stale):
+    """An edit older than the server's copy, or of a family note by someone who only reads those: 409 with the
+    server's copy, which the device takes."""
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"detail": e.detail, "current": e.current}, status_code=409)
 
 
 def _status_extra(request: Request) -> dict:

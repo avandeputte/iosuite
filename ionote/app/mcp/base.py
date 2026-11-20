@@ -6,7 +6,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from app import __version__, config, notes
 
 __all__ = ["ADDS", "DELETES", "READ_ONLY", "UPDATES", "WRITES", "clamp", "current_user", "need_admin", "who", "need_member",
-           "server", "APP", "LOG_NAME", "clamp_limit", "resolve_folder", "note_or_fail", "summary", "iso", "parse_date"]
+           "server", "APP", "LOG_NAME", "clamp_limit", "resolve_folder", "note_or_fail", "note_to_change", "summary", "iso", "parse_date"]
 
 APP = config.BASE_URL  # for the links in results
 LOG_NAME = "MCP"       # the name the change log shows for a change made through MCP
@@ -16,8 +16,8 @@ server = shared_mcp.make_server("ionote", "ioNote", __version__, instructions=(
     "notes_overview, use list_folders / list_tags to find exact names, then search_notes and get_note. "
     "view_note_image shows a note's picture, read_attachment a file's text. related_notes, suggest_organization and "
     "notes_digest help find what belongs together, tidy up and summarise. Notes are private to each account: these tools work on the notes of the "
-    "account you signed in as (notes_overview names it). Changing anything takes a member's account (a viewer only reads); the server tools "
-    "an admin's."))
+    "account you signed in as (notes_overview names it), and on the Family space's notes, which everyone reads (family: true on a note). "
+    "Changing one's own notes takes a member's account (a viewer only reads), changing family notes an editor's; the server tools an admin's."))
 
 
 def need_member() -> dict:
@@ -59,11 +59,19 @@ def note_or_fail(uid: str) -> dict:
     return n
 
 
+def note_to_change(uid: str) -> dict:
+    """The note, when the account may change it: its own, or a family note for an editor or admin."""
+    n = note_or_fail(uid)
+    if n["family"] and not notes.family_write():
+        raise ToolError("This is a family note: editors and admins change those")
+    return n
+
+
 def summary(n: dict, folders: dict = None, text_chars: int = 300) -> dict:
     """A note as a search result: the title the apps show, a preview of its text, where it is."""
     text = n["body"] or n["ocrText"]
     out = {"id": n["id"], "title": notes.display_title(n), "preview": text[:text_chars] + ("…" if len(text) > text_chars else ""),
-           "tags": n["tags"], "folder": (folders or {}).get(n["folderID"]), "pinned": n["pinned"] or None,
+           "tags": n["tags"], "folder": (folders or {}).get(n["folderID"]), "family": n["family"] or None, "pinned": n["pinned"] or None,
            "has_image": n["hasImage"] or None, "files": len(n.get("attachments") or []) or None, "source": n["source"], "source_app": n["sourceApp"],
            "created": iso(n["createdAt"]), "updated": iso(n["updatedAt"]), "url": f"{APP}/#/note/{n['id']}"}
     return {k: v for k, v in out.items() if v not in (None, [], "")}

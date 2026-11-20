@@ -11,7 +11,7 @@ import time
 from PIL import Image, ImageOps
 
 from app import config, db
-from app.notes import check_uuid, get_note, log_change, display_title
+from app.notes import check_uuid, get_note, log_change, display_title, need_write
 
 try:
     import pillow_heif  # optional: HEIC from iPhones
@@ -80,6 +80,7 @@ def put(uid: str, data: bytes, user: str) -> dict:
         n = get_note(uid, con)
         if not n or n["deleted"]:
             raise KeyError(uid)
+        need_write(n)
         if sha == n["imageSHA"]:  # the same picture again (a device retrying): nothing changed
             return n
         con.execute("REPLACE INTO nts_note_images (uuid, mime, data, thumb, width, height, size_bytes, sha, updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
@@ -102,6 +103,7 @@ def remove(uid: str, user: str) -> dict:
         n = get_note(uid, con)
         if not n:
             raise KeyError(uid)
+        need_write(n)
         con.execute("DELETE FROM nts_note_images WHERE uuid = %s", (uid,))
         # the text read from the picture goes with it (it would still be found by searches otherwise)
         con.execute("UPDATE nts_notes SET has_image = 0, image_sha = NULL, ocr_text = '', updated_at = %s, rev = %s, changed_by = %s WHERE uuid = %s",

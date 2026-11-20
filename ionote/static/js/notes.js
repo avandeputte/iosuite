@@ -1,5 +1,5 @@
 /** The sidebar (views, folders, tags) and the list of notes. */
-import { $, h, api, state, icon, fmtDate, colorVar, menu, colorPicker, ask, confirmIt, toast, fail, canWrite, dialog, displayTitle } from './core.js';
+import { $, h, api, state, icon, fmtDate, colorVar, menu, colorPicker, ask, confirmIt, toast, fail, canWrite, hasFamily, familyWrite, dialog, displayTitle } from './core.js';
 import { taskCounts } from './markdown.js';
 
 export const view = { v: 'all', f: null, t: null, q: '', sort: localSort(), n: null };
@@ -36,7 +36,7 @@ function title() {
   if (view.q) return `Search: ${view.q}`;
   if (view.v === 'folder') { const f = (state.meta.folders || []).find((x) => x.id === view.f); return f ? f.name : 'Folder'; }
   if (view.v === 'tag') return '#' + view.t;
-  return { all: 'All notes', pinned: 'Pinned', images: 'Pictures', nofolder: 'No folder', trash: 'Trash' }[view.v] || 'Notes';
+  return { all: 'All notes', pinned: 'Pinned', images: 'Pictures', family: 'Family', nofolder: 'No folder', trash: 'Trash' }[view.v] || 'Notes';
 }
 
 // ---- sidebar
@@ -57,6 +57,7 @@ function dropTarget(el, folderId) {
     e.preventDefault(); el.classList.remove('drop');
     const id = e.dataTransfer.getData('application/x-ionote-note');
     if (!id) return;
+    if ((shown.find((n) => n.id === id) || {}).family) { toast('Family notes are in no folder: tags group them'); return; }
     try { await api(`api/notes/${id}`, { method: 'PUT', body: { folderID: folderId, updatedAt: Date.now() / 1000 } }); toast(folderId ? 'Moved to the folder' : 'Taken out of its folder'); refresh(); } catch (err) { fail(err); }
   });
   return el;
@@ -77,6 +78,7 @@ export function renderNav() {
     navItem('All notes', 'notes', m.total, on('all'), to({}), 'var(--c-teal)', '.bar'),
     navItem('Pinned', 'pin', m.pinned || null, on('pinned'), to({ v: 'pinned' }), 'var(--c-orange)', '.bar'),
     navItem('Pictures', 'photo', m.images || null, on('images'), to({ v: 'images' }), 'var(--c-blue)', '.bar'),
+    hasFamily() ? navItem('Family', 'family', m.family || null, on('family'), to({ v: 'family' }), 'var(--c-green)') : null,
     h('div.navgap'),
     sec('Folders', canWrite() ? h('button.iconbtn', { title: 'New folder', 'aria-label': 'New folder', onclick: newFolder }, icon('add')) : null),
   ];
@@ -100,7 +102,7 @@ export function renderNav() {
     navItem('Templates', 'template', (m.templates || []).length || null, page === 'templates', '#/templates', 'var(--c-purple)'),
     canWrite() ? navItem('Change log', 'history', null, page === 'changes', '#/changes', 'var(--c-indigo)') : null,
     navItem('Import and export', 'download', null, page === 'import', '#/import', 'var(--c-green)'),
-    h('button.navmore' + (['settings', 'changes', 'import', 'templates'].includes(page) || (notes && ['folder', 'tag', 'nofolder'].includes(view.v)) ? '.on' : ''), { type: 'button', title: 'More', onclick: moreSheet }, icon('more'), h('span.nl', 'More')),
+    h('button.navmore' + (['settings', 'changes', 'import', 'templates'].includes(page) || (notes && ['folder', 'tag', 'nofolder', 'family'].includes(view.v)) ? '.on' : ''), { type: 'button', title: 'More', onclick: moreSheet }, icon('more'), h('span.nl', 'More')),
     h('div.navfoot',
       navItem('Settings', 'gear', null, page === 'settings', '#/settings', null, '.foot'),
       h('div#status', { role: 'status', 'aria-live': 'polite' }, statusText)));
@@ -121,6 +123,7 @@ function moreSheet() {
   const tile = (href, label, ic, hue, on) => h('a' + (on ? '.on' : ''), { href, style: `--hue:${hue}`, onclick: () => close() }, h('span.sic', icon(ic)), label);
   const chip = (href, label, hue, on) => { const a = h('a.chip' + (on ? '.on' : ''), { href, onclick: () => close() }, label); if (hue) a.style.setProperty('--hue', hue); return a; };
   const grid = [
+    hasFamily() ? tile(to({ v: 'family' }), 'Family', 'family', 'var(--c-green)', view.v === 'family') : null,
     tile(to({ v: 'nofolder' }), 'No folder', 'folderOff', 'var(--c-gray)', view.v === 'nofolder'),
     tile('#/templates', 'Templates', 'template', 'var(--c-purple)', page === 'templates'),
     canWrite() ? tile('#/changes', 'Change log', 'history', 'var(--c-indigo)', page === 'changes') : null,
@@ -183,6 +186,7 @@ function query(offset) {
   if (view.v === 'tag') p.set('tag', view.t);
   if (view.v === 'pinned') p.set('pinned', '1');
   if (view.v === 'images') p.set('image', '1');
+  if (view.v === 'family') p.set('family', '1');
   return p;
 }
 
@@ -216,6 +220,7 @@ function card(n) {
     h('div.body', h('div.t', title), prev && prev !== title ? h('div.p', prev) : null,
       h('div.m', h('span', fmtDate(view.sort === 'created' || view.sort === 'oldest' ? n.createdAt : n.updatedAt)),
         folder && view.v !== 'folder' ? h('span', '· ' + folder.name) : null,
+        n.family && view.v !== 'family' ? h('span.prog.fam', { title: 'In the Family space: everyone reads it' }, icon('family'), 'Family') : null,
         todo ? h('span.prog' + (done === todo ? '.done' : ''), { title: `${done} of ${todo} checklist items done` }, icon('checklist'), `${done}/${todo}`) : null,
         nfiles ? h('span.prog', { title: `${nfiles} attached file${nfiles > 1 ? 's' : ''}` }, icon('attach'), String(nfiles)) : null,
         n.tags.slice(0, 4).map((t) => { const s = h('span.tag', t); const cv = colorVar(tagColors[t.toLowerCase()]); if (cv) s.style.setProperty('--tc', cv); return s; }))),
@@ -237,6 +242,8 @@ export function renderList() {
   }
   if (!shown.length) {
     list.append(h('div.empty', view.q ? 'No notes match.' : view.v === 'trash' ? 'The trash is empty.' :
+      view.v === 'family' ? (familyWrite() ? 'No family notes yet. A note made here is everyone\'s to read: the wifi password, the bin days, the packing list.'
+        : 'No family notes yet. Editors and admins put notes here for everyone to read.') :
       canWrite() ? 'No notes here yet. Click New note, paste a picture, or drop one on the window.' : 'No notes here yet.'));
     return;
   }

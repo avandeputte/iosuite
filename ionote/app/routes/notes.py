@@ -1,14 +1,15 @@
 """Notes, folders, tags, pictures and sync: the API the web app and the Mac and iPhone apps share.
 
 Reads are open to whoever the sign-in rule lets in (as in iopix); every change needs a member (the apps sign in
-as one, or as an editor or admin). A change the device made offline carries its own updatedAt: when the
-server already has a later edit, the answer is 409 with the server's copy under "current".
+as one, or as an editor or admin), and a change to a note of the Family space an editor (notes.py). A change the
+device made offline carries its own updatedAt: when the server already has a later edit, the answer is 409 with the
+server's copy under "current" (app/main.py); a member's change to a family note is answered the same way.
 """
 import time
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 from iosuite_shared.access import json_body
 from starlette.concurrency import run_in_threadpool
 
@@ -16,10 +17,6 @@ from app import access, attachments, images, notes, ocr
 from app.http import attachment, jresp, user_name
 
 router = APIRouter()
-
-
-def _stale(e: notes.Stale):
-    return JSONResponse({"detail": "A newer version is on the server", "current": e.current}, status_code=409)
 
 
 def _bool(v):
@@ -34,9 +31,10 @@ def api_meta(request: Request):
 
 @router.get("/api/notes", dependencies=[access.public])
 def api_notes(request: Request, q: str = "", folder: str = None, tag: str = None, pinned: str = None, image: str = None,
-              sort: str = "updated", limit: int = 200, offset: int = 0, source: str = None):
-    """Search and list: q matches every word (prefix) in the title, text, text in the picture and tags."""
-    return jresp(request, notes.list_notes(q, folder, tag, _bool(pinned), _bool(image), sort, limit, offset, source))
+              sort: str = "updated", limit: int = 200, offset: int = 0, source: str = None, family: str = None):
+    """Search and list: q matches every word (prefix) in the title, text, text in the picture and tags. family=1:
+    the Family space's notes only; family=0: one's own only."""
+    return jresp(request, notes.list_notes(q, folder, tag, _bool(pinned), _bool(image), sort, limit, offset, source, family=_bool(family)))
 
 
 @router.get("/api/notes/{uid}", dependencies=[access.public])
@@ -69,10 +67,7 @@ async def api_note_create(request: Request):
 async def api_note_put(uid: str, request: Request):
     """Create or update the note with this id (the apps choose ids). updatedAt: when the edit was made."""
     body = await json_body(request)
-    try:
-        return await run_in_threadpool(notes.save_note, uid, body, user_name(request), bool(body.get("force")))
-    except notes.Stale as e:
-        return _stale(e)
+    return await run_in_threadpool(notes.save_note, uid, body, user_name(request), bool(body.get("force")))
 
 
 @router.delete("/api/notes/{uid}", dependencies=[access.member_write])
@@ -80,10 +75,7 @@ def api_note_delete(uid: str, request: Request, ts: float = None):
     """Move to the trash (a tombstone the devices sync). ts: when the device deleted it."""
     if not notes.get_note(uid):
         raise HTTPException(404, "No such note")
-    try:
-        return notes.delete_note(uid, user_name(request), ts)
-    except notes.Stale as e:
-        return _stale(e)
+    return notes.delete_note(uid, user_name(request), ts)
 
 
 @router.post("/api/notes/{uid}/restore", dependencies=[access.member_write])
@@ -296,20 +288,14 @@ def api_templates_standard(request: Request):
 async def api_template_put(uid: str, request: Request):
     """{name, title, body, tags, folderID, updatedAt}; {deleted: true} deletes it."""
     body = await json_body(request)
-    try:
-        return await run_in_threadpool(notes.save_template, uid, body, user_name(request), bool(body.get("force")))
-    except notes.Stale as e:
-        return _stale(e)
+    return await run_in_threadpool(notes.save_template, uid, body, user_name(request), bool(body.get("force")))
 
 
 @router.delete("/api/templates/{uid}", dependencies=[access.member_write])
 def api_template_delete(uid: str, request: Request, ts: float = None):
     if not notes.get_template(uid):
         raise HTTPException(404, "No such template")
-    try:
-        return notes.save_template(uid, {"deleted": True, "updatedAt": ts or time.time()}, user_name(request), force=ts is None)
-    except notes.Stale as e:
-        return _stale(e)
+    return notes.save_template(uid, {"deleted": True, "updatedAt": ts or time.time()}, user_name(request), force=ts is None)
 
 
 # ---- folders
@@ -328,20 +314,14 @@ async def api_folder_create(request: Request):
 async def api_folder_put(uid: str, request: Request):
     """{name, color, updatedAt}; {deleted: true} deletes it (its notes stay, in no folder)."""
     body = await json_body(request)
-    try:
-        return await run_in_threadpool(notes.save_folder, uid, body, user_name(request), bool(body.get("force")))
-    except notes.Stale as e:
-        return _stale(e)
+    return await run_in_threadpool(notes.save_folder, uid, body, user_name(request), bool(body.get("force")))
 
 
 @router.delete("/api/folders/{uid}", dependencies=[access.member_write])
 def api_folder_delete(uid: str, request: Request, ts: float = None):
     if not any(f["id"] == notes.check_uuid(uid) for f in notes.list_folders(include_deleted=True)):
         raise HTTPException(404, "No such folder")
-    try:
-        return notes.save_folder(uid, {"deleted": True, "updatedAt": ts or time.time()}, user_name(request), force=ts is None)
-    except notes.Stale as e:
-        return _stale(e)
+    return notes.save_folder(uid, {"deleted": True, "updatedAt": ts or time.time()}, user_name(request), force=ts is None)
 
 
 # ---- tags
@@ -354,10 +334,7 @@ def api_tags(request: Request):
 async def api_tag_color(name: str, request: Request):
     """{color: one of the colours, or null for none, updatedAt}."""
     body = await json_body(request)
-    try:
-        return await run_in_threadpool(notes.set_tag_color, name, body.get("color"), user_name(request), body.get("updatedAt"), bool(body.get("force")))
-    except notes.Stale as e:
-        return _stale(e)
+    return await run_in_threadpool(notes.set_tag_color, name, body.get("color"), user_name(request), body.get("updatedAt"), bool(body.get("force")))
 
 
 @router.post("/api/tags/rename", dependencies=[access.member_write])
