@@ -260,7 +260,10 @@ body.home #main { top: env(safe-area-inset-top); }
 .gday .muted { font-weight: 400; }
 a.gday:hover { text-decoration: underline; }
 .todaycols a.wgev:hover .wgtitle { text-decoration: underline; }
-.wgwhere { margin-left: auto; flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-s); }
+/* what follows a row's title on the same line ("Dinner @ Nan Xiang Soup Dumplings", "Ava Calloway turns 9"): cut short
+   only when the line is full, and before the title is */
+.wgat { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wgat:empty { display: none; }
 .glance .wgrings { width: 60px; height: 60px; }
 /* one row of small photos, as many of the six as fit at 60px or more (four in the narrow column); the rest stay out of sight */
 .glance .wgpix { grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); grid-template-rows: auto; grid-auto-rows: 0; row-gap: 0; overflow: hidden; }
