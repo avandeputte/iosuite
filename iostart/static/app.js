@@ -1056,14 +1056,14 @@ async function drawGlance(el, again = false) {
   const taskRow = (t) => ({ at: t.late ? -1 : timed(t) ? +new Date(t.due) : Infinity, el: row('iotask', t.title, [h('span', { class: 'tick', style: { borderColor: t.color || 'var(--fg2)' } }),
     h('span', { class: `wgwhen ${t.late ? 'wgwarn' : 'muted'}` }, t.late ? 'Late' : timed(t) ? evTime({ start: t.due }) : ''), h('span', { class: 'wgtitle' }, t.title)]) });
   const eventRow = (o) => ({ at: o.allDay ? 0 : +new Date(o.start), el: row('iocalendar', [o.title, o.location].filter(Boolean).join(' · '), [h('span', { class: 'dot', style: { background: o.color || 'var(--fg2)' } }),
-    h('span', { class: 'wgwhen muted' }, evTime(o)), h('span', { class: 'wgtitle' }, o.title), o.location ? h('span', { class: 'wgwhere muted' }, shortPlace(o.location)) : null]) });
+    h('span', { class: 'wgwhen muted' }, evTime(o)), h('span', { class: 'wgtitle' }, o.title), o.location ? h('span', { class: 'wgat muted' }, `@ ${shortPlace(o.location)}`) : null]) });
   const byHour = (rows) => rows.sort((a, b) => a.at - b.at).map((r) => r.el);
   // ioContact's birthdays (and its other dates) of today and the coming week, whether or not the Birthdays card is on the
   // page: on top of their day. ioCalendar's Birthdays calendar has them too ("Ava Calloway's birthday"): those are left out
   const dates = ((bdays && bdays.items) || []).filter((b) => b.in >= 0 && b.in <= 7);
   const dateRow = (b) => ({ at: -0.5, el: h('a', { class: 'wgev', href: `${app('iocontact').url}/#/c/${b.id}`, title: b.label === 'birthday' ? (b.turns ? `${b.name} turns ${b.turns}` : `${b.name}'s birthday`) : `${b.name}: ${b.label}` },
     h('span', { class: 'gcake' }, b.label === 'birthday' ? '🎂' : '🎉'), h('span', { class: 'wgwhen muted' }, b.label === 'birthday' ? 'Birthday' : ''), h('span', { class: 'wgtitle' }, b.name),
-    h('span', { class: 'wgwhere muted' }, b.label === 'birthday' ? (b.turns ? `turns ${b.turns}` : '') : b.label + (b.turns ? ` · ${b.turns} years` : ''))) });
+    h('span', { class: 'wgat muted' }, b.label === 'birthday' ? (b.turns ? `turns ${b.turns}` : '') : b.label + (b.turns ? ` · ${b.turns} years` : ''))) });
   const mine = (items, n) => items.filter((o) => !(isBirthdayEvent(o) && dates.some((b) => b.in === n && (o.title || '').includes(b.name))));
   const dayIn = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return isoDay(d); };
   const daysTo = (date) => Math.round((new Date(`${date}T12:00:00`) - new Date().setHours(12, 0, 0, 0)) / 86400000);
@@ -1088,7 +1088,7 @@ async function drawGlance(el, again = false) {
   for (const step of later) for (const x of step) x.hidden = true;  // fitGlance shows what there is room for
   // nothing today and nothing in the week: the next event, however far off
   if (cal && !events.length && !ahead.size && cal.next) lines.push(row('iocalendar', cal.next.title, [h('span', { class: 'dot', style: { background: cal.next.color || 'var(--fg2)' } }),
-    h('span', { class: 'wgwhen muted' }, 'Next'), h('span', { class: 'wgtitle' }, cal.next.title), h('span', { class: 'wgwhere muted' }, `${evDay(cal.next)} ${cal.next.allDay ? '' : evTime(cal.next)}`.trim())]));
+    h('span', { class: 'wgwhen muted' }, 'Next'), h('span', { class: 'wgtitle' }, cal.next.title), h('span', { class: 'wgat muted' }, `${evDay(cal.next)} ${cal.next.allDay ? '' : evTime(cal.next)}`.trim())]));
   const more = [moreToday ? `+${moreToday} more today` : null, task && task.overdue ? `${task.overdue} overdue` : null].filter(Boolean).join(' · ');
   const plans = cal || task || dates.length ? h('div', null, wgHead(cal && task ? 'Plans and tasks' : cal ? 'Plans' : task ? 'Tasks' : 'Birthdays', more || ' '), lines, later) : null;
   // the week's bills (and what needs a look in ioMoney), as its card has them
