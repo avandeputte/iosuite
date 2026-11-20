@@ -386,6 +386,11 @@
      "kind": "health_week",
      "label": "Weekly health summary",
      "hint": "On Monday morning, last week’s steps, sleep and workouts next to the week before"
+    },
+    {
+     "kind": "health_usual",
+     "label": "Outside your usual",
+     "hint": "When your resting heart rate, heart rate variability or sleep leaves what is usual for you"
     }
    ]
   },

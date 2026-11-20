@@ -248,7 +248,7 @@ const sameKey = (buf, key) => { if (!buf) return false; const a = new Uint8Array
 const sha256 = async (s) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map((b) => b.toString(16).padStart(2, '0')).join('');
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const appleMobile = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const MORNING_KINDS = ['tasks', 'birthdays', 'health_week'];
+const MORNING_KINDS = ['tasks', 'birthdays', 'health_week', 'health_usual'];
 
 async function workerRegistration(create) {
   let reg = await navigator.serviceWorker.getRegistration(SCOPE.href);

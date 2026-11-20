@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from iosuite_shared import chores, demo as suite_demo, pages, users as shared
 from iosuite_shared.updates import setup_log
 
-from app import __version__, config, db, notify, suiteitems, upload, webapi
+from app import __version__, config, db, notify, suiteitems, upload, usual, webapi
 from app.auth import APP, auth, updater
 
 setup_log(config.LOG_FILE)  # the server log that Settings › Server shows; the app runs without it
@@ -34,10 +34,12 @@ async def lifespan(_app):
     webapi.start_backfill()
     updater.start_daily()
     week = chores.start(notify.weekly, every_s=60, first_s=20, name="weekly summary")  # Monday morning: last week next to the one before
+    morning = chores.start(notify.usual_morning, every_s=60, first_s=40, name="outside your usual")  # at each person's morning time
     log.info("ioHealth started, writing to %s:%s/%s (%s)", db.params()["host"], db.params()["port"], db.params()["database"],
              "accounts exist" if shared.any_users() else "no accounts yet: create the first one from the sign-in screen, inside your network")
     yield
     week.cancel()
+    morning.cancel()
 
 
 app = FastAPI(title="ioHealth", version=__version__, lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json",
@@ -47,7 +49,7 @@ app = FastAPI(title="ioHealth", version=__version__, lifespan=lifespan, docs_url
 # who is asking, whether sign-in is required at all, the cross-site check on writes: iosuite-shared's middleware
 app.middleware("http")(auth.middleware(open_paths=OPEN_PATHS, open_prefixes=OPEN_PREFIXES))
 upload.on_sync.append(webapi.sync_finished)
-upload.on_user_sync.append(notify.after_sync_quietly)  # "goal reached" notifications
+upload.on_user_sync.append(notify.after_sync_quietly)  # "goal reached" and "outside your usual" notifications
 
 
 def _limit_for(path: str, ctype: str) -> int:
@@ -76,6 +78,7 @@ app.include_router(auth.admin_router())  # /api/suite-admin (+ ui.js, the Settin
 app.include_router(auth.status_router(updater, extra=_status_extra))  # /api/status: public, the same shape in every app
 app.include_router(upload.router)
 app.include_router(webapi.router)
+app.include_router(usual.router)       # /api/usual: what is outside the account's usual
 
 
 app.include_router(auth.server_router(updater, log_file=config.LOG_FILE))  # /api/server, /api/log: admins

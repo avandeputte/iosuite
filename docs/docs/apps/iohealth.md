@@ -16,7 +16,8 @@ your server.
 ## What it does
 
 - **Dashboard**: today's rings and the last week's, last night's sleep, every metric against your usual, recent
-  workouts, and a heads-up list (resting heart rate up, HRV down, glucose lows, goal streaks).
+  workouts, and a heads-up list (resting heart rate up, HRV or sleep down against your usual, glucose lows, goal
+  streaks). What leaves your usual also comes as a notification, on the day it begins.
 - **Metrics**: chart any synced type over any range, zoom and pan, stack or overlay several, compare with a year
   earlier, goal lines.
 - **Workouts** with their GPS routes on a map, splits, heart rate zones, training load; **Sleep** stages per night;
