@@ -18,7 +18,9 @@ def test_search_item_and_tiles(client):
 def test_tile_events_carry_their_details(client):
     """What the wall display shows of a tapped event: who of the family it is for, its calendar, its notes."""
     import datetime as dt
-    day = dt.date.today() + dt.timedelta(days=1)
+    # two days on, not one: the tile's week starts tomorrow in its own zone, which in the evening in the Americas is
+    # already the day after the test process's tomorrow
+    day = dt.date.today() + dt.timedelta(days=2)
     r = client.post("/api/events", json={"title": "Swimming", "start": f"{day.isoformat()}T10:00", "notes": "Bring goggles"})
     assert r.status_code in (200, 201), r.text
     ev = client.get("/api/suite/tile", params={"kind": "week"}).json()["days"][0]["items"][0]
