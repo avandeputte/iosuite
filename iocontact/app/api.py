@@ -374,7 +374,9 @@ async def merge_undo(mid: int, request: Request):
     r = readable_contact(u, m["kept_contact_id"])
     writable_book(u, r["address_book_id"])
     try:
-        return await run_in_threadpool(quality.undo, mid)
+        return await run_in_threadpool(quality.undo, mid, u)
+    except quality.NotAllowed as e:
+        raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(409, str(e))
 

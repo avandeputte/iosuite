@@ -18,7 +18,7 @@ such as a LAN address, gets a cookie for that host only).
 # Never set it in a pull request: main does what the next line says by itself, after every merge that changes
 # something an install has (.github/workflows/version.yml).
 # Bump it with every change that reaches users; an install is offered an update when this line is higher on GitHub.
-__version__ = "3.34.0"
+__version__ = "3.35.0"
 
 from iosuite_shared.errors import Invalid
 

@@ -4,6 +4,8 @@ from typing import Literal, Optional
 from mcp.server.mcpserver import Image
 from mcp.server.mcpserver.exceptions import ToolError
 
+from iosuite_shared import users as shared_users
+
 from app import __version__, config, db, iopix, model, relations as rel, vcard
 from app.fold import fold
 from app.mcp.base import READ_ONLY, book_ids, brief, clamp, contact_out, find_contact, readable_books, server, who
@@ -255,8 +257,10 @@ def connection_details() -> dict:
 @server.tool(annotations=READ_ONLY)
 def list_iopix_people(text: str = "", unlinked_only: bool = False) -> list:
     """The people named in ioPix (the family photo library), with the contact each is linked to, if any.
-    text: part of a name. link_iopix_person links one to a contact."""
+    text: part of a name. link_iopix_person links one to a contact. Members and more, as GET /api/iopix/people."""
     u = who()
+    if not shared_users.is_member(u):
+        raise ToolError("ioPix's people are for members and more; a viewer only looks at the contacts")
     if not iopix.settings()["url"]:
         raise ToolError("ioPix is not part of the suite (it connects by itself once it runs on the same Shared ioSuite database)")
     try:

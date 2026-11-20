@@ -51,7 +51,9 @@ For **Claude Desktop** on a computer in your network, use the `mcp-remote` bridg
 }
 ```
 
-On the server itself, `.venv/bin/python -m app.mcp --user NAME` serves the same tools over stdio.
+On the server itself, `.venv/bin/python -m app.mcp --user NAME` serves the same tools over stdio. It reads the account
+and its role once, when it starts: after changing someone's role, restart any stdio server running as them. Starting
+one needs the app's `config.env` (with the database password), so it is only for whoever runs the server.
 
 ## Be careful with admin app passwords
 

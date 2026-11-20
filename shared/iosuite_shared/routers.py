@@ -154,7 +154,10 @@ def auth_router(self) -> APIRouter:
         body = await json_body(request)
         try:
             u = users.create(str(body.get("name", ""))[:64], str(body.get("password", ""))[:1024], "admin", app,
-                             email=str(body.get("email") or ""), display_name=str(body.get("displayName") or ""), suite_admin=True)
+                             email=str(body.get("email") or ""), display_name=str(body.get("displayName") or ""), suite_admin=True,
+                             first=True)
+        except users.FirstTaken as e:
+            raise HTTPException(409, str(e))
         except ValueError as e:
             raise HTTPException(400, str(e))
         authlog.info("first account created and signed in: %s (suite admin) from %s", u["name"], proxy.source(request))
