@@ -225,3 +225,10 @@ def test_assistants_read_family_notes_and_only_editors_change_them(client, admin
     mine = _call(a, "update_note", {"note_id": NID, "family": False}, headers=eve)
     assert not mine.get("isError"), mine
     assert _call(a, "get_note", {"note_id": NID}, headers=sam)["isError"]
+
+
+def test_an_install_without_accounts_has_no_family_space(client):
+    assert client.get("/api/meta").json()["familyWrite"] is False
+    assert client.get("/api/sync").json()["familyWrite"] is False
+    assert client.put(f"/api/notes/{NID}", json={"title": "open", "family": True, "updatedAt": 1}).status_code == 400
+    assert client.put(f"/api/notes/{NID}", json={"title": "open", "updatedAt": 1}).json()["family"] is False

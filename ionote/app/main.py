@@ -73,10 +73,12 @@ def _owner_of(request: Request) -> int:
 
 def _family_of(user) -> int:
     """What this account may do with the Family space's notes: editors and admins change them, everyone else with a
-    role reads them; a visitor sees none."""
+    role reads them; a visitor sees none, and an install without accounts has no family."""
+    if not user:
+        return notes_mod.NO_FAMILY
     if users.can_write(user):
         return notes_mod.FAMILY_WRITE
-    return notes_mod.FAMILY_READ if user and users.is_signed_in(user) else notes_mod.NO_FAMILY
+    return notes_mod.FAMILY_READ if users.is_signed_in(user) else notes_mod.NO_FAMILY
 
 
 def _mcp_user(u: dict) -> None:
