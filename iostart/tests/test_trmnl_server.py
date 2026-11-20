@@ -312,7 +312,13 @@ def test_quiet_hours(client, paired):
     first = look()
     assert first["refresh_rate"] == 900 and client.get("/api/trmnl").json()["devices"][0]["quiet"] is None
     r = client.put(f"/api/trmnl/devices/{dev}", json={"quiet": {"from": _hhmm(-1), "to": _hhmm(2)}})
-    assert r.status_code == 200 and r.json()["quiet"]["show"] == "last" and r.json()["quietNow"] is True
+    assert r.status_code == 200 and r.json()["quiet"]["show"] == "sleep" and r.json()["quietNow"] is True
+    # a sleep screen, as TRMNL's own sleep mode: the same picture all night
+    n = look()
+    assert n["filename"].startswith("screen-") and look()["filename"] == n["filename"] and 7000 < n["refresh_rate"] <= 7300
+    assert grays(picture(out, look()["image_url"])) == 2
+    # or the screen as it was
+    assert client.put(f"/api/trmnl/devices/{dev}", json={"quiet": {"from": _hhmm(-1), "to": _hhmm(2), "show": "last"}}).json()["quiet"]["show"] == "last"
     d = look()
     assert 7000 < d["refresh_rate"] <= 7300 and d["filename"] == first["filename"]  # asleep until the quiet ends, its screen as it was
     assert look()["filename"] == first["filename"]
@@ -320,11 +326,7 @@ def test_quiet_hours(client, paired):
     # a press of its button shows the screen it is at, now, and it sleeps on until the morning
     b = look("button")
     assert b["filename"].startswith("plugin-") and b["filename"].split("-")[1] == first["filename"].split("-")[1] and 7000 < b["refresh_rate"] <= 7300
-    # or a line that says until when
-    assert client.put(f"/api/trmnl/devices/{dev}", json={"quiet": {"from": _hhmm(-1), "to": _hhmm(2), "show": "notice"}}).json()["quiet"]["show"] == "notice"
-    n = look()
-    assert n["filename"].startswith("screen-") and look()["filename"] == n["filename"] and 7000 < n["refresh_rate"] <= 7300
-    assert grays(picture(out, look()["image_url"])) == 2
+    assert client.put(f"/api/trmnl/devices/{dev}", json={"quiet": {"from": _hhmm(-1), "to": _hhmm(2), "show": "notice"}}).status_code == 400
     # outside them, and without them, the playlist goes on where it was
     assert client.put(f"/api/trmnl/devices/{dev}", json={"quiet": {"from": _hhmm(3), "to": _hhmm(5)}}).json()["quietNow"] is False
     after = look()
@@ -362,11 +364,14 @@ def test_the_button(client, paired, monkeypatch):
     client.put(f"/api/trmnl/devices/{dev}", json={"playlist": [{"layout": "full", "screens": [k]} for k in ("today", "tasks", "calendar")]})
     one = ask()
     assert one["special_function"] == "sleep" and "action" not in one and client.get("/api/trmnl").json()["buttons"][0] == "sleep"
-    # sleep (the default): the screen stays, for eight hours, or until the quiet hours end when there are some
+    # sleep (the default): the sleep screen, for eight hours, or until the quiet hours end when there are some
     s = ask("true")
-    assert s["action"] == "sleep" and s["refresh_rate"] == trmnlserver.SLEEP_FOR and s["filename"] == one["filename"]
+    assert s["action"] == "sleep" and s["refresh_rate"] == trmnlserver.SLEEP_FOR and s["filename"].startswith("screen-")
     client.put(f"/api/trmnl/devices/{dev}", json={"quiet": {"from": _hhmm(3), "to": _hhmm(5)}})
     assert 17900 < ask("sleep")["refresh_rate"] <= 18100
+    client.put(f"/api/trmnl/devices/{dev}", json={"quiet": {"from": _hhmm(3), "to": _hhmm(5), "show": "last"}})  # the quiet hours keep the last picture: so does it
+    s = ask("sleep")
+    assert s["filename"] == ask("sleep")["filename"] and not s["filename"].startswith("screen-")
     client.put(f"/api/trmnl/devices/{dev}", json={"quiet": None})
     # identify: which screen this is, by its name
     assert client.put(f"/api/trmnl/devices/{dev}", json={"button": "identify", "name": "Kitchen"}).json()["button"] == "identify"

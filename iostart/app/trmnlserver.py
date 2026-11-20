@@ -26,7 +26,8 @@ firmware knows to skip the download; it is drawn again after RESEND minutes anyw
 What else the firmware's protocol has, set per device in Settings › TRMNL:
 
 * quiet hours (TRMNL's "sleep mode"): between two times of the person's day the device is told to sleep until the
-  quiet ends, and keeps its last picture or shows a line saying so. A press of its button still shows the screen.
+  quiet ends, and shows a sleep screen (a moon and its Zzz, until when) or keeps its last picture. A press of its
+  button still shows the screen.
 * the button's function (a double press; the TRMNL X's menu picks one by name): the answer names the function the
   device arms (special_function), and when it then asks with a special_function header, the answer carries the
   `action` the firmware waits for: sleep, identify, restart_playlist, rewind, send_to_me (a notification that opens
@@ -39,6 +40,7 @@ What else the firmware's protocol has, set per device in Settings › TRMNL:
 Left out on purpose: firmware updates (update_firmware, firmware_url). The device keeps the firmware it has; telling
 it to flash one is not something to do untested.
 """
+import base64
 import datetime as dt
 import functools
 import hashlib
@@ -71,7 +73,7 @@ PATHS = ("/api/setup", "/api/display", "/api/log", "/api/current_screen", "/api/
 BUTTON = {"sleep": "sleep", "identify": "identify", "restart": "restart_playlist", "back": "rewind", "hold": "guest_mode",
           "send": "send_to_me", "wifi": "add_wifi", "none": "none"}
 FUNCTIONS = {v: k for k, v in BUTTON.items()} | {"toggle_hold": "hold"}
-QUIET_SHOW = ("last", "notice")  # while quiet: the last picture stays, or a line that says until when
+QUIET_SHOW = ("sleep", "last")  # while quiet: a sleep screen that says until when, or the last picture stays
 SLEEP_FOR = 8 * 3600             # the button's "sleep" without quiet hours
 LOW_BATTERY, BATTERY_OK = 15, 30  # percent: told once below the first, again only after it was above the second
 HHMM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
@@ -328,7 +330,7 @@ def _look(d: dict, base: str) -> dict:
         return _answer(d, _picture(d, base, stay=bool(d["state"].get("hold"))), refresh(d))
     if pressed:
         return _answer(d, _picture(d, base, stay=True), left)
-    if d["settings"]["quiet"].get("show") == "notice":
+    if quiet(d)["show"] == "sleep":
         return _answer(d, _picture(d, base, quiet=True), left)
     return _answer(d, _picture(d, base, stay=True, again=True), left)
 
@@ -336,8 +338,9 @@ def _look(d: dict, base: str) -> dict:
 def _function(d: dict, fn: str, base: str) -> dict:
     """What the firmware's special functions get: the `action` it checks for, and what goes with it."""
     st, wire = d["state"], BUTTON[fn]
-    if fn == "sleep":
-        return _answer(d, _picture(d, base, stay=True, again=True), quiet_left(d, ahead=True) or SLEEP_FOR, action=wire)
+    if fn == "sleep":  # the sleep screen too, unless its quiet hours keep the last picture
+        last = (quiet(d) or {}).get("show") == "last"
+        return _answer(d, _picture(d, base, stay=True, again=last, quiet=not last), quiet_left(d, ahead=True) or SLEEP_FOR, action=wire)
     if fn == "identify":
         return _answer(d, _picture(d, base, identify=True), refresh(d), action=wire)
     if fn == "restart":
@@ -502,6 +505,20 @@ NOTICE = """<div class="layout layout--col layout--center gap--large">
   <span class="title">ioSuite</span>
   <span class="instance">{{ instance }}</span>
 </div>"""
+# the quiet hours' screen, as TRMNL's own sleep mode has one: a moon and its Zzz (the start page's moon, the Zzz of
+# Material Design Icons' "sleep"), until when, and that the button wakes it
+SLEEP_ICON = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 24"><path d="M10.5 3.5a8.5 8.5 0 1 0 6 14.5 7 7 0 0 1-6-14.5z"/>'
+              '<path d="M27,8H23V6.7L25.3,4H23V2.7H27V4L24.7,6.7H27V8M21.5,12.5H17.5V11.2L19.8,8.5H17.5V7.2H21.5V8.5L19.2,11.2H21.5V12.5Z"/></svg>')
+SLEEP = """<div class="layout layout--col layout--center gap--large">
+  <img class="image w--35 h--30 lg:w--56 lg:h--48" src="data:image/svg+xml;base64,{{ icon }}">
+  <span class="title lg:title--xlarge">Sleeping until {{ until }}</span>
+  <span class="label lg:label--large">Press the button to see the screen now</span>
+</div>
+<div class="title_bar">
+  <img class="image" src="">
+  <span class="title">ioSuite</span>
+  <span class="instance">{{ instance }}</span>
+</div>"""
 
 
 def _notice(d: dict, title: str, text: str, code: str = "") -> bytes:
@@ -509,6 +526,13 @@ def _notice(d: dict, title: str, text: str, code: str = "") -> bytes:
     import liquid
     bits = grays(d)
     view = liquid.Environment().parse(NOTICE).render({"title": title, "text": text, "code": " ".join(code), "instance": d["name"] or d["mac"]})
+    return picture(drawer(bits, scale(d)).screen([view], "full", d["width"], d["height"]), bits)
+
+
+def _sleep(d: dict, until: str) -> bytes:
+    import liquid
+    bits = grays(d)
+    view = liquid.Environment().parse(SLEEP).render({"icon": base64.b64encode(SLEEP_ICON.encode()).decode(), "until": until, "instance": d["name"] or d["mac"]})
     return picture(drawer(bits, scale(d)).screen([view], "full", d["width"], d["height"]), bits)
 
 
@@ -529,10 +553,10 @@ def _draw(d: dict, at: int, kind: str = "playlist"):
     if kind == "identify":
         return _notice(d, _name(d), _facts(d)), "identify"
     if kind == "quiet":
-        left = quiet_left(d)
+        left = quiet_left(d, ahead=True) or SLEEP_FOR
         conf = trmnlpush.settings(d["owner"])
-        until = trmnl.clock(dt.datetime.now(_zone(d)) + dt.timedelta(seconds=left or 0), conf["clock"] == 24)
-        return _notice(d, f"Quiet until {until}", "Press the button to see the screen now"), f"quiet-{d['settings'].get('quiet')}"
+        until = trmnl.clock(dt.datetime.now(_zone(d)) + dt.timedelta(seconds=left), conf["clock"] == 24)
+        return _sleep(d, until), f"sleep-{until}"
     bits, s = grays(d), scale(d)
     items = playlist(d)
     item = items[at % len(items)]
@@ -605,7 +629,7 @@ def quiet(d: dict):
     q = d["settings"].get("quiet")
     if not isinstance(q, dict) or not (HHMM.fullmatch(str(q.get("from"))) and HHMM.fullmatch(str(q.get("to")))):
         return None
-    return {"from": q["from"], "to": q["to"], "show": q.get("show") if q.get("show") in QUIET_SHOW else "last"}
+    return {"from": q["from"], "to": q["to"], "show": q.get("show") if q.get("show") in QUIET_SHOW else QUIET_SHOW[0]}
 
 
 def state(user) -> dict:
@@ -683,9 +707,9 @@ def configure(user, dev_id: int, b: dict) -> dict:
         else:
             if not isinstance(q, dict) or not (HHMM.fullmatch(str(q.get("from"))) and HHMM.fullmatch(str(q.get("to")))) or q["from"] == q["to"]:
                 raise Invalid("Quiet hours go from one time of the day to another, as 22:00 and 07:00")
-            if q.get("show", "last") not in QUIET_SHOW:
-                raise Invalid("While quiet a screen keeps its last picture, or says until when it is quiet")
-            d["settings"]["quiet"] = {"from": q["from"], "to": q["to"], "show": q.get("show", "last")}
+            if q.get("show", QUIET_SHOW[0]) not in QUIET_SHOW:
+                raise Invalid("While quiet a screen shows that it sleeps, or keeps its last picture")
+            d["settings"]["quiet"] = {"from": q["from"], "to": q["to"], "show": q.get("show", QUIET_SHOW[0])}
         d["state"].get("shown", {}).pop("quiet", None)
     if "button" in b:
         if b["button"] not in BUTTON:

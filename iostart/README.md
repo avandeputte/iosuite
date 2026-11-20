@@ -69,7 +69,8 @@ what the app will show on the start page later (today's events, the newest photo
   and white on a reTerminal E1002 or E1004, which run TRMNL's firmware; the E1004's panel stands, and gets its picture
   lying down as the firmware turns it), a picture of each
   entry as it is now, its battery, signal, firmware and last log lines; quiet hours (it sleeps from one time of the
-  day to another, keeping its last picture or saying until when; a press of its button still wakes it); what two
+  day to another, showing a sleep screen with until when, or keeping its last picture; a press of its button still
+  wakes it); what two
   presses of its button do (sleep until the morning, show which screen it is, start over, go back one, stay on what
   it shows, send what it shows to your phone as a notification, open its Wi-Fi setup); stay on one entry; a full
   redraw every time; the device's detailed log; a reset (it forgets its Wi-Fi and key and sets up again). A battery
