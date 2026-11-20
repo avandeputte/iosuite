@@ -2,7 +2,7 @@
 their own bookmarks (with what is in their own folders), their choices of shared bookmarks for their start page,
 their home page layout, the copies of their bookmarks file a browser synced with (/dav/bookmarks), the TRMNL screens
 the start page pushes for them (their webhook addresses and app password, kept with the keys and tokens) and their
-TRMNL devices (each with its key). Shared bookmarks stay, whoever added them: they are everyone's."""
+TRMNL devices (each with its key) and the kitchen timers they started. Shared bookmarks stay, whoever added them: they are everyone's."""
 from app import db
 
 FILES = ("bookmarkfile", "bookmarkfile-base", "bookmarkfile-temp")  # bookmarkdav._key: "<what>:<user id>:<file name>"
@@ -18,6 +18,8 @@ def of(user_id: int, remove: bool) -> list:
     from app import trmnlpush, trmnlserver
     pushed = len(trmnlpush.hooks(user_id))
     devices = len(trmnlserver.devices_of(user_id))
+    from app import timers
+    running = timers.person_data(user_id, remove)
     if remove:
         trmnlserver.forget_person(user_id)  # their TRMNL devices and each one's key
         trmnlpush.stop(user_id)  # the TRMNL webhook addresses and the app password they were read with (keys and tokens)
@@ -34,4 +36,5 @@ def of(user_id: int, remove: bool) -> list:
             {"what": "synced bookmarks files", "one": "synced bookmarks file", "count": synced},
             {"what": "TRMNL screens pushed", "one": "TRMNL screen pushed", "count": pushed},
             {"what": "TRMNL devices", "one": "TRMNL device", "count": devices},
+            {"what": "kitchen timers", "one": "kitchen timer", "count": running},
             {"what": "shared bookmarks they added", "one": "shared bookmark they added", "count": shared, "kept": True}]

@@ -32,11 +32,13 @@ The tree is the account's (app/bookmarks.py): their own bookmarks and the shared
 account may not change carries "shared": true and "readOnly": true. Someone who is not an admin of the start page can
 add their own links in a shared folder; what they change of the shared bookmarks themselves is refused and goes back.
 """
+import concurrent.futures as _cf
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
-from app import __version__, bookmarks, bookmarksync as sync, siteicons
+from app import __version__, apps as _apps, bookmarks, bookmarksync as sync, siteicons, widgets as _widgets
 from iosuite_shared import users
 
 BASE = "/dav/ext"
@@ -147,7 +149,9 @@ def _guard(fn):
 def hello(request: Request):
     u = sync.user(request)
     return {"user": u["name"], "displayName": u.get("displayName") or u["name"], "canWrite": bool(users.is_member(u)), "canShare": bool(users.is_admin(u)),
-            "rev": bookmarks.revision(), "version": __version__}
+            "rev": bookmarks.revision(), "version": __version__,
+            # full: the app password reaches the other apps too (the iPhone app's widgets and Siri; see below)
+            "full": getattr(request.state, "app_password_scope", "") == ""}
 
 
 @router.get(BASE + "/rev", include_in_schema=False)
@@ -199,3 +203,81 @@ async def post_sync(request: Request):
     except (TypeError, ValueError):
         base = 0
     return await _guard(apply)(base, body.get("ops") or [])
+
+
+# ------------------------------------------------------------------ the iPhone app's widgets and Siri (ioStart for iOS)
+# What ioStart's home screen widgets and its Siri / Shortcuts actions read and add, as the person:
+#
+#     GET  <address>/dav/ext/today?tz=   {today, week, tasks, links}: today's events (and the next one when the day is
+#                                        empty), the coming week's, the tasks due today or late; each part null when its
+#                                        app is not there or would not answer (`errors` says why)
+#     GET  <address>/dav/ext/calendars   the calendars and the lists the person may add to: {calendars, lists}
+#     POST <address>/dav/ext/tasks       {title, due?, listId?, timezone?} → {id, url}   (ioTask)
+#     POST <address>/dav/ext/events      {title, start, end?, allDay, timezone?, calendarId?} → {id, url}   (ioCalendar)
+#
+# These are asked of ioCalendar and ioTask with the app's own sign-in passed on (app/widgets.py), so they need a full
+# app password: the iPhone app's sign-in flow asks for one (`?scope=full`, app/ncbookmarks.py); a sync-only password
+# gets 403 {"detail": {"error", "signInAgain": true}}, which the app shows as "sign in again to turn on widgets and Siri".
+
+
+def _full(request: Request) -> dict:
+    u = sync.user(request)
+    if getattr(request.state, "app_password_scope", "") != "":
+        raise HTTPException(403, {"error": "This app password is for bookmark sync only: sign in again to turn on widgets and Siri", "signInAgain": True})
+    return u
+
+
+def _ask(fn, *a):
+    try:
+        return fn(*a), None
+    except _widgets.Unavailable as e:
+        return None, str(e)
+
+
+@router.get(BASE + "/today", include_in_schema=False)
+async def today(request: Request, tz: str = ""):
+    _full(request)
+
+    def work():
+        parts = {"today": ("iocalendar", ""), "week": ("iocalendar", "week"), "tasks": ("iotask", "")}
+        with _cf.ThreadPoolExecutor(3) as ex:
+            futs = {k: ex.submit(_ask, _widgets.get, request, key, tz, kind, 8) for k, (key, kind) in parts.items()}
+            got = {k: f.result() for k, f in futs.items()}
+        out = {k: v for k, (v, _) in got.items()}
+        out["errors"] = {k: why for k, (_, why) in got.items() if why}
+        out["links"] = {k: _apps.url_for(k) for k in ("iocalendar", "iotask")}
+        return out
+    return await run_in_threadpool(work)
+
+
+@router.get(BASE + "/calendars", include_in_schema=False)
+async def calendars(request: Request):
+    _full(request)
+
+    def work():
+        (cals, e1), (lists, e2) = _ask(_widgets.iocalendar_calendars, request), _ask(_widgets.iotask_lists, request)
+        return {"calendars": (cals or {}).get("items"), "lists": (lists or {}).get("items"),
+                "errors": {k: v for k, v in (("calendars", e1), ("lists", e2)) if v}}
+    return await run_in_threadpool(work)
+
+
+async def _add(request: Request, fn):
+    _full(request)
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "Unreadable request body")
+    try:
+        return await run_in_threadpool(fn, request, body)
+    except _widgets.Unavailable as e:
+        raise HTTPException(e.status, str(e))
+
+
+@router.post(BASE + "/tasks", include_in_schema=False)
+async def add_task(request: Request):
+    return await _add(request, _widgets.iotask_add)
+
+
+@router.post(BASE + "/events", include_in_schema=False)
+async def add_event(request: Request):
+    return await _add(request, _widgets.iocalendar_add)
