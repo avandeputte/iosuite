@@ -64,3 +64,17 @@ def test_a_contact_moved_away_a_moment_ago_is_not_written(client, family_id):
     finally:
         model.viewer.reset(tok)
     assert model.get_row(cid)["address_book_id"] == _private(client) and not model.get_row(cid)["deleted"]
+
+
+def test_undo_writes_only_the_tables_columns(client, family_id):
+    """A snapshot's keys become column names only when the table has that column (a stored key never becomes SQL)."""
+    import json
+    from app import db
+    a, b = mk(client, family_id, fn="Ann Lee")["id"], mk(client, family_id, fn="Annie Lee")["id"]
+    assert client.post("/api/contacts/merge", json={"keep": a, "others": [b]}).status_code == 200
+    m = db.one("SELECT id, snapshot FROM con_contact_merges ORDER BY id DESC LIMIT 1")
+    snap = json.loads(m["snapshot"])
+    snap["contacts"][0]["fn` = 'x', `notes"] = "injected"
+    db.ex("UPDATE con_contact_merges SET snapshot = %s WHERE id = %s", (json.dumps(snap), m["id"]))
+    assert client.post(f"/api/merges/{m['id']}/undo").status_code == 200
+    assert sorted(c["fn"] for c in client.get("/api/contacts").json()["items"]) == ["Ann Lee", "Annie Lee"]
