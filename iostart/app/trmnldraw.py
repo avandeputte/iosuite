@@ -26,6 +26,7 @@ added here (the test compares every screen).
 import base64
 import functools
 import html.parser
+import io
 import math
 import os
 import re
@@ -128,6 +129,12 @@ def _walk(n):
 
 # ---- the classes that count on this screen -----------------------------------------------------------------------
 
+# the coloured inks of a Spectra 6 panel (black and white besides), as the framework names them (text--red, bg--blue),
+# and their place in the picture's palette; in the picture as it is drawn each is one value of its own (INK)
+INKS = ("red", "green", "blue", "yellow")
+TONES = ("black", "white") + INKS
+INK = {k: i + 1 for i, k in enumerate(INKS)}
+PALETTE = [(255, 255, 255), (0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)]  # white, black, then INKS
 STEPS = {"xxsmall", "xsmall", "small", "base", "large", "xlarge", "xxlarge", "xxxlarge", "mega", "giga"}
 
 
@@ -141,22 +148,26 @@ def _family(c: str):
     base, _, step = c.partition("--")
     if base in ("title", "label", "value", "description", "text", "progress-bar") and step in STEPS:
         return base
+    if base in ("text", "bg") and step in TONES:
+        return base + "-color"
     return None
 
 
-def classes(cls, large: bool) -> set:
+def classes(cls, large: bool, bits: int = 1, inks: bool = False) -> set:
     """An element's classes as they count on this screen. The framework's classes for one size of screen (lg:gap--large:
     on a large screen, the TRMNL X) take the place of the element's plain class of the same group there and are
-    nothing elsewhere; lg:flex and lg:block show there what `hidden` hides elsewhere. The suite's markup has no sm: or
-    md: (the TRMNL itself is md: its look is the plain classes)."""
+    nothing elsewhere; lg:flex and lg:block show there what `hidden` hides elsewhere. The same for one depth of gray
+    (1bit:, 2bit:, 4bit:), which no screen of coloured inks is: that is how the markup gives a colour to such a screen
+    alone (text--red 1bit:text--black 2bit:text--black 4bit:text--black). The suite's markup has no sm: or md: (the
+    TRMNL itself is md: its look is the plain classes)."""
     out = {c for c in cls if ":" not in c}
-    if not large:
-        return out
+    mine = ([] if not large else ["lg:"]) + ([] if inks else [f"{bits}bit:"])
     for c in cls:
-        if not c.startswith("lg:"):
+        at = next((m for m in mine if c.startswith(m)), None)
+        if at is None:
             continue
-        c = c[3:]
-        if c in ("flex", "block"):
+        c = c[len(at):]
+        if c in ("flex", "block", "inline"):
             out.discard("hidden")
             continue
         group = _family(c)
@@ -299,8 +310,10 @@ def _style(n: Node, s: float, bits: int = 1, dense: bool = False) -> Style:
             st.color = "gray"
         if "label" in c and in_item and bits >= 2:  # where there are grays, what stands under an item's title is dark gray
             st.color = "dim"
-        if "label--inverted" in c:
-            st.color, st.bg, st.radius, st.pl, st.pr = "white", "black", px(4), px(5), px(5)
+        for name, ink in (("label--error", "red"), ("label--primary", "blue"), ("label--inverted", "black")):  # inverted last: it is what a screen of grays puts back
+            if name in c:
+                st.color, st.bg, st.radius, st.pl, st.pr = "white", ink, px(4), px(5), px(5)
+        if {"label--inverted", "label--error", "label--primary"} & c:
             if not any(_family(x) == "label" for x in n.own):  # the full-size label has a pixel of black above and below its line
                 st.pt, st.pb = px(1), px(1)
         if "label--outline" in c:
@@ -408,8 +421,15 @@ def _style(n: Node, s: float, bits: int = 1, dense: bool = False) -> Style:
     exact = next((x for x in c if re.fullmatch(r"gap--\[\d+px\]", x)), None)  # a gap of so many of the framework's pixels
     if exact and st.kind in ("box", "grid", "columns"):
         st.gap = px(int(exact[6:-3]))
+    for tone in TONES:
+        if f"bg--{tone}" in c:
+            st.bg = tone
+        if f"text--{tone}" in c and st.kind == "text":
+            st.color = tone
     if "w--full" in c:
         st.full = True
+    if "h--full" in c and st.kind == "box":  # as tall as its place (a box in a column: in the suite's markup, the colour of an item's meta)
+        st.grow = True
     wide = next((x for x in c if re.fullmatch(r"w--\d+", x)), None)  # a box of a set width: N times 4 of the framework's pixels
     if wide and st.kind == "box":
         st.w = px(4 * int(wide[3:]))
@@ -417,8 +437,12 @@ def _style(n: Node, s: float, bits: int = 1, dense: bool = False) -> Style:
 
 
 class Drawer:
-    def __init__(self, scale: float = 1.0, bits: int = 1, dense: bool = None):
+    def __init__(self, scale: float = 1.0, bits: int = 1, dense: bool = None, inks: bool = False):
+        """inks: a panel of coloured inks (Spectra 6), which prints each pixel in the nearest ink and no grays: it is
+        drawn as a 1-bit screen (the grays as the framework's patterns) where the markup's colours are inks."""
         self.s = scale
+        self.inks = inks
+        bits = 1 if inks else bits
         self.bits = bits
         self.dense = scale >= 1.5 if dense is None else dense  # the framework's own rule: from 1.5 device pixels to one of its own
         self.T = TEXT_DENSE if self.dense else TEXT
@@ -708,18 +732,30 @@ class Drawer:
     def tile(self, tone: str) -> Image.Image:
         return _tile(tone, self.bits)
 
+    def value(self, tone: str) -> int:
+        """The value of black, white or an ink in the picture as it is drawn (an ink is black where there is none)."""
+        return 255 if tone == "white" else INK[tone] if tone in INK and self.inks else 0
+
+    def put(self, img: Image.Image, v, at, mask: Image.Image = None):
+        """img.paste, but where inks are drawn a pixel is all one thing or another (the panel has nothing between),
+        so that an ink keeps its own value: the mask is cut at its middle, where a 1-bit screen's would be."""
+        if self.inks and mask is not None:
+            mask = mask.point(lambda x: 255 if x >= 128 else 0)
+        img.paste(v, at, mask)
+
     def fill(self, img: Image.Image, mask: Image.Image, at, tone: str, origin: int = 0):
-        """Paints `tone` (black, white, light, dark) through a mask placed at `at`; the grays are the framework's
-        dither patterns, starting at the element's own corner (inside its border: origin) as a CSS background does."""
-        if tone in ("black", "white"):
-            img.paste(0 if tone == "black" else 255, at, mask)
+        """Paints `tone` (black, white, an ink, light, dark) through a mask placed at `at`; the grays are the
+        framework's dither patterns, starting at the element's own corner (inside its border: origin) as a CSS
+        background does."""
+        if tone in TONES:
+            self.put(img, self.value(tone), at, mask)
             return
         t = self.tile(tone)
         pat = Image.new("L", mask.size)
         for ty in range(origin % 16 - 16 if origin % 16 else 0, mask.size[1], 16):
             for tx in range(origin % 16 - 16 if origin % 16 else 0, mask.size[0], 16):
                 pat.paste(t, (tx, ty))
-        img.paste(pat, at, mask)
+        self.put(img, pat, at, mask)
 
     def paint(self, img: Image.Image, n: Node):
         st = n.st
@@ -733,7 +769,7 @@ class Drawer:
         if st.border and Wd and Ht:
             b = max(1, _r(st.border))
             ring = ImageChops.subtract(_rounded(Wd, Ht, st.radius), _inset(_rounded(Wd - 2 * b, Ht - 2 * b, max(0, st.radius - b)), Wd, Ht, b))
-            img.paste(st.line, (X, Y), ring)
+            self.put(img, st.line, (X, Y), ring)
         if st.kind == "track":
             for k in n.kids:  # the fill, inside the track's rounded shape
                 kx, ky, kw, kh = k.box
@@ -751,6 +787,10 @@ class Drawer:
                 left, top, right, foot = (_r(v / s + 1e-6) * s for v in (x, y, x + w, y + h))
                 X, Y = math.floor(left), math.floor(top)
                 at, Wd, Ht = (round((left - X) * 8) / 8, round((top - Y) * 8) / 8), round((right - left) * 8) / 8, round((foot - top) * 8) / 8
+            if self.inks:  # each shape in its own colour, the later over the earlier
+                for tone, mask in glyph_inks(src, max(1, Wd), max(1, Ht), st.stretch, at):
+                    self.put(img, self.value(tone), (X, Y), mask)
+                return
             mask = glyph(src, max(1, Wd), max(1, Ht), st.stretch, at)
             if mask is not None:
                 img.paste(0, (X, Y), mask)
@@ -788,15 +828,20 @@ class Drawer:
             if self.dense and not st.halo:
                 self._fine(img, line, font, st, lx, base)
                 continue
-            if st.color == "gray" and self.bits < 4:
+            if (st.color == "gray" and self.bits < 4) or self.inks:
                 mask = Image.new("L", (Wd, Ht), 0)
+                if st.halo and self.inks:
+                    halo = Image.new("L", (Wd, Ht), 0)
+                    ImageDraw.Draw(halo).text((pos[0] - X, pos[1] - Y), line, font=font, fill=255, anchor="ls", features=st.feat,
+                                              stroke_width=max(1, round((1 if self.dense else 2) * self.s)), stroke_fill=255)
+                    self.put(img, 255, (X, Y), halo)
                 ImageDraw.Draw(mask).text((pos[0] - X, pos[1] - Y), line, font=font, fill=255, anchor="ls", features=st.feat)
-                self.fill(img, mask, (X, Y), "dark")
+                self.fill(img, mask, (X, Y), "dark" if st.color == "gray" else st.color if st.color in TONES else "black")
                 continue
             d = ImageDraw.Draw(img)
             if st.halo:  # white around the letters, so they stand out from the bar's pattern
                 d.text(pos, line, font=font, fill=255, anchor="ls", stroke_width=max(1, round((1 if self.dense else 2) * self.s)), stroke_fill=255, features=st.feat)
-            d.text(pos, line, font=font, fill={"black": 0, "white": 255, "gray": 0x77, "dim": 0x55}[st.color], anchor="ls", features=st.feat)
+            d.text(pos, line, font=font, fill={"gray": 0x77, "dim": 0x55}.get(st.color) or self.value(st.color), anchor="ls", features=st.feat)
 
     def _fine(self, img: Image.Image, line: str, font, st: Style, x: float, base: float):
         """A line of letters on a dense screen, as a browser sets them there: each letter where it falls along the
@@ -817,7 +862,7 @@ class Drawer:
         if st.color == "gray" and self.bits < 4:
             self.fill(img, mask, (X + x0, Y + y0), "dark")
         else:
-            img.paste({"black": 0, "white": 255, "gray": 0x77, "dim": 0x55}[st.color], (X + x0, Y + y0), mask)
+            self.put(img, {"gray": 0x77, "dim": 0x55}.get(st.color) or self.value(st.color), (X + x0, Y + y0), mask)
 
     def _icon(self, img: Image.Image, X: int, Y: int, size: int, halo: bool):
         """The suite's mark (common.liquid's SVG: four tiles, a narrow one and the sun)."""
@@ -832,8 +877,8 @@ class Drawer:
             r = max(1, round((1 if self.dense else 3) * self.s))
             wide = Image.new("L", (size + 2 * r, size + 2 * r), 0)
             wide.paste(mask.point(lambda v: 255 if v >= 128 else 0), (r, r))
-            img.paste(255, (X - r, Y - r), wide.filter(ImageFilter.MaxFilter(2 * r + 1)))
-        img.paste(0, (X, Y), mask)
+            self.put(img, 255, (X - r, Y - r), wide.filter(ImageFilter.MaxFilter(2 * r + 1)))
+        self.put(img, 0, (X, Y), mask)
 
     # -- a whole screen ----
     def view(self, markup: str, size: str, w: float, h: float) -> Image.Image:
@@ -844,7 +889,7 @@ class Drawer:
         for k in root.kids:
             k.parent = root
         for n in _walk(root):
-            n.cls = classes(n.cls, self.dense)  # a dense screen is the large one (the TRMNL X)
+            n.cls = classes(n.cls, self.dense, self.bits, self.inks)  # a dense screen is the large one (the TRMNL X)
         for n in _walk(root):
             n.st = _style(n, s, self.bits, self.dense)
         full = size == "full"
@@ -888,9 +933,9 @@ class Drawer:
                 img.paste(pic, (X, Y))
                 continue
             r = round(7 * s)
-            img.paste(pic, (X, Y), _rounded(Wd, Ht, r))
+            self.put(img, pic, (X, Y), _rounded(Wd, Ht, r))
             self._frame(img, X, Y, Wd, Ht, r)
-        return quantize(img, self.bits)
+        return inked(img) if self.inks else quantize(img, self.bits)
 
     def _frame(self, img: Image.Image, X: int, Y: int, Wd: int, Ht: int, r: int):
         """The line around a mashup's view: dotted on a 1-bit screen, light gray where there are grays."""
@@ -921,7 +966,7 @@ class _Svg(html.parser.HTMLParser):
 
     def __init__(self):
         super().__init__()
-        self.box, self.shapes, self.inherit, self.stretch = (0.0, 0.0, 24.0, 24.0), [], [{}], False
+        self.box, self.shapes, self.inherit, self.stretch, self.tones = (0.0, 0.0, 24.0, 24.0), [], [{}], False, []
 
     def handle_starttag(self, tag, attrs):
         a = {**self.inherit[-1], **{k: v for k, v in attrs if v is not None}}
@@ -935,6 +980,8 @@ class _Svg(html.parser.HTMLParser):
             return
         fill = a.get("fill", "#000") != "none"
         width = float(a.get("stroke-width") or 1) if a.get("stroke", "none") != "none" else 0.0
+        # its ink: the fill's, or the stroke's where it has one and no fill of its own (a line's black fill covers nothing)
+        tone, before = _tone(a.get("fill", "#000") if fill and not (width and "fill" not in a) else a.get("stroke", "#000")), len(self.shapes)
         caps = a.get("stroke-linecap") == "round"
         num = lambda k: float(a.get(k) or 0)  # noqa: E731
         try:
@@ -957,6 +1004,7 @@ class _Svg(html.parser.HTMLParser):
                     self.shapes.append(("line", line, fill, width, caps or closed, None))
         except ValueError:
             pass
+        self.tones.extend([tone] * (len(self.shapes) - before))
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
@@ -1060,6 +1108,45 @@ def _arc(x1, y1, rx, ry, turn, large, sweep, x2, y2) -> list:
     return out
 
 
+def _tone(color: str) -> str:
+    """An SVG colour as the inks name it: the nearest of black, white and INKS."""
+    c = str(color or "").strip().lower()
+    named = {"black": (0, 0, 0), "white": (255, 255, 255), "red": (255, 0, 0), "green": (0, 128, 0), "lime": (0, 255, 0),
+             "blue": (0, 0, 255), "yellow": (255, 255, 0)}
+    if c in named:
+        rgb = named[c]
+    else:
+        m = re.fullmatch(r"#([0-9a-f]{3}|[0-9a-f]{6})", c)
+        if not m:
+            return "black"  # currentColor and the like: the ink of the text, black here
+        h = m.group(1) if len(m.group(1)) == 6 else "".join(x * 2 for x in m.group(1))
+        rgb = tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return min(TONES, key=lambda t: sum((a - b) ** 2 for a, b in zip(rgb, PALETTE[1 if t == "black" else 0 if t == "white" else 2 + INKS.index(t)])))
+
+
+@functools.lru_cache(maxsize=256)
+def glyph_inks(src: str, w: float, h: float, fill: bool = False, at=(0.0, 0.0)) -> tuple:
+    """glyph() for a panel of inks: ((tone, mask), ...), one for each run of shapes of one colour, in their order."""
+    m = re.match(r"data:image/svg\+xml;base64,(.*)", src or "", re.S)
+    if not m:
+        return ()
+    try:
+        text = base64.b64decode(m.group(1), validate=False).decode("utf-8", "replace")
+    except ValueError:
+        return ()
+    p = _Svg()
+    p.feed(text)
+    runs, out = [], []
+    for i, tone in enumerate(p.tones):
+        if runs and runs[-1][0] == tone:
+            runs[-1][1].append(i)
+        else:
+            runs.append((tone, [i]))
+    for tone, which in runs:
+        out.append((tone, _draw(p, w, h, fill, at, set(which))))
+    return tuple(out)
+
+
 @functools.lru_cache(maxsize=256)
 def glyph(src: str, w: float, h: float, fill: bool = False, at=(0.0, 0.0)):
     """The ink of an img whose src is an SVG in a data: address, as a mask (None when it is not one): drawn eight
@@ -1077,6 +1164,11 @@ def glyph(src: str, w: float, h: float, fill: bool = False, at=(0.0, 0.0)):
         return None
     p = _Svg()
     p.feed(text)
+    return _draw(p, w, h, fill, at)
+
+
+def _draw(p, w: float, h: float, fill: bool, at, which: set = None) -> Image.Image:
+    """The shapes of a read SVG (all, or those whose places are in `which`) as one mask: see glyph()."""
     k = 8
     bx, by, bw, bh = p.box
     f = min(w / bw, h / bh) * k  # the whole drawing, in the middle (preserveAspectRatio's default)
@@ -1086,7 +1178,9 @@ def glyph(src: str, w: float, h: float, fill: bool = False, at=(0.0, 0.0)):
     big = Image.new("L", (size[0] * k, size[1] * k), 0)
     d = ImageDraw.Draw(big)
     at = lambda x, y: (x * fx + ox, y * fy + oy)  # noqa: E731
-    for kind, nums, inside, width, caps, more in p.shapes:
+    for i, (kind, nums, inside, width, caps, more) in enumerate(p.shapes):
+        if which is not None and i not in which:
+            continue
         sw = width * f
         if kind == "circle":
             (cx, cy), r = at(nums[0], nums[1]), nums[2] * f
@@ -1183,6 +1277,25 @@ def _tile(tone: str, bits: int) -> Image.Image:
     return t
 
 
+def inked(img: Image.Image) -> Image.Image:
+    """A picture drawn with inks (Drawer(inks=True)) as the panel prints it: a palette picture of PALETTE, each
+    pixel black, white or its ink."""
+    lut = [1 if v < 128 else 0 for v in range(256)]
+    for tone, v in INK.items():
+        lut[v] = 2 + INKS.index(tone)
+    out = Image.frombytes("P", img.size, img.point(lut).tobytes())
+    out.putpalette([c for rgb in PALETTE for c in rgb])
+    return out
+
+
+def to_inks(img: Image.Image) -> Image.Image:
+    """Any picture (a browser's) as a panel of PALETTE prints it: each pixel to the nearest ink, as TRMNL's firmware
+    does (no dithering)."""
+    pal = Image.new("P", (1, 1))
+    pal.putpalette([c for rgb in PALETTE for c in rgb] + [0, 0, 0] * (256 - len(PALETTE)))
+    return img.convert("RGB").quantize(palette=pal, dither=Image.Dither.NONE)
+
+
 def quantize(img: Image.Image, bits: int) -> Image.Image:
     """To the grays the screen has (2, 4, 16 or 256), each pixel to the nearest: no dithering, the patterns are the
     grays."""
@@ -1194,7 +1307,12 @@ def quantize(img: Image.Image, bits: int) -> Image.Image:
 
 def png(img: Image.Image, bits: int) -> bytes:
     """A grayscale PNG of exactly `bits` a pixel (1, 2, 4 or 8), which is what TRMNL's firmware decodes (Pillow
-    writes 1 and 8 only)."""
+    writes 1 and 8 only). A picture in inks (inked) goes as a PNG of its palette, 4 bits a pixel, which the
+    firmware of a Spectra 6 panel reads colour by colour."""
+    if img.mode == "P":
+        out = io.BytesIO()
+        img.save(out, "PNG", bits=4, optimize=True)
+        return out.getvalue()
     bits = 1 if bits < 2 else 2 if bits < 4 else 4 if bits < 8 else 8
     w, h = img.size
     data = img.convert("L").tobytes()

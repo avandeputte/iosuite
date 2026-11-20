@@ -30,49 +30,57 @@
       "title": "Pay the water bill",
       "when": "Late",
       "note": "",
-      "late": true
+      "late": true,
+      "ink": "blue"
      },
      {
       "title": "Theo: no school",
       "when": "All day",
       "note": "",
-      "late": false
+      "late": false,
+      "ink": "green"
      },
      {
       "title": "Riley's dentist",
       "when": "9:30 AM",
       "note": "@ Bayside Dental",
-      "late": false
+      "late": false,
+      "ink": "blue"
      },
      {
       "title": "Sign Ava's field trip form",
       "when": "Due 3 PM",
       "note": "",
-      "late": false
+      "late": false,
+      "ink": "red"
      },
      {
       "title": "Ava swim practice",
       "when": "4 PM",
       "note": "@ Flushing Meadows Aquatic Center",
-      "late": false
+      "late": false,
+      "ink": "red"
      },
      {
       "title": "Dinner with the Parks",
       "when": "6 PM",
       "note": "@ Nan Xiang Dumpling",
-      "late": false
+      "late": false,
+      "ink": "yellow"
      },
      {
       "title": "Order Thanksgiving turkey",
       "when": "To do",
       "note": "",
-      "late": false
+      "late": false,
+      "ink": "yellow"
      },
      {
       "title": "Call the plumber about the upstairs sink",
       "when": "To do",
       "note": "",
-      "late": false
+      "late": false,
+      "ink": "green"
      }
     ],
     "more": 0
@@ -84,25 +92,29 @@
       "title": "Grandma Joan",
       "when": "Birthday",
       "note": "\u00b7 turns 80",
-      "late": false
+      "late": false,
+      "ink": ""
      },
      {
       "title": "Recycling out",
       "when": "7 AM",
       "note": "",
-      "late": false
+      "late": false,
+      "ink": ""
      },
      {
       "title": "Parent-teacher conference",
       "when": "3:30 PM",
       "note": "@ PS 41",
-      "late": false
+      "late": false,
+      "ink": "red"
      },
      {
       "title": "Return library books",
       "when": "To do",
       "note": "",
-      "late": false
+      "late": false,
+      "ink": "green"
      }
     ],
     "more": 0
@@ -114,7 +126,8 @@
       "title": "Book flights for Christmas",
       "when": "To do",
       "note": "",
-      "late": false
+      "late": false,
+      "ink": "yellow"
      }
     ],
     "more": 0
@@ -126,19 +139,22 @@
       "title": "Soccer: Theo vs. Hawks",
       "when": "10 AM",
       "note": "@ Cunningham Park",
-      "late": false
+      "late": false,
+      "ink": "green"
      },
      {
       "title": "Grandma's birthday lunch",
       "when": "12:30 PM",
       "note": "@ Ralph's",
-      "late": false
+      "late": false,
+      "ink": "blue"
      },
      {
       "title": "Renew Costco membership",
       "when": "Due 5 PM",
       "note": "",
-      "late": false
+      "late": false,
+      "ink": "blue"
      }
     ],
     "more": 0
@@ -150,7 +166,8 @@
       "title": "Uncle Rob",
       "when": "Birthday",
       "note": "",
-      "late": false
+      "late": false,
+      "ink": ""
      }
     ],
     "more": 0
@@ -162,13 +179,15 @@
       "title": "Car service",
       "when": "8 AM",
       "note": "@ Bayside Honda",
-      "late": false
+      "late": false,
+      "ink": "red"
      },
      {
       "title": "Put the bins out",
       "when": "To do",
       "note": "",
-      "late": false
+      "late": false,
+      "ink": ""
      }
     ],
     "more": 0
@@ -191,22 +210,26 @@
      {
       "time": "All day",
       "title": "Theo: no school",
-      "place": ""
+      "place": "",
+      "ink": "green"
      },
      {
       "time": "9:30 AM",
       "title": "Riley's dentist",
-      "place": "Bayside Dental"
+      "place": "Bayside Dental",
+      "ink": "blue"
      },
      {
       "time": "4 PM",
       "title": "Ava swim practice",
-      "place": "Flushing Meadows Aquatic Center"
+      "place": "Flushing Meadows Aquatic Center",
+      "ink": "red"
      },
      {
       "time": "6 PM",
       "title": "Dinner with the Parks",
-      "place": "Nan Xiang Dumpling"
+      "place": "Nan Xiang Dumpling",
+      "ink": "yellow"
      }
     ]
    },
@@ -217,12 +240,14 @@
      {
       "time": "7 AM",
       "title": "Recycling out",
-      "place": ""
+      "place": "",
+      "ink": ""
      },
      {
       "time": "3:30 PM",
       "title": "Parent-teacher conference",
-      "place": "PS 41"
+      "place": "PS 41",
+      "ink": "red"
      }
     ]
    },
@@ -233,12 +258,14 @@
      {
       "time": "10 AM",
       "title": "Soccer: Theo vs. Hawks",
-      "place": "Cunningham Park"
+      "place": "Cunningham Park",
+      "ink": "green"
      },
      {
       "time": "12:30 PM",
       "title": "Grandma's birthday lunch",
-      "place": "Ralph's"
+      "place": "Ralph's",
+      "ink": "blue"
      }
     ]
    },
@@ -249,7 +276,8 @@
      {
       "time": "8 AM",
       "title": "Car service",
-      "place": "Bayside Honda"
+      "place": "Bayside Honda",
+      "ink": "red"
      }
     ]
    }
@@ -268,42 +296,50 @@
    {
     "title": "Pay the water bill",
     "when": "Late",
-    "late": true
+    "late": true,
+    "ink": "blue"
    },
    {
     "title": "Sign Ava's field trip form",
     "when": "3 PM",
-    "late": false
+    "late": false,
+    "ink": "red"
    },
    {
     "title": "Order Thanksgiving turkey",
     "when": "",
-    "late": false
+    "late": false,
+    "ink": "yellow"
    },
    {
     "title": "Call the plumber about the upstairs sink",
     "when": "",
-    "late": false
+    "late": false,
+    "ink": "green"
    },
    {
     "title": "Return library books",
     "when": "",
-    "late": false
+    "late": false,
+    "ink": "green"
    },
    {
     "title": "Book flights for Christmas",
     "when": "",
-    "late": false
+    "late": false,
+    "ink": "yellow"
    },
    {
     "title": "Renew Costco membership",
     "when": "",
-    "late": false
+    "late": false,
+    "ink": "blue"
    },
    {
     "title": "Water the plants",
     "when": "",
-    "late": false
+    "late": false,
+    "ink": ""
    }
   ],
   "more": 0,

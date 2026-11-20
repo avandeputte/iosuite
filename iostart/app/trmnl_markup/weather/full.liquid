@@ -7,13 +7,13 @@
     <div class="col--span-4 flex flex--col flex--left gap lg:gap--large">
       <div class="flex flex--col flex--left gap--small lg:gap--base">
         <div class="flex flex--row flex--left gap lg:gap--large">
-          <img class="image w--16 h--16 lg:w--24 lg:h--24" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}">
+          <img class="image w--16 h--16 lg:w--24 lg:h--24 {{ grays_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}"><img class="image w--16 h--16 lg:w--24 lg:h--24 {{ inks_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx_ink[icon] | append: '</svg>' | base64_encode }}">
           <span class="value value--xxlarge lg:value--xxxlarge">{{ temp }}</span>
         </div>
         <span class="title lg:title--large">{{ text }}</span>
         {%- if hi != "" %}<span class="label lg:label--large">High {{ hi }} &middot; Low {{ lo }}</span>{% endif %}
         {%- if feels != "" %}<span class="label lg:label--large">Feels like {{ feels }}</span>{% endif %}
-        {%- if note != "" %}<span class="label label--inverted lg:label--large">{{ note }}</span>{% endif %}
+        {%- if note != "" %}<span class="label label--primary {{ on_grays }} lg:label--large">{{ note }}</span>{% endif %}
       </div>
       <div class="flex flex--col flex--left gap--xsmall lg:gap--small">
         {%- if wind != "" %}<span class="label label--small label--gray lg:label--base">Wind {{ wind }}</span>{% endif %}
@@ -29,11 +29,11 @@
           {%- for h in hours limit: 8 %}
           <div class="flex flex--col flex--center gap--xsmall w--16 lg:w--20 lg:gap--small">
             <span class="label label--small lg:label--base" data-pixel-perfect="true">{{ h.time }}</span>
-            <img class="image w--10 h--10 lg:w--14 lg:h--14" src="data:image/svg+xml;base64,{{ wx_open | append: wx[h.icon] | append: '</svg>' | base64_encode }}">
+            <img class="image w--10 h--10 lg:w--14 lg:h--14 {{ grays_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx[h.icon] | append: '</svg>' | base64_encode }}"><img class="image w--10 h--10 lg:w--14 lg:h--14 {{ inks_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx_ink[h.icon] | append: '</svg>' | base64_encode }}">
           </div>
           {%- endfor %}
         </div>
-        <img class="image image--fill w--full h--8 lg:h--20" src="data:image/svg+xml;base64,{{ curve | base64_encode }}">
+        <img class="image image--fill w--full h--8 lg:h--20 {{ grays_only }}" src="data:image/svg+xml;base64,{{ curve | base64_encode }}"><img class="image image--fill w--full h--8 lg:h--20 {{ inks_only }}" src="data:image/svg+xml;base64,{{ curve | replace: '<polygon ', '<polygon fill="#f00" ' | base64_encode }}">
         <div class="flex flex--row flex--left gap--none">
           {%- for h in hours limit: 8 %}
           <div class="flex flex--col flex--center gap--xsmall w--16 lg:w--20 lg:gap--small">
@@ -49,7 +49,7 @@
         {%- for d in days %}
         <div class="grid grid--cols-12 w--full">
           <div class="col--span-2 flex flex--row flex--left"><span class="title title--small lg:title--base lg:text--bold">{{ d.day }}</span></div>
-          <div class="col--span-1 flex flex--row flex--left"><img class="image w--8 h--8 lg:w--12 lg:h--12" src="data:image/svg+xml;base64,{{ wx_open | append: wx[d.icon] | append: '</svg>' | base64_encode }}"></div>
+          <div class="col--span-1 flex flex--row flex--left"><img class="image w--8 h--8 lg:w--12 lg:h--12 {{ grays_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx[d.icon] | append: '</svg>' | base64_encode }}"><img class="image w--8 h--8 lg:w--12 lg:h--12 {{ inks_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx_ink[d.icon] | append: '</svg>' | base64_encode }}"></div>
           <div class="col--span-5 flex flex--row flex--left"><span class="label lg:label--large" data-clamp="1">{{ d.text }}</span></div>
           <div class="col--span-2 flex flex--row flex--left"><span class="label label--gray lg:label--large">{{ d.rain }}</span></div>
           <div class="col--span-2 flex flex--row flex--right"><span class="label lg:label--large">{{ d.hi }} / {{ d.lo }}</span></div>

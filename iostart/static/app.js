@@ -1771,7 +1771,7 @@ async function setTrmnl(el) {
   const LAYOUT = { full: 'One screen', '1Lx1R': 'Two, side by side', '1Tx1B': 'Two, one above the other', '1Lx2R': 'One left, two right',
     '2Lx1R': 'Two left, one right', '2Tx1B': 'Two above, one below', '1Tx2B': 'One above, two below', '2x2': 'Four' };
   const EVERY = (sec) => (sec >= 86400 ? 'day' : sec >= 3600 ? `${sec / 3600} hour${sec > 3600 ? 's' : ''}` : `${sec / 60} minutes`);
-  const GRAYS = { 1: 'Black and white', 2: '4 grays', 4: '16 grays' };
+  const GRAYS = { color: 'In color', 1: 'Black and white', 2: '4 grays', 4: '16 grays' };
   const BUTTON = { sleep: 'Sleeps until the morning', identify: 'Shows which screen it is', restart: 'Starts its turn over', back: 'Goes back one',
     hold: 'Stays on what it shows, or moves on again', send: 'Sends what it shows to your phone', wifi: 'Opens its Wi-Fi setup', none: 'Nothing' };
   const devs = h('div', { class: 'trmnl-items' });
@@ -1806,7 +1806,7 @@ async function setTrmnl(el) {
         const title = h('input', { class: 't', value: x.name, maxlength: 60, 'aria-label': 'Name', onchange: () => device(x, { name: title.value }) });
         const facts = [x.model, `${x.width} × ${x.height}`, signal(x.rssi), x.firmware ? `firmware ${x.firmware}` : null].filter(Boolean).join(' · ');
         const every = h('select', { class: 't', onchange: () => device(x, { refresh: +every.value }) }, d.refreshes.map((v) => h('option', { value: v, selected: v === x.refresh ? true : null }, EVERY(v))));
-        const bits = x.canBits.length > 1 ? h('select', { class: 't', onchange: () => device(x, { bits: +bits.value }) }, x.canBits.map((v) => h('option', { value: v, selected: v === x.bits ? true : null }, GRAYS[v] || `${v} bits`))) : null;
+        const bits = x.canBits.length > 1 ? h('select', { class: 't', onchange: () => device(x, { bits: bits.value === 'color' ? 'color' : +bits.value }) }, x.canBits.map((v) => h('option', { value: v, selected: v === x.bits ? true : null }, GRAYS[v] || `${v} bits`))) : null;
         const rows = x.playlist.map((it, i) => {
           const places = (d.layouts.find((l) => l.key === it.layout) || { places: [] }).places;
           const lay = h('select', { class: 't', 'aria-label': 'Layout', onchange: () => {

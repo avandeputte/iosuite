@@ -4,12 +4,12 @@
   <div class="grid grid--cols-12 w--full">
     <div class="col--span-4 flex flex--col flex--left gap--small lg:gap--base">
       <div class="flex flex--row flex--left gap lg:gap--large">
-        <img class="image w--12 h--12 lg:w--20 lg:h--20" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}">
+        <img class="image w--12 h--12 lg:w--20 lg:h--20 {{ grays_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}"><img class="image w--12 h--12 lg:w--20 lg:h--20 {{ inks_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx_ink[icon] | append: '</svg>' | base64_encode }}">
         <span class="value value--xlarge lg:value--xxlarge">{{ temp }}</span>
       </div>
       <span class="title title--small lg:title--base lg:text--bold">{{ text }}</span>
       <span class="label label--small lg:label--base">{% if hi != "" %}High {{ hi }} &middot; Low {{ lo }}{% endif %}</span>
-      {%- if note != "" %}<span class="label label--small label--inverted lg:label--base">{{ note }}</span>{% endif %}
+      {%- if note != "" %}<span class="label label--small label--primary {{ on_grays }} lg:label--base">{{ note }}</span>{% endif %}
     </div>
     <div class="col--span-8 flex flex--col flex--left gap--small lg:gap--base">
       <span class="label label--underline lg:label--large">The next hours</span>
@@ -17,7 +17,7 @@
         {%- for h in hours limit: 8 %}
         <div class="flex flex--col flex--center gap--xsmall lg:gap--small">
           <span class="label label--small lg:label--base">{{ h.time }}</span>
-          <img class="image w--8 h--8 lg:w--12 lg:h--12" src="data:image/svg+xml;base64,{{ wx_open | append: wx[h.icon] | append: '</svg>' | base64_encode }}">
+          <img class="image w--8 h--8 lg:w--12 lg:h--12 {{ grays_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx[h.icon] | append: '</svg>' | base64_encode }}"><img class="image w--8 h--8 lg:w--12 lg:h--12 {{ inks_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx_ink[h.icon] | append: '</svg>' | base64_encode }}">
           <span class="title title--small lg:title--base lg:text--bold">{{ h.temp }}</span>
           <span class="label label--small label--gray lg:label--base">{% if h.rain != "" %}{{ h.rain }}{% else %}&nbsp;{% endif %}</span>
         </div>

@@ -177,6 +177,29 @@ def test_a_bigger_screen(client, apps_answer):
     assert img.size == (1872, 1404) and 4 < grays(img) <= 16
 
 
+def test_a_screen_in_color(client, apps_answer):
+    """The reTerminal E1004: a panel of six inks standing 1200 x 1600, which turns a picture lying down; it gets its
+    screens in their colours, in a PNG of its palette, or in black and white if its owner says so."""
+    out = client.__class__(client.app)
+    e = device(Model="reterminal_e1004", Width="1200", Height="1600")
+    s = out.get("/api/setup", headers=e).json()
+    d = client.post("/api/trmnl/devices", json={"code": s["friendly_id"]}).json()
+    assert d["model"] == "reTerminal E1004" and (d["width"], d["height"]) == (1600, 1200) and d["bits"] == "color" and d["canBits"] == ["color", 1]
+    client.put(f"/api/trmnl/devices/{d['id']}", json={"playlist": [{"layout": "full", "screens": ["health"]}]})
+    img = picture(out, out.get("/api/display", headers={**e, "Access-Token": s["api_key"]}).json()["image_url"])
+    assert img.size == (1600, 1200) and img.mode == "P"
+    assert {rgb for _, rgb in img.convert("RGB").getcolors(16)} <= set(trmnldraw.PALETTE) and len(img.convert("RGB").getcolors(16)) >= 4  # the rings
+    assert client.put(f"/api/trmnl/devices/{d['id']}", json={"bits": 1}).json()["bits"] == 1
+    img = picture(client, f"/api/trmnl/devices/{d['id']}/preview.png")
+    assert img.size == (1600, 1200) and grays(img) == 2
+    assert client.put(f"/api/trmnl/devices/{d['id']}", json={"bits": 4}).status_code == 400
+    small = device(mac="AA:BB:CC:00:11:33")  # a TRMNL has no colours
+    s = out.get("/api/setup", headers=small).json()
+    d = client.post("/api/trmnl/devices", json={"code": s["friendly_id"]}).json()
+    r = client.put(f"/api/trmnl/devices/{d['id']}", json={"bits": "color"})
+    assert r.status_code == 400 and "color" in r.text
+
+
 def test_only_its_owner(client, paired):
     from iosuite_shared import testing
     out, key, dev = paired

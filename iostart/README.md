@@ -54,14 +54,20 @@ what the app will show on the start page later (today's events, the newest photo
   rings (Move, Exercise, Stand, in black alone) and the week's steps as bars, Money what falls due on each of the
   week's days, Weather the hours' temperatures as a curve: pictures the markup writes itself, as SVG. On a TRMNL X
   (the framework's `lg:` classes) the text is larger and the halves and quadrants list more, so the larger screen
-  is filled; a plugin imported before this needs importing again to look so.
+  is filled; a plugin imported before this needs importing again to look so. On a screen of coloured inks (the
+  framework's `screen--color-6a`, such as the reTerminal E1004) the screens have colour: the rings in red, green and
+  blue, the bars blue, what is late, expired or low red, the events and tasks marked in their calendar's or list's
+  colour, the weather pictures in colour; a screen of grays shows them as before (the markup's `1bit:` `2bit:` `4bit:`
+  classes).
 - **A TRMNL server of its own** (Settings › TRMNL › Straight from the start page): the start page answers a TRMNL
   device itself, so a TRMNL needs no TRMNL account, plugin or webhook, and nothing leaves the network. In the device's
   Wi-Fi setup, give the start page's address inside the network as its server; it then shows a six-letter code, which
   a signed-in person types in Settings › TRMNL to make it theirs. From then on it shows that person's screens, read as
   them with their "TRMNL" app password, one playlist entry at each wake: a screen filling the display, or one of
   TRMNL's mashup layouts (two, three or four screens sharing it). Per device: its name, how often it looks (5 minutes
-  to once a day), its shades (black and white or 4 grays on a TRMNL, up to 16 grays on a TRMNL X), a picture of each
+  to once a day), its shades (black and white or 4 grays on a TRMNL, up to 16 grays on a TRMNL X, in color or black
+  and white on a reTerminal E1002 or E1004, which run TRMNL's firmware; the E1004's panel stands, and gets its picture
+  lying down as the firmware turns it), a picture of each
   entry as it is now, its battery, signal, firmware and last log lines; quiet hours (it sleeps from one time of the
   day to another, keeping its last picture or saying until when; a press of its button still wakes it); what two
   presses of its button do (sleep until the morning, show which screen it is, start over, go back one, stay on what

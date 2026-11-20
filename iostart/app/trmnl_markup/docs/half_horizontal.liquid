@@ -10,7 +10,7 @@
           <span class="title title--small lg:title--base lg:text--bold" data-clamp="1">{{ x.title }}</span>
           
           <div class="flex gap--small lg:gap--base">
-            <span class="label label--small lg:label--base{% if x.expired %} label--inverted{% endif %}">{{ x.when }}</span>
+            <span class="label label--small lg:label--base{% if x.expired %} label--error {{ on_grays }}{% endif %}">{{ x.when }}</span>
             {%- if x.date != "" %}<span class="label label--small label--gray lg:label--base">{{ x.date }}</span>{% endif %}
           </div>
         </div>

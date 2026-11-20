@@ -17,10 +17,10 @@
       <span class="label label--underline group-header" data-group-header="true">{{ g.label }}</span>
       {%- for r in g.rows %}
       <div class="item">
-        <div class="meta"></div>
+        <div class="meta">{% if r.ink != blank %}<div class="bg--{{ r.ink }} w--full h--full {{ inks_only }}"></div>{% endif %}</div>
         <div class="content">
           <span class="title title--small lg:title--base lg:text--bold" data-clamp="1">{{ r.title }}</span>
-          <span class="label label--small lg:label--base{% if r.late %} label--inverted{% endif %}" data-clamp="1">{{ r.when }}{% if r.note != "" %} {{ r.note }}{% endif %}</span>
+          <span class="label label--small lg:label--base{% if r.late %} label--error {{ on_grays }}{% endif %}" data-clamp="1">{{ r.when }}{% if r.note != "" %} {{ r.note }}{% endif %}</span>
         </div>
       </div>
       {%- endfor %}

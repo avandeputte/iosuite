@@ -11,7 +11,7 @@
       {%- endfor %}
       {%- if bills.size == 0 %}<span class="description">No bills due this week</span>{% endif %}
   </div>
-  {%- for l in low %}<span class="label label--small label--inverted lg:label--base" data-clamp="1">{{ l }}</span>{% endfor %}
+  {%- for l in low %}<span class="label label--small label--error {{ on_grays }} lg:label--base" data-clamp="1">{{ l }}</span>{% endfor %}
       {%- if behind.size > 0 %}<span class="label label--small label--gray lg:label--base" data-clamp="2">Not up to date: {{ behind | join: ", " }}</span>{% endif %}
   {%- endunless %}
 </div>

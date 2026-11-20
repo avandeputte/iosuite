@@ -13,7 +13,7 @@
     </div>
     <div class="col--span-4 flex flex--col flex--left gap--small lg:gap--base">
       {%- if total != "" %}<span class="value value--small lg:value--base" data-fit-value="true">{{ total }}</span><span class="label label--small lg:label--base">due this week</span>{% endif %}
-      {%- for l in low limit: 1 %}<span class="label label--small label--inverted lg:label--base" data-clamp="1">{{ l }}</span>{% endfor %}
+      {%- for l in low limit: 1 %}<span class="label label--small label--error {{ on_grays }} lg:label--base" data-clamp="1">{{ l }}</span>{% endfor %}
     </div>
   </div>
   {%- endunless %}

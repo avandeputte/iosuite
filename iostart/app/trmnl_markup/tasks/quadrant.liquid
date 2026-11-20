@@ -5,10 +5,10 @@
     <div class="column">
       {%- for t in tasks limit: 4 %}
       <div class="item">
-        <div class="meta"></div>
+        <div class="meta">{% if t.ink != blank %}<div class="bg--{{ t.ink }} w--full h--full {{ inks_only }}"></div>{% endif %}</div>
         <div class="content">
           <span class="title title--small lg:title--base lg:text--bold" data-clamp="1">{{ t.title }}</span>
-          {%- if t.when != "" %}<span class="label label--small lg:label--base{% if t.late %} label--inverted{% endif %}">{{ t.when }}</span>{% endif %}
+          {%- if t.when != "" %}<span class="label label--small lg:label--base{% if t.late %} label--error {{ on_grays }}{% endif %}">{{ t.when }}</span>{% endif %}
         </div>
       </div>
       {%- endfor %}
