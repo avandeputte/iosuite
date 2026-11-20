@@ -1836,11 +1836,11 @@ async function setTrmnl(el) {
           set(x.playlist.concat([{ layout: 'full', screens: [mine.find((k) => !used.includes(k)) || mine[0]] }]));
         } }, icon('add', 's'), 'Add');
         // quiet hours: the device sleeps through them (TRMNL's sleep mode)
-        const q = x.quiet || { from: '22:00', to: '07:00', show: 'last' };
+        const q = x.quiet || { from: '22:00', to: '07:00', show: 'sleep' };
         const quiet = (b) => device(x, { quiet: { ...q, ...b } });
         const from = h('input', { class: 't', type: 'time', value: q.from, onchange: () => from.value && quiet({ from: from.value }) });
         const to = h('input', { class: 't', type: 'time', value: q.to, onchange: () => to.value && quiet({ to: to.value }) });
-        const show = h('select', { class: 't', onchange: () => quiet({ show: show.value }) }, [['last', 'What it showed last'], ['notice', 'That it is quiet, and until when']].map(([v, t]) => h('option', { value: v, selected: v === q.show ? true : null }, t)));
+        const show = h('select', { class: 't', onchange: () => quiet({ show: show.value }) }, [['sleep', 'A sleep screen, and until when'], ['last', 'What it showed last']].map(([v, t]) => h('option', { value: v, selected: v === q.show ? true : null }, t)));
         const button = h('select', { class: 't', onchange: () => device(x, { button: button.value }) }, d.buttons.map((v) => h('option', { value: v, selected: v === x.button ? true : null }, BUTTON[v] || v)));
         const log = x.log.length ? h('details', { class: 'trmnl-log' }, h('summary', { class: 'muted small' }, 'What the device reported'),
           h('ul', { class: 'small' }, x.log.slice().reverse().map((l) => h('li', null, h('span', { class: 'muted' }, `${when(l.at)}  `), l.text)))) : null;
