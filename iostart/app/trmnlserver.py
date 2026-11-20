@@ -75,12 +75,19 @@ QUIET_SHOW = ("last", "notice")  # while quiet: the last picture stays, or a lin
 SLEEP_FOR = 8 * 3600             # the button's "sleep" without quiet hours
 LOW_BATTERY, BATTERY_OK = 15, 30  # percent: told once below the first, again only after it was above the second
 HHMM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
-# what TRMNL's firmware calls itself (its Model header) -> (name, grays it can show, how many of its pixels one of the
-# framework's is). Anything else: its Width and Height headers, black and white.
+# what TRMNL's firmware calls itself (its Model header, the DEVICE_MODEL of its build) -> (name, what it can show,
+# how many of its pixels one of the framework's is). What it can show, the first as it comes: the bits of gray a pixel
+# has, or COLOR, the inks of a panel of coloured inks (Spectra 6: the reTerminal E1002 and E1004, which take each pixel
+# to the nearest ink without dithering), where the screens show their colours and the grays are the framework's
+# patterns. The E1004's scale is the framework's own (screen--seeed_e1004's --pixel-ratio). Anything else: its Width
+# and Height headers, black and white.
+COLOR = "color"
 MODELS = {
     "og": ("TRMNL", (1, 2), 1.0), "og_png": ("TRMNL", (1, 2), 1.0), "og_plus": ("TRMNL", (1, 2), 1.0), "og_4clr": ("TRMNL", (1, 2), 1.0),
     "x": ("TRMNL X", (4, 2, 1), 1.8), "v2": ("TRMNL X", (4, 2, 1), 1.8),
-    "m5_papers3": ("M5PaperS3", (4, 2, 1), 1.0), "seeed_e1001": ("Seeed E1001", (2, 1), 1.0),
+    "m5_papers3": ("M5PaperS3", (4, 2, 1), 1.0),
+    "reterminal_e1001": ("reTerminal E1001", (2, 1), 1.0), "reterminal_e1002": ("reTerminal E1002", (COLOR, 1), 1.0),
+    "reterminal_e1003": ("reTerminal E1003", (4, 2, 1), 1.8), "reterminal_e1004": ("reTerminal E1004", (COLOR, 1), 1.5385),
 }
 
 
@@ -178,7 +185,10 @@ def _dims(headers) -> tuple:
         except ValueError:
             v = 0
         return v if 100 <= v <= 4000 else d
-    return n("width", 800), n("height", 480)
+    # a panel that stands (the reTerminal E1004 says 1200 x 1600) gets its picture lying down: the firmware turns a
+    # picture as wide as the panel is tall, and the screens are drawn for a screen wider than tall
+    w, h = n("width", 800), n("height", 480)
+    return max(w, h), min(w, h)
 
 
 def _note(d: dict, headers) -> None:
@@ -429,8 +439,8 @@ def image(key: str) -> bytes:
 
 # ---- the picture ----------------------------------------------------------------------------------------------------
 
-def grays(d: dict) -> int:
-    """Bits a pixel of the picture this device gets: its setting when the model can show it, else the model's own."""
+def grays(d: dict):
+    """Bits a pixel of the picture this device gets, or COLOR: its setting when the model can show it, else the model's own."""
     can = MODELS.get(d["model"], ("", (1, 2), 1.0))[1]
     want = d["settings"].get("bits")
     return want if want in can else can[0]
@@ -468,10 +478,18 @@ def _template(screen: str, size: str):
     return liquid.Environment().parse(m["shared"] + "\n" + m[size])
 
 
-def render(datas: list, layout: str, bits: int = 1, s: float = 1.0, width: int = None, height: int = None):
+def drawer(bits, s: float) -> trmnldraw.Drawer:
+    return trmnldraw.Drawer(s, 1, inks=True) if bits == COLOR else trmnldraw.Drawer(s, bits)
+
+
+def picture(img, bits) -> bytes:
+    return trmnldraw.png(img, 1 if bits == COLOR else bits)
+
+
+def render(datas: list, layout: str, bits=1, s: float = 1.0, width: int = None, height: int = None):
     """The picture of one playlist entry: datas = what trmnl.build gave for each of its screens, [(screen, data)]."""
     views = [_template(screen, size).render(data) for (screen, data), size in zip(datas, trmnldraw.sizes(layout))]
-    return trmnldraw.Drawer(s, bits).screen(views, layout, width, height)
+    return drawer(bits, s).screen(views, layout, width, height)
 
 
 NOTICE = """<div class="layout layout--col layout--center gap--large">
@@ -491,7 +509,7 @@ def _notice(d: dict, title: str, text: str, code: str = "") -> bytes:
     import liquid
     bits = grays(d)
     view = liquid.Environment().parse(NOTICE).render({"title": title, "text": text, "code": " ".join(code), "instance": d["name"] or d["mac"]})
-    return trmnldraw.png(trmnldraw.Drawer(scale(d), bits).screen([view], "full", d["width"], d["height"]), bits)
+    return picture(drawer(bits, scale(d)).screen([view], "full", d["width"], d["height"]), bits)
 
 
 def _facts(d: dict) -> str:
@@ -527,7 +545,7 @@ def _draw(d: dict, at: int, kind: str = "playlist"):
     datas = [(k, trmnl.build(who, k, conf["tz"], conf["clock"] == 24)) for k in item["screens"]]
     digest = hashlib.sha256(json.dumps([item["layout"], bits, d["width"], d["height"],
                                         [[k, {a: v for a, v in x.items() if a != "updated"}] for k, x in datas]], sort_keys=True).encode()).hexdigest()
-    return trmnldraw.png(render(datas, item["layout"], bits, s, d["width"], d["height"]), bits), digest
+    return picture(render(datas, item["layout"], bits, s, d["width"], d["height"]), bits), digest
 
 
 def _picture(d: dict, base: str, waiting: bool = False, stay: bool = False, again: bool = False, quiet: bool = False, identify: bool = False) -> dict:
@@ -623,7 +641,7 @@ def _mine(user, dev_id: int) -> dict:
 
 
 def configure(user, dev_id: int, b: dict) -> dict:
-    """Body: {name?, refresh? (seconds, one of REFRESH), bits? (1|2|4), playlist? [{layout, screens}], pair? (true:
+    """Body: {name?, refresh? (seconds, one of REFRESH), bits? (1|2|4, or "color" on a colour panel), playlist? [{layout, screens}], pair? (true:
     open Pair again for ten minutes), quiet? ({from, to, show} as "HH:MM" of the person's day, or null: none),
     button? (one of BUTTON: what a double press does), hold? (the screen it shows stays), clean? (a full redraw every
     time), verbose? (the device's detailed log), reset? (true: at its next look the device forgets its Wi-Fi and its
@@ -639,7 +657,7 @@ def configure(user, dev_id: int, b: dict) -> dict:
         d["settings"]["refresh"] = b["refresh"]
     if "bits" in b:
         if b["bits"] not in MODELS.get(d["model"], ("", (1, 2), 1.0))[1]:
-            raise Invalid("This screen cannot show that many grays")
+            raise Invalid("This screen cannot show colors" if b["bits"] == COLOR else "This screen cannot show that many grays")
         d["settings"]["bits"] = b["bits"]
     if "playlist" in b:
         items = b["playlist"] if isinstance(b["playlist"], list) else []
@@ -715,7 +733,7 @@ def preview(user, dev_id: int, at: int = 0, layout: str = "", screens: list = No
     who = trmnlpush.asker(user["id"])
     datas = [(k, trmnl.build(who, k, conf["tz"], conf["clock"] == 24)) for k in screens]
     bits = grays(d)
-    return trmnldraw.png(render(datas, layout, bits, scale(d), d["width"], d["height"]), bits)
+    return picture(render(datas, layout, bits, scale(d), d["width"], d["height"]), bits)
 
 
 def remove(user, dev_id: int) -> None:

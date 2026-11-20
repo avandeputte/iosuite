@@ -3,7 +3,7 @@
   {%- unless missing %}
   <div class="grid grid--cols-12 w--full">
     {%- if rings.size > 0 %}
-    <div class="col--span-4 flex flex--row flex--center"><img class="image w--36 h--36 lg:w--72 lg:h--72" src="{{ rings_img }}"></div>
+    <div class="col--span-4 flex flex--row flex--center"><img class="image w--36 h--36 lg:w--72 lg:h--72 {{ grays_only }}" src="{{ rings_img }}"><img class="image w--36 h--36 lg:w--72 lg:h--72 {{ inks_only }}" src="{{ rings_ink }}"></div>
     {%- endif %}
     <div class="col--span-4 flex flex--col flex--left gap--small lg:gap--base">
       <span class="value value--large lg:value--xlarge" data-fit-value="true">{{ steps }}</span>

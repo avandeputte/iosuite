@@ -7,7 +7,7 @@
       <span class="label label--underline group-header" data-group-header="true">{{ d.label }} &middot; {{ d.date }}</span>
       {%- for e in d.events limit: 8 %}
       <div class="item">
-        <div class="meta"></div>
+        <div class="meta">{% if e.ink != blank %}<div class="bg--{{ e.ink }} w--full h--full {{ inks_only }}"></div>{% endif %}</div>
         <div class="content">
           <span class="title title--small lg:text--xlarge lg:text--bold" data-clamp="1">{{ e.title }}</span>
           <span class="label label--small lg:label--large" data-clamp="1">{{ e.time }}{% if e.place != "" %} @ {{ e.place }}{% endif %}</span>

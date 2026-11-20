@@ -28,6 +28,7 @@ Two ways for the data to reach TRMNL, as the person's TRMNL is set up:
 Either way the data is read as the person, with what they may see in each app and nothing more (widgets.fetch: the
 apps' standard tile endpoints, on the person's own sign-in): there is no service account behind it.
 """
+import colorsys
 import datetime as dt
 import io
 import json
@@ -160,21 +161,35 @@ def _weather(w: dict | None, today: dt.date) -> dict | None:
                       "text": d.get("text") or ""} for d in days if str(d.get("date") or "") > today.isoformat()][:4]}
 
 
+def ink(color) -> str:
+    """The ink of a colour screen (the reTerminal E1004) nearest a colour (#rrggbb, a calendar's or a list's): red,
+    yellow, green or blue by its hue, or "" for a gray, black or white (which the screen shows as the others)."""
+    m = re.fullmatch(r"#?([0-9a-fA-F]{6})", str(color or "").strip())
+    if not m:
+        return ""
+    h, ls, s = colorsys.rgb_to_hls(*(int(m.group(1)[i:i + 2], 16) / 255 for i in (0, 2, 4)))
+    if s < 0.25 or not 0.12 < ls < 0.92:
+        return ""
+    h *= 360
+    return "red" if h < 40 or h >= 320 else "yellow" if h < 75 else "green" if h < 170 else "blue"  # orange is red; purple, blue
+
+
 def _tasks(items, z, h24: bool) -> list:
     out = []
     for x in items or []:
         d = _at(x.get("due"), z) if x.get("due") and not x.get("allDay") else None
         out.append({"title": (x.get("title") or "(no title)")[:80], "when": "Late" if x.get("late") else clock(d, h24) if d else "",
-                    "late": bool(x.get("late"))})
+                    "late": bool(x.get("late")), "ink": ink(x.get("color"))})
     return out
 
 
 # ------------------------------------------------------------------ the screens
 
 def _wall_event(o: dict, z, h24: bool) -> dict:
-    """{time, title, place} for one of the wall feed's events (epoch s for a timed one, day for an all-day one)."""
+    """{time, title, place, ink} for one of the wall feed's events (epoch s for a timed one, day for an all-day one)."""
     s = dt.datetime.fromtimestamp(o["s"], z) if o.get("s") is not None and not o.get("allDay") else None
-    return {"time": clock(s, h24) if s else "All day", "title": (o.get("title") or "(no title)")[:80], "place": (o.get("place") or "")[:60]}
+    return {"time": clock(s, h24) if s else "All day", "title": (o.get("title") or "(no title)")[:80], "place": (o.get("place") or "")[:60],
+            "ink": ink(o.get("color"))}
 
 
 def _when(o: dict, z, today: dt.date, h24: bool) -> str:
@@ -196,7 +211,7 @@ BIRTHDAY = re.compile(r"\b(birthday|anniversary)\b", re.I)
 
 def _today(request, z, now, h24):
     """What the start page's Today card lists, from the wall display's feed (wall.feed) and ioTask's coming week:
-    list: [{label, rows: [{title, when, note, late}], more}], today first and then each of the coming six days that
+    list: [{label, rows: [{title, when, note, late, ink}], more}], today first and then each of the coming six days that
     has anything, a day's rows as the card orders them: what is late, ioContact's birthdays, the all-day events,
     what has an hour by the hour (events and tasks together), the tasks without one. The markup shows as many
     as the screen has room for. none: what to say of a day with nothing."""
@@ -206,8 +221,8 @@ def _today(request, z, now, h24):
     week = (_ask(request, "iotask", tz=str(now.tzinfo), kind="week", n=20) or {}) if f.get("tasks") is not None else {}
     days: dict = {}  # day -> [(order, row)]
 
-    def put(day, order, title, when, note="", late=False):
-        days.setdefault(day, []).append((order, {"title": str(title or "(no title)")[:80], "when": when, "note": note[:60], "late": late}))
+    def put(day, order, title, when, note="", late=False, color=None):
+        days.setdefault(day, []).append((order, {"title": str(title or "(no title)")[:80], "when": when, "note": note[:60], "late": late, "ink": ink(color)}))
 
     dates = [b for b in f.get("birthdays") or [] if b.get("in") is not None and 0 <= b["in"] <= 6]
     for b in dates:
@@ -222,7 +237,7 @@ def _today(request, z, now, h24):
                     b["in"] == (day - today).days and str(b.get("name") or "\0") in (o.get("title") or "") for b in dates):
                 continue
             e = _wall_event(o, z, h24)
-            put(day, 0 if o.get("allDay") or o.get("s") is None else o["s"], e["title"], e["time"], f"@ {e['place']}" if e["place"] else "")
+            put(day, 0 if o.get("allDay") or o.get("s") is None else o["s"], e["title"], e["time"], f"@ {e['place']}" if e["place"] else "", color=o.get("color"))
 
     def task(x, day=None, late=False):
         d = _at(x.get("due"), z) if x.get("due") and not x.get("allDay") else None
@@ -231,7 +246,8 @@ def _today(request, z, now, h24):
                 day = d.date() if d else dt.date.fromisoformat(str(x.get("due"))[:10])
             except ValueError:
                 return
-        put(day, -1 if late else d.timestamp() if d else float("inf"), x.get("title"), "Late" if late else f"Due {clock(d, h24)}" if d else "To do", late=late)
+        put(day, -1 if late else d.timestamp() if d else float("inf"), x.get("title"), "Late" if late else f"Due {clock(d, h24)}" if d else "To do", late=late,
+            color=x.get("color"))
 
     events(today, f.get("today"))
     for x in t.get("items") or []:
@@ -248,7 +264,7 @@ def _today(request, z, now, h24):
     ahead = [d for d in sorted(days) if today < d <= today + dt.timedelta(days=6)]
     first = rows(today)
     if nxt and not first and not ahead:  # nothing today and nothing in the week: the next event, however far off
-        first.append({"title": str(nxt.get("title") or "(no title)")[:80], "when": "Next", "note": _when(nxt, z, today, h24), "late": False})
+        first.append({"title": str(nxt.get("title") or "(no title)")[:80], "when": "Next", "note": _when(nxt, z, today, h24), "late": False, "ink": ink(nxt.get("color"))})
     late = t.get("overdue") or 0
     out = [{"label": f"Today \u00b7 {late} late" if late else "Today", "rows": first, "more": (f.get("todayMore") or 0) + (t.get("more") or 0)}]
     left = AHEAD

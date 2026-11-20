@@ -13,7 +13,7 @@
   <div class="grid grid--cols-12 w--full">
     <div class="col--span-5 flex flex--col flex--left flex--top gap lg:gap--xlarge">
       {%- if rings.size > 0 %}
-      <div class="flex flex--row flex--center w--full"><img class="image w--40 h--40 lg:w--80 lg:h--80" src="{{ rings_img }}"></div>
+      <div class="flex flex--row flex--center w--full"><img class="image w--40 h--40 lg:w--80 lg:h--80 {{ grays_only }}" src="{{ rings_img }}"><img class="image w--40 h--40 lg:w--80 lg:h--80 {{ inks_only }}" src="{{ rings_ink }}"></div>
       <div class="flex flex--col flex--left gap--xsmall w--full lg:gap--base">
         {%- for r in rings %}
         <div class="flex flex--row flex--between w--full">
@@ -37,7 +37,7 @@
       {%- if rings.size > 0 %}{{ steps_item }}{% endif %}
       <div class="flex flex--col flex--left gap--small lg:gap--base">
         <span class="label label--underline lg:label--xlarge">The last seven days</span>
-        <img class="image image--fill w--full h--32 lg:h--80" src="{{ week_img }}">
+        <img class="image image--fill w--full h--32 lg:h--80 {{ grays_only }}" src="{{ week_img }}"><img class="image image--fill w--full h--32 lg:h--80 {{ inks_only }}" src="{{ week_ink }}">
         <div class="flex flex--row flex--left gap--none">
           {%- for w in week %}
           <div class="flex flex--col flex--center gap--none w--16 lg:w--20">

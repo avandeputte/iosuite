@@ -1,7 +1,7 @@
 <div class="layout layout--row layout--center gap lg:gap--large">
   {%- if missing %}<div class="flex flex--col flex--center w--full"><span class="description">{{ missing }}</span></div>{% endif %}
   {%- unless missing %}
-  {%- if rings.size > 0 %}<img class="image w--28 h--28 lg:w--48 lg:h--48" src="{{ rings_img }}">{% endif %}
+  {%- if rings.size > 0 %}<img class="image w--28 h--28 lg:w--48 lg:h--48 {{ grays_only }}" src="{{ rings_img }}"><img class="image w--28 h--28 lg:w--48 lg:h--48 {{ inks_only }}" src="{{ rings_ink }}">{% endif %}
   <div class="flex flex--col flex--left gap--small lg:gap--base">
     <span class="value value--large lg:value--xlarge" data-fit-value="true">{{ steps }}</span>
     <span class="label lg:label--large">steps today</span>

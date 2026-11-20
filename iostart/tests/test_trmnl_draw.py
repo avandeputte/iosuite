@@ -34,11 +34,11 @@ def page(screen: str, size: str) -> str:
     return ENV.parse(m["shared"] + "\n" + m[size]).render(DATA[screen])
 
 
-def drawn(screen: str, size: str, bits: int, scale: float = 1.0, dims=(None, None)) -> Image.Image:
+def drawn(screen: str, size: str, bits: int, scale: float = 1.0, dims=(None, None), inks: bool = False) -> Image.Image:
     """The screen in this size, with the other screens around it where it shares the display (as the references)."""
     others = [o for o in trmnl.SCREENS if o != screen]
     views = [page(screen, size)] + [page(o, size) for o in others[:3]]
-    return trmnldraw.Drawer(scale, bits).screen(views, MASHUP[size], *dims)
+    return trmnldraw.Drawer(scale, bits, inks=inks).screen(views, MASHUP[size], *dims)
 
 
 def reference(name: str) -> Image.Image:
@@ -84,6 +84,49 @@ def test_the_larger_trmnl(screen, size, bits, most):
     # among the quadrants is the calendar's and among the halves standing side by side today's, where a header is
     # left alone (ORPHAN) on this screen
     assert apart(img, ref, 2) <= (0.05 if size in ("quadrant", "half_vertical") else 0.005)
+
+
+# the reTerminal E1004 in its colours (a Spectra 6 panel of 1600 x 1200; the framework's screen--seeed_e1004 with
+# screen--color-6a, Chromium's picture taken to the nearest ink): every full screen, health (the rings) and today (its
+# list) in every size, and one of each other size
+E1004 = ([(s, "full") for s in trmnl.SCREENS] + [(s, z) for s in ("health", "today") for z in trmnl.SIZES if z != "full"]
+         + [("weather", "half_vertical"), ("money", "half_vertical"), ("calendar", "quadrant")])
+
+
+def in_ink(img: Image.Image, rgb) -> Image.Image:
+    """Where a picture has this ink (white there, black elsewhere)."""
+    return ImageChops.difference(img.convert("RGB"), Image.new("RGB", img.size, rgb)).convert("L").point(lambda v: 255 if v == 0 else 0)
+
+
+@pytest.mark.parametrize("screen,size", E1004)
+def test_the_reterminal_e1004_in_color(screen, size):
+    img, ref = drawn(screen, size, 1, 1.5385, (1600, 1200), inks=True), Image.open(os.path.join(REF, f"{screen}-{size}-e1004.png"))
+    assert img.size == (1600, 1200) and img.mode == "P"
+    full = size == "full"
+    assert trmnldraw.same(img, ref) <= (0.025 if full else 0.035)  # the halves' title bars: the framework's pattern drifts at this scale
+    assert apart(img, ref, 2) <= (0.005 if full else 0.02)  # (ORPHAN)
+    for rgb in trmnldraw.PALETTE[2:]:  # each ink where the framework has it, to the pixel or two
+        a, b = in_ink(img, rgb), in_ink(ref, rgb)
+        na, nb = a.histogram()[255], b.histogram()[255]
+        assert abs(na - nb) <= 0.08 * max(nb, 100), (rgb, na, nb)  # a bar of colour may be a pixel longer
+        lost = ImageChops.subtract(a, b.filter(ImageFilter.MaxFilter(5))).histogram()[255] + ImageChops.subtract(b, a.filter(ImageFilter.MaxFilter(5))).histogram()[255]
+        assert lost <= 0.01 * max(na + nb, 100), (rgb, lost)
+
+
+def test_colors_stay_on_a_screen_of_inks():
+    """A screen of grays keeps its look (the 1bit: 2bit: 4bit: classes give it back); a screen of inks has the colours,
+    in a PNG of its palette that the firmware of a Spectra 6 panel reads pixel by pixel."""
+    cls = {"label", "label--error", "1bit:label--inverted", "2bit:label--inverted", "hidden", "1bit:inline"}
+    assert trmnldraw.classes(cls, True, 1) == {"label", "label--error", "label--inverted"}  # 1bit:inline shows what hidden hides
+    assert trmnldraw.classes(cls, True, 4) == {"label", "label--error", "hidden"}
+    assert trmnldraw.classes(cls, True, 1, inks=True) == {"label", "label--error", "hidden"}
+    img = drawn("health", "full", 1, 1.5385, (1600, 1200), inks=True)
+    assert {rgb for _, rgb in img.convert("RGB").getcolors(16)} == set(trmnldraw.PALETTE) - {(255, 255, 0)}  # the rings: red, green, blue
+    back = Image.open(io.BytesIO(trmnldraw.png(img, 1)))
+    assert back.mode == "P" and back.info.get("bits", 4) <= 4 and back.size == (1600, 1200)
+    assert ImageChops.difference(back.convert("RGB"), img.convert("RGB")).getbbox() is None
+    for screen in ("health", "today", "weather"):  # in black and white as before: no ink
+        assert {rgb for _, rgb in drawn(screen, "full", 1, 1.5385, (1600, 1200)).convert("RGB").getcolors(16)} <= {(0, 0, 0), (255, 255, 255)}
 
 
 def test_classes_for_the_large_screen():
@@ -220,15 +263,23 @@ def test_what_the_markup_uses_is_known():
              "layout--col", "layout--row", "layout--stretch-x", "layout--top", "meta", "text--bold", "text--xlarge", "text--xxlarge", "title", "title--base",
              "title--large", "title--small", "title--xlarge", "title_bar", "value", "value--base", "value--large", "value--small", "value--tnums", "value--xlarge",
              "value--xxlarge", "value--xxxlarge", "w--full"}
+    known |= {"h--full", "inline", "label--error", "label--primary"} | {f"bg--{t}" for t in trmnldraw.INKS}  # the colours of a screen of inks
     large = {"block", "flex"}  # what may follow lg: (the classes for the TRMNL X): these two, a size of text, a gap, a width, a height
+    grays = {"hidden", "inline", "label--inverted"}  # what may follow 1bit: 2bit: 4bit: (a screen of grays given back its look)
     used = set()
     for screen in trmnl.SCREENS:
         m = trmnl.markup(screen)
+        said = dict(re.findall(r'\{%-? assign (\w+) = "([^"{}]*)" -?%\}', "".join(m.values())))  # classes kept in a name (on_grays)
         for part in m.values():
             for cls in re.findall(r'class="([^"]*)"', part):
+                cls = re.sub(r"\{\{ (\w+) \}\}", lambda k: said.get(k.group(1), k.group(0)), cls)
+                cls = re.sub(r"bg--\{\{ \w+\.ink \}\}", " ".join(f"bg--{t}" for t in trmnldraw.INKS), cls)  # app/trmnl.py's ink()
                 used |= {c for c in re.sub(r"\{[%{].*?[%}]\}", " ", cls).split() if not c.startswith("col--span-") and not re.fullmatch(r"(lg:)?[wh]--\d+|gap--\[\d+px\]", c)}
     plain = {c for c in used if ":" not in c}
     sized = {c[3:] for c in used if c.startswith("lg:")}
-    assert all(c.startswith("lg:") for c in used - plain), sorted(used - plain)  # no sm: or md:, which the drawing does not read
-    assert plain | sized <= known, sorted((plain | sized) - known)
+    bits = {c[5:] for c in used if re.match(r"[124]bit:", c)}
+    assert all(c.startswith(("lg:", "1bit:", "2bit:", "4bit:")) for c in used - plain), sorted(used - plain)  # no sm: or md:, which the drawing does not read
+    assert plain | sized | bits <= known, sorted((plain | sized | bits) - known)
+    assert bits <= grays, sorted(bits - grays)
+    assert {f"{b}bit:{c}" for b in (1, 2, 4) for c in bits} <= used  # a screen of grays of each depth is given its look back
     assert all(c in large or trmnldraw._family(c) or c == "text--bold" for c in sized), sorted(sized)

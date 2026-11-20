@@ -3,19 +3,19 @@
   {%- unless missing %}
   <div class="flex flex--col flex--left gap--small w--full lg:gap--base">
     <div class="flex flex--row flex--left gap lg:gap--large">
-      <img class="image w--12 h--12 lg:w--20 lg:h--20" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}">
+      <img class="image w--12 h--12 lg:w--20 lg:h--20 {{ grays_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx[icon] | append: '</svg>' | base64_encode }}"><img class="image w--12 h--12 lg:w--20 lg:h--20 {{ inks_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx_ink[icon] | append: '</svg>' | base64_encode }}">
       <span class="value value--xlarge lg:value--xxlarge">{{ temp }}</span>
     </div>
     <span class="title title--small lg:title--base lg:text--bold">{{ text }}</span>
     {%- if hi != "" %}<span class="label label--small lg:label--base">High {{ hi }} &middot; Low {{ lo }}{% if feels != "" %} &middot; feels like {{ feels }}{% endif %}</span>{% endif %}
-    {%- if note != "" %}<span class="label label--small label--inverted lg:label--base">{{ note }}</span>{% endif %}
+    {%- if note != "" %}<span class="label label--small label--primary {{ on_grays }} lg:label--base">{{ note }}</span>{% endif %}
   </div>
   {%- if hours.size > 0 %}
   <div class="flex flex--row flex--between w--full">
     {%- for h in hours limit: 5 %}
     <div class="flex flex--col flex--center gap--xsmall lg:gap--small">
       <span class="label label--small lg:label--base">{{ h.time }}</span>
-      <img class="image w--7 h--7" src="data:image/svg+xml;base64,{{ wx_open | append: wx[h.icon] | append: '</svg>' | base64_encode }}">
+      <img class="image w--7 h--7 {{ grays_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx[h.icon] | append: '</svg>' | base64_encode }}"><img class="image w--7 h--7 {{ inks_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx_ink[h.icon] | append: '</svg>' | base64_encode }}">
       <span class="title title--small lg:title--base lg:text--bold">{{ h.temp }}</span>
     </div>
     {%- endfor %}
@@ -26,7 +26,7 @@
     {%- for d in days limit: 4 %}
     <div class="grid grid--cols-12 w--full">
       <div class="col--span-3 flex flex--row flex--left"><span class="title title--small lg:title--base lg:text--bold">{{ d.day }}</span></div>
-      <div class="col--span-2 flex flex--row flex--left"><img class="image w--6 h--6" src="data:image/svg+xml;base64,{{ wx_open | append: wx[d.icon] | append: '</svg>' | base64_encode }}"></div>
+      <div class="col--span-2 flex flex--row flex--left"><img class="image w--6 h--6 {{ grays_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx[d.icon] | append: '</svg>' | base64_encode }}"><img class="image w--6 h--6 {{ inks_only }}" src="data:image/svg+xml;base64,{{ wx_open | append: wx_ink[d.icon] | append: '</svg>' | base64_encode }}"></div>
       <div class="col--span-3 flex flex--row flex--left"><span class="label label--gray lg:label--large">{{ d.rain }}</span></div>
       <div class="col--span-4 flex flex--row flex--right"><span class="label lg:label--large">{{ d.hi }} / {{ d.lo }}</span></div>
     </div>

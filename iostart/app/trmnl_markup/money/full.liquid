@@ -27,7 +27,7 @@
       {%- if days.size > 0 %}
       <div class="flex flex--col flex--left gap--small lg:gap--base">
         <span class="label label--underline lg:label--xlarge">Day by day</span>
-        <img class="image image--fill w--full h--24 lg:h--56" src="{{ days_img }}">
+        <img class="image image--fill w--full h--24 lg:h--56 {{ grays_only }}" src="{{ days_img }}"><img class="image image--fill w--full h--24 lg:h--56 {{ inks_only }}" src="{{ days_ink }}">
         <div class="flex flex--row flex--left gap--none">
           {%- for d in days %}
           <div class="flex flex--col flex--center gap--none w--11 lg:w--14">
@@ -38,7 +38,7 @@
         </div>
       </div>
       {%- endif %}
-      {%- for l in low %}<span class="label label--small label--inverted lg:label--large" data-clamp="1">{{ l }}</span>{% endfor %}
+      {%- for l in low %}<span class="label label--small label--error {{ on_grays }} lg:label--large" data-clamp="1">{{ l }}</span>{% endfor %}
       {%- if behind.size > 0 %}<span class="label label--small label--gray lg:label--large" data-clamp="2">Not up to date: {{ behind | join: ", " }}</span>{% endif %}
     </div>
   </div>

@@ -25,6 +25,10 @@ def test_wording():
     assert trmnl.money(-2450, "USD") == "-$2,450.00" and trmnl.money(9.5, "CHF") == "9.50 CHF"
     assert trmnl.minutes(431) == "7 h 11 min" and trmnl.minutes(45) == "45 min"
     assert [trmnl.short(v) for v in (85.4, -701, 1000, 1234, 2450, 9960, 12000)] == ["85", "701", "1k", "1.2k", "2.5k", "10k", "12k"]
+    # a calendar's or a list's colour as the ink of a colour screen nearest it; grays have none
+    assert [trmnl.ink(c) for c in ("#e53935", "#fb8c00", "#fdd835", "#7cb342", "#00897b", "#1e88e5", "#8e24aa", "#d81b60")] == [
+        "red", "red", "yellow", "green", "blue", "blue", "blue", "red"]
+    assert [trmnl.ink(c) for c in ("#9e9e9e", "#000000", "#ffffff", None, "", "red", "#12")] == [""] * 7
 
 
 def test_screens(client, apps_answer):
@@ -35,7 +39,7 @@ def test_screens(client, apps_answer):
     # the order of the start page's Today card: what is late, then what has an hour, then the tasks without one
     assert [(r["title"], r["when"]) for r in first["rows"]][0] == ("Pay the water bill", "Late") and first["rows"][0]["late"]
     assert first["rows"][1]["title"] == "Dinner" and first["rows"][1]["when"].endswith(("AM", "PM")) and first["rows"][1]["note"] == "@ Nan Xiang Dumpling"
-    assert first["rows"][2] == {"title": "Take out the bins", "when": "To do", "note": "", "late": False}
+    assert first["rows"][2] == {"title": "Take out the bins", "when": "To do", "note": "", "late": False, "ink": "blue"}
     # the coming days, each under its name: ioContact's birthday first, the events, ioTask's coming week on its day
     assert ahead[0]["label"].startswith("Tomorrow \u00b7 ")
     assert [(r["title"], r["when"], r["note"]) for r in ahead[0]["rows"]] == [("Ava", "Birthday", "\u00b7 turns 9"), ("Dentist", "9:30 AM", "")]
@@ -120,7 +124,7 @@ def test_today_lists_what_the_card_lists(monkeypatch):
     z = ZoneInfo(TZ)
     now = dt.datetime(2026, 11, 19, 8, 5, tzinfo=z)
     at = lambda d, h, m=0: int(dt.datetime(2026, 11, d, h, m, tzinfo=z).timestamp())  # noqa: E731
-    feed = {"today": [{"title": "Riley's dentist", "allDay": False, "s": at(19, 9, 30), "place": "Bayside Dental"},
+    feed = {"today": [{"title": "Riley's dentist", "allDay": False, "s": at(19, 9, 30), "place": "Bayside Dental", "color": "#1e88e5"},
                       {"title": "Theo: no school", "allDay": True, "day": "2026-11-19", "place": ""}],
             "todayMore": 0, "next": None,
             "days": [{"date": "2026-11-21", "items": [{"title": "Grandma Joan's birthday", "allDay": True, "day": "2026-11-21", "place": ""},
@@ -134,6 +138,7 @@ def test_today_lists_what_the_card_lists(monkeypatch):
     assert first["label"] == "Today" and first["more"] == 2
     assert [(r["title"], r["when"]) for r in first["rows"]] == [("Ann & Rob", "Anniversary"), ("Theo: no school", "All day"), ("Riley's dentist", "9:30 AM"),
                                                                  ("Sign the form", "Due 3 PM"), ("Call the plumber", "To do")]
+    assert [r["ink"] for r in first["rows"]] == ["", "", "blue", "", ""]  # the calendar's colour, for a colour screen
     assert [g["label"] for g in d["list"][1:]] == ["Saturday \u00b7 Nov 21", "Tuesday \u00b7 Nov 24"]
     assert [(r["title"], r["note"]) for r in d["list"][1]["rows"]] == [("Grandma Joan", "\u00b7 turns 80"), ("Soccer", "")]
     feed.update(today=[], days=[], tasks={"items": [], "more": 0, "overdue": 0}, birthdays=[],
@@ -199,14 +204,18 @@ def test_markup_renders():
     for size in trmnl.SIZES:
         ring = pics("health", size, rings)[0]
         assert ring.count("<circle") == 3 and 'stroke-dasharray="163.36 400"' in ring and 'transform="rotate(-90 60 60)"' in ring, size  # half of 2 pi 52
-    week = pics("health", "full", rings)[1]
+        inked = pics("health", size, rings)[1]  # each picture twice: in black, then in a colour screen's inks
+        assert inked.replace(' stroke="#f00"', "").replace(' stroke="#0f0"', "") == ring.replace('<g fill="none" stroke="#000">', '<g fill="none">'), size
+    week = pics("health", "full", rings)[2]
     assert week.count("<rect") == 2 and 'y="36" width="7" height="64"' in week and 'preserveAspectRatio="none"' in week
+    assert pics("health", "full", rings)[3].count('<rect fill="#00f" ') == 2
     days = pics("money", "full", {"total": "$50.00", "days": [{"day": "Thu", "amount": "40", "pct": 100}, {"day": "Fri", "amount": "", "pct": 0}]})
-    assert len(days) == 2 and days[0].count("<rect") == 2 and 'height="100"' in days[0]  # and the suite's mark in the bar
+    assert len(days) == 3 and days[0].count("<rect") == 2 and 'height="100"' in days[0] and days[1].count('<rect fill="#00f" ') == 2  # and the suite's mark in the bar
     hours = [{"time": f"{i + 1} PM", "icon": 5, "temp": "66°", "rain": "", "y": 25 * i} for i in range(5)]
     curve = [x for x in pics("weather", "full", forecast | {"hours": hours}) if "<polygon" in x]
     points = re.search(r'points="([^"]+)"', curve[0]).group(1).split()
-    assert len(curve) == 1 and len(points) == 2 * (len(hours) + 2) and points[0] == "0,3.0" and points[1] == "5,3.0" and points[5] == "45,83.0"
+    assert '<polygon fill="#f00" ' in curve[1]
+    assert len(curve) == 2 and len(points) == 2 * (len(hours) + 2) and points[0] == "0,3.0" and points[1] == "5,3.0" and points[5] == "45,83.0"
 
 
 @pytest.fixture()
