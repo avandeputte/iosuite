@@ -1,0 +1,26 @@
+# Do the workflow files still read? GitHub refuses a file that is not YAML or names a key twice, and says so nowhere
+# on the pull request: that workflow's checks just do not appear, every push sends a failure message, and on main the
+# app is neither tested nor built. This check is red on the pull request instead (.github/scripts/workflows.py).
+name: Workflows
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/**", ".github/scripts/workflows.py"]
+  pull_request:
+    paths: [".github/workflows/**", ".github/scripts/workflows.py"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -q pyyaml
+      - run: python .github/scripts/workflows.py

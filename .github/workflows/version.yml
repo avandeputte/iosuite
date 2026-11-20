@@ -37,11 +37,15 @@ jobs:
         if: steps.v.outputs.released == 'false'
         run: |
           # every app carries the suite's version, so each gets an image of it; their tests ran on the pull request
+          # one that will not start does not keep the others from theirs; the run fails, so no release is made and the
+          # next run starts them all again
+          failed=""
           for f in .github/workflows/io*.yml; do
             w="$(basename "$f")"
             [ "$w" = iopix-site.yml ] && continue
-            gh workflow run "$w" --ref main
+            gh workflow run "$w" --ref main || failed="$failed $w"
           done
+          if [ -n "$failed" ]; then echo "::error::did not start:$failed"; exit 1; fi
       - name: Build the website for this version
         if: steps.v.outputs.bumped == 'true'
         run: gh workflow run iopix-site.yml --ref main
